@@ -480,6 +480,14 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+app.get('/api/db-test', async (req, res) => {
+    try {
+        const [result] = await db.query('SELECT 1 as test');
+        res.json({ status: 'Connected to DB', result });
+    } catch (error) {
+        res.status(500).json({ status: 'DB connection failed', error: error.message });
+    }
+});
 // Start server
 app.listen(PORT, () => {
     console.log(`\n🚀 Server running on http://localhost:${PORT}`);
