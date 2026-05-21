@@ -19,7 +19,7 @@ const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS) || 10;
 // Security Middleware
 app.use(helmet());
 app.use(cors({
-    origin: '*',  // Allow all origins temporarily (change this later!)
+    origin: ['https://teacher-review-system-zeta.vercel.app', 'http://localhost:3000'],
     credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
