@@ -19,7 +19,7 @@ const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS) || 10;
 // Security Middleware
 app.use(helmet());
 app.use(cors({
-    origin: ['http://localhost:3000', 'http://localhost:3001'],
+    origin: '*',  // Allow all origins temporarily (change this later!)
     credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
