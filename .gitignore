@@ -1,2 +1,7 @@
 backend/.env
 backend/.env
+<<<<<<< HEAD
+=======
+.env
+node_modules/
+>>>>>>> 3cbd2a1a008e02ecb8cb7a045969b6168c953dae
