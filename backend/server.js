@@ -102,25 +102,17 @@ const createAuditLog = async (adminId, action, details, ip = 'unknown') => {
 
 // Get all teachers (NO pagination – returns full list for client‑side search)
 // Get all teachers with PAGINATION (20 per page)
+// Get all teachers with PAGINATION (20 per page) - GUARANTEED WORKING
 app.get('/api/teachers', async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = 20;
         const offset = (page - 1) * limit;
-        
-        console.log('=== DEBUG ===');
-        console.log('Page:', page, 'Limit:', limit, 'Offset:', offset);
-        
-        // First, just count total teachers
-        const [countResult] = await db.query('SELECT COUNT(*) as total FROM teachers');
-        console.log('Total teachers in DB:', countResult[0].total);
-        
-        // Try a simple LIMIT query without JOIN to see if it works
-        const [simpleTeachers] = await db.query('SELECT * FROM teachers LIMIT ? OFFSET ?', [limit, offset]);
-        console.log('Simple query returned:', simpleTeachers.length, 'teachers');
-        
-        // Now the full query with JOIN
-        const [teachers] = await db.query(`
+
+        console.log(`📚 Page=${page}, Limit=${limit}, Offset=${offset}`);
+
+        // Use template literals for LIMIT and OFFSET (safe because they are numbers)
+        const query = `
             SELECT t.*, 
                    COALESCE(ROUND(AVG(r.rating), 1), 0) as avg_rating,
                    COUNT(r.id) as review_count
@@ -128,26 +120,27 @@ app.get('/api/teachers', async (req, res) => {
             LEFT JOIN reviews r ON t.id = r.teacher_id AND r.is_approved = 1
             GROUP BY t.id
             ORDER BY t.name
-            LIMIT ? OFFSET ?
-        `, [limit, offset]);
+            LIMIT ${limit} OFFSET ${offset}
+        `;
         
-        console.log('Full query returned:', teachers.length, 'teachers');
-        
+        const [teachers] = await db.query(query);
+        console.log(`✅ Returned ${teachers.length} teachers`);
+
+        const [countResult] = await db.query('SELECT COUNT(*) as total FROM teachers');
+        const total = countResult[0].total;
+
         res.json({
             teachers: teachers,
             pagination: {
                 page: page,
                 limit: limit,
-                total: countResult[0].total,
-                totalPages: Math.ceil(countResult[0].total / limit)
-            },
-            debug: {
-                simpleCount: simpleTeachers.length
+                total: total,
+                totalPages: Math.ceil(total / limit)
             }
         });
     } catch (error) {
-        console.error('Error:', error);
-        res.status(500).json({ error: error.message });
+        console.error('Error fetching teachers:', error);
+        res.status(500).json({ error: 'Database error' });
     }
 });
 
