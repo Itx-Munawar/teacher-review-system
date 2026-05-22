@@ -470,29 +470,39 @@ const App: React.FC = () => {
     }, [selectedTeacher, reviewRating, reviewComment, reviewUserName]);
 
     const handleTeacherClick = useCallback(async (teacher: Teacher) => {
-        try {
-            const response = await getTeacherDetail(teacher.id);
-            const data = response.data;
-            const teacherData: TeacherDetail = {
-                id: data.id || teacher.id,
-                name: data.name || data.teacher?.name || teacher.name,
-                department: data.department || data.teacher?.department || teacher.department,
-                avg_rating: Number(data.avg_rating) || 0,
-                review_count: data.review_count || data.total_reviews || 0,
-                total_reviews: data.total_reviews || 0,
-                image_url: data.image_url || data.teacher?.image_url || null,
-                reviews: data.reviews || [],
-            };
-            setSelectedTeacher(teacherData);
-            setShowReviewForm(false);
-            setReviewComment('');
-            setReviewRating(5);
-            setReviewUserName('');
-            setReviewError('');
-        } catch (error) {
-            console.error('Error loading teacher details:', error);
-        }
-    }, []);
+    console.log('🔍 Teacher clicked:', teacher);
+    try {
+        const response = await getTeacherDetail(teacher.id);
+        const data = response.data;
+
+        // Extract data from backend response
+        const teacherInfo = data.teacher;
+        const reviewsList = data.reviews || [];
+        const avgRating = Number(data.avg_rating) || 0;
+        const totalReviews = data.total_reviews || 0;
+
+        const teacherData: TeacherDetail = {
+            id: teacherInfo.id,
+            name: teacherInfo.name,
+            department: teacherInfo.department,
+            avg_rating: avgRating,
+            review_count: totalReviews,
+            total_reviews: totalReviews,
+            image_url: teacherInfo.image_url || null,
+            reviews: reviewsList,
+        };
+
+        setSelectedTeacher(teacherData);
+        setShowReviewForm(false);
+        setReviewComment('');
+        setReviewRating(5);
+        setReviewUserName('');
+        setReviewError('');
+    } catch (error) {
+        console.error('❌ Error loading teacher details:', error);
+        alert('Failed to load teacher details');
+    }
+}, []);
 
     const renderStars = (rating: number) => {
         const numRating = Number(rating) || 0;

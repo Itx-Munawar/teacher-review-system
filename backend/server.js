@@ -7,8 +7,8 @@ const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const validator = require('validator');
 const { body, validationResult } = require('express-validator');
-const crypto = require('crypto');        // NEW for reset tokens
-const nodemailer = require('nodemailer'); // NEW for email
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 const db = require('./db');
 
 const app = express();
@@ -43,7 +43,7 @@ const resetLimiter = rateLimit({
     message: { error: 'Too many reset requests. Try again in an hour.' }
 });
 
-// Create transporter once
+// Email transporter
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
@@ -52,7 +52,6 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-// Real email sender
 const sendEmail = async (to, subject, html) => {
     try {
         await transporter.sendMail({
@@ -70,14 +69,9 @@ const sendEmail = async (to, subject, html) => {
 };
 
 // ========== HELPER FUNCTIONS ==========
-
 const verifyAdmin = (req, res, next) => {
     const token = req.headers.authorization?.split(' ')[1];
-    
-    if (!token) {
-        return res.status(401).json({ error: 'No token provided' });
-    }
-    
+    if (!token) return res.status(401).json({ error: 'No token provided' });
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
         req.admin = decoded;
@@ -100,9 +94,7 @@ const createAuditLog = async (adminId, action, details, ip = 'unknown') => {
 
 // ========== PUBLIC API ENDPOINTS ==========
 
-// Get all teachers (NO pagination – returns full list for client‑side search)
-// Get all teachers with PAGINATION (20 per page)
-// Get all teachers with PAGINATION (20 per page) - GUARANTEED WORKING
+// GET /api/teachers - paginated list (20 per page)
 app.get('/api/teachers', async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
@@ -111,7 +103,6 @@ app.get('/api/teachers', async (req, res) => {
 
         console.log(`📚 Page=${page}, Limit=${limit}, Offset=${offset}`);
 
-        // Use template literals for LIMIT and OFFSET (safe because they are numbers)
         const query = `
             SELECT t.*, 
                    COALESCE(ROUND(AVG(r.rating), 1), 0) as avg_rating,
@@ -144,11 +135,10 @@ app.get('/api/teachers', async (req, res) => {
     }
 });
 
-// NEW: Search all teachers (no pagination - returns ALL matches)
+// GET /api/teachers/search - search all teachers (no pagination)
 app.get('/api/teachers/search', async (req, res) => {
     try {
         const searchTerm = req.query.q;
-        
         if (!searchTerm || searchTerm.trim() === '') {
             return res.json([]);
         }
@@ -171,7 +161,47 @@ app.get('/api/teachers/search', async (req, res) => {
     }
 });
 
-// Submit review with validation
+// ========== NEW: GET SINGLE TEACHER WITH REVIEWS ==========
+app.get('/api/teachers/:id', async (req, res) => {
+    try {
+        const teacherId = req.params.id;
+
+        // Get teacher
+        const [teachers] = await db.query(
+            'SELECT * FROM teachers WHERE id = ?',
+            [teacherId]
+        );
+        if (teachers.length === 0) {
+            return res.status(404).json({ error: 'Teacher not found' });
+        }
+
+        // Get approved reviews for this teacher
+        const [reviews] = await db.query(
+            `SELECT * FROM reviews 
+             WHERE teacher_id = ? AND is_approved = 1 
+             ORDER BY created_at DESC`,
+            [teacherId]
+        );
+
+        // Get average rating and total review count
+        const [ratingData] = await db.query(
+            'SELECT AVG(rating) as avg_rating, COUNT(*) as total FROM reviews WHERE teacher_id = ? AND is_approved = 1',
+            [teacherId]
+        );
+
+        res.json({
+            teacher: teachers[0],
+            reviews: reviews,
+            avg_rating: ratingData[0].avg_rating || 0,
+            total_reviews: ratingData[0].total || 0
+        });
+    } catch (error) {
+        console.error('Error fetching teacher details:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// POST /api/reviews - submit a new review
 app.post('/api/reviews', reviewLimiter, [
     body('teacher_id').isInt({ min: 1 }).withMessage('Invalid teacher ID'),
     body('rating').isInt({ min: 1, max: 5 }).withMessage('Rating must be between 1 and 5'),
@@ -185,16 +215,10 @@ app.post('/api/reviews', reviewLimiter, [
     
     try {
         const { teacher_id, rating, comment, user_name } = req.body;
-        
-        // Sanitize inputs
         const sanitizedComment = validator.escape(comment.trim());
         const sanitizedName = user_name ? validator.escape(user_name.trim()) : 'Anonymous';
         
-        const [teachers] = await db.query(
-            'SELECT id FROM teachers WHERE id = ?',
-            [teacher_id]
-        );
-        
+        const [teachers] = await db.query('SELECT id FROM teachers WHERE id = ?', [teacher_id]);
         if (teachers.length === 0) {
             return res.status(404).json({ error: 'Teacher not found' });
         }
@@ -218,95 +242,47 @@ app.post('/api/reviews', reviewLimiter, [
 
 // ========== ADMIN API ENDPOINTS ==========
 
-// Admin login with bcrypt and account lockout (FIXED: now uses bcrypt)
 app.post('/api/admin/login', loginLimiter, async (req, res) => {
+    // ... (your existing admin login code) ...
     try {
         const { username, password } = req.body;
-        
-        const [admins] = await db.query(
-            'SELECT * FROM admins WHERE username = ?',
-            [username]
-        );
-        
-        if (admins.length === 0) {
-            return res.status(401).json({ error: 'Invalid credentials' });
-        }
-        
+        const [admins] = await db.query('SELECT * FROM admins WHERE username = ?', [username]);
+        if (admins.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
         const admin = admins[0];
-        
-        // Check if account is locked
         if (admin.locked_until && new Date(admin.locked_until) > new Date()) {
             return res.status(401).json({ error: 'Account locked. Try again later.' });
         }
-        
-        // ** FIXED: use bcrypt.compare **
         const isValid = await bcrypt.compare(password, admin.password);
-        
         if (!isValid) {
             const failedAttempts = (admin.failed_attempts || 0) + 1;
             let lockedUntil = null;
-            
-            if (failedAttempts >= 5) {
-                lockedUntil = new Date(Date.now() + 15 * 60 * 1000);
-            }
-            
-            await db.query(
-                'UPDATE admins SET failed_attempts = ?, locked_until = ? WHERE id = ?',
-                [failedAttempts, lockedUntil, admin.id]
-            );
-            
+            if (failedAttempts >= 5) lockedUntil = new Date(Date.now() + 15 * 60 * 1000);
+            await db.query('UPDATE admins SET failed_attempts = ?, locked_until = ? WHERE id = ?', [failedAttempts, lockedUntil, admin.id]);
             return res.status(401).json({ error: 'Invalid credentials' });
         }
-        
-        // Reset failed attempts on successful login
-        await db.query(
-            'UPDATE admins SET failed_attempts = 0, locked_until = NULL WHERE id = ?',
-            [admin.id]
-        );
-        
-        const token = jwt.sign(
-            { id: admin.id, username: admin.username },
-            JWT_SECRET,
-            { expiresIn: '24h' }
-        );
-        
+        await db.query('UPDATE admins SET failed_attempts = 0, locked_until = NULL WHERE id = ?', [admin.id]);
+        const token = jwt.sign({ id: admin.id, username: admin.username }, JWT_SECRET, { expiresIn: '24h' });
         await createAuditLog(admin.id, 'LOGIN', 'Admin logged in', req.ip);
-        
-        res.json({
-            success: true,
-            token,
-            admin: { id: admin.id, username: admin.username }
-        });
+        res.json({ success: true, token, admin: { id: admin.id, username: admin.username } });
     } catch (error) {
         console.error('Login error:', error);
         res.status(500).json({ error: 'Login error' });
     }
 });
 
-// ========== NEW: FORGOT PASSWORD ==========
 app.post('/api/admin/forgot-password', resetLimiter, async (req, res) => {
+    // ... (your existing forgot password code) ...
     try {
         const { email } = req.body;
         if (!email) return res.status(400).json({ error: 'Email is required' });
-        
         const [admins] = await db.query('SELECT id, username FROM admins WHERE email = ?', [email]);
-        if (admins.length === 0) {
-            // Security: don't reveal if email exists
-            return res.json({ success: true, message: 'If that email exists, we sent a reset link.' });
-        }
-        
+        if (admins.length === 0) return res.json({ success: true, message: 'If that email exists, we sent a reset link.' });
         const admin = admins[0];
         const resetToken = crypto.randomBytes(32).toString('hex');
-        const tokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-        
-        await db.query(
-            'UPDATE admins SET reset_token = ?, reset_token_expires = ? WHERE id = ?',
-            [resetToken, tokenExpiry, admin.id]
-        );
-        
+        const tokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
+        await db.query('UPDATE admins SET reset_token = ?, reset_token_expires = ? WHERE id = ?', [resetToken, tokenExpiry, admin.id]);
         const resetLink = `http://localhost:3000/reset-password?token=${resetToken}`;
         await sendEmail(email, 'Password Reset Request', `<p>Click <a href="${resetLink}">here</a> to reset your password. Link expires in 1 hour.</p>`);
-        
         res.json({ success: true, message: 'Reset link sent to email.' });
     } catch (error) {
         console.error('Forgot password error:', error);
@@ -314,28 +290,15 @@ app.post('/api/admin/forgot-password', resetLimiter, async (req, res) => {
     }
 });
 
-// ========== NEW: RESET PASSWORD ==========
 app.post('/api/admin/reset-password', async (req, res) => {
+    // ... (your existing reset password code) ...
     try {
         const { token, newPassword } = req.body;
-        if (!token || !newPassword || newPassword.length < 6) {
-            return res.status(400).json({ error: 'Token and new password (min 6 chars) required' });
-        }
-        
-        const [admins] = await db.query(
-            'SELECT id FROM admins WHERE reset_token = ? AND reset_token_expires > NOW()',
-            [token]
-        );
-        if (admins.length === 0) {
-            return res.status(400).json({ error: 'Invalid or expired token' });
-        }
-        
+        if (!token || !newPassword || newPassword.length < 6) return res.status(400).json({ error: 'Token and new password (min 6 chars) required' });
+        const [admins] = await db.query('SELECT id FROM admins WHERE reset_token = ? AND reset_token_expires > NOW()', [token]);
+        if (admins.length === 0) return res.status(400).json({ error: 'Invalid or expired token' });
         const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
-        await db.query(
-            'UPDATE admins SET password = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?',
-            [hashedPassword, admins[0].id]
-        );
-        
+        await db.query('UPDATE admins SET password = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?', [hashedPassword, admins[0].id]);
         res.json({ success: true, message: 'Password reset successfully. You can now login.' });
     } catch (error) {
         console.error('Reset password error:', error);
@@ -343,20 +306,14 @@ app.post('/api/admin/reset-password', async (req, res) => {
     }
 });
 
-// ========== NEW: SETUP ENDPOINT (create admin with hashed password) ==========
 app.post('/api/admin/setup', async (req, res) => {
+    // ... (your existing setup code) ...
     try {
         const { username, password, email } = req.body;
-        if (!username || !password || !email) {
-            return res.status(400).json({ error: 'Username, password, and email required' });
-        }
+        if (!username || !password || !email) return res.status(400).json({ error: 'Username, password, and email required' });
         const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
-        // Delete existing admin with same username
         await db.query('DELETE FROM admins WHERE username = ?', [username]);
-        await db.query(
-            'INSERT INTO admins (username, password, email) VALUES (?, ?, ?)',
-            [username, hashedPassword, email]
-        );
+        await db.query('INSERT INTO admins (username, password, email) VALUES (?, ?, ?)', [username, hashedPassword, email]);
         res.json({ success: true, message: 'Admin created. Use new credentials to login.' });
     } catch (error) {
         console.error('Setup error:', error);
@@ -364,56 +321,36 @@ app.post('/api/admin/setup', async (req, res) => {
     }
 });
 
-// Add teacher (images are just URLs for simplicity) with validation and audit log
 app.post('/api/admin/teachers', verifyAdmin, [
     body('name').isLength({ min: 2, max: 100 }).withMessage('Name must be 2-100 characters'),
     body('department').isLength({ min: 2, max: 100 }).withMessage('Department must be 2-100 characters'),
     body('image_url').optional().isURL().withMessage('Image URL must be a valid URL')
 ], async (req, res) => {
+    // ... (your existing add teacher code) ...
     const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-        return res.status(400).json({ error: errors.array()[0].msg });
-    }
-    
+    if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
     try {
         const { name, department, image_url } = req.body;
         const sanitizedName = validator.escape(name.trim());
         const sanitizedDept = validator.escape(department.trim());
         const sanitizedImageUrl = image_url ? validator.escape(image_url.trim()) : null;
-        
-        const [result] = await db.query(
-            'INSERT INTO teachers (name, department, image_url) VALUES (?, ?, ?)',
-            [sanitizedName, sanitizedDept, sanitizedImageUrl]
-        );
-        
+        const [result] = await db.query('INSERT INTO teachers (name, department, image_url) VALUES (?, ?, ?)', [sanitizedName, sanitizedDept, sanitizedImageUrl]);
         await createAuditLog(req.admin.id, 'ADD_TEACHER', `Added teacher: ${sanitizedName}`, req.ip);
-        
-        res.json({
-            success: true,
-            id: result.insertId,
-            message: 'Teacher added successfully'
-        });
+        res.json({ success: true, id: result.insertId, message: 'Teacher added successfully' });
     } catch (error) {
         console.error('Error adding teacher:', error);
         res.status(500).json({ error: 'Database error' });
     }
 });
 
-// Delete teacher (unchanged)
 app.delete('/api/admin/teachers/:id', verifyAdmin, async (req, res) => {
+    // ... (your existing delete teacher code) ...
     try {
         const teacherId = req.params.id;
-        
         const [teachers] = await db.query('SELECT name FROM teachers WHERE id = ?', [teacherId]);
-        
         const [result] = await db.query('DELETE FROM teachers WHERE id = ?', [teacherId]);
-        
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ error: 'Teacher not found' });
-        }
-        
+        if (result.affectedRows === 0) return res.status(404).json({ error: 'Teacher not found' });
         await createAuditLog(req.admin.id, 'DELETE_TEACHER', `Deleted teacher: ${teachers[0]?.name || teacherId}`, req.ip);
-        
         res.json({ success: true, message: 'Teacher deleted successfully' });
     } catch (error) {
         console.error('Error deleting teacher:', error);
@@ -421,8 +358,8 @@ app.delete('/api/admin/teachers/:id', verifyAdmin, async (req, res) => {
     }
 });
 
-// Get all reviews for admin (unchanged)
 app.get('/api/admin/reviews', verifyAdmin, async (req, res) => {
+    // ... (your existing get admin reviews code) ...
     try {
         const [reviews] = await db.query(`
             SELECT r.*, t.name as teacher_name 
@@ -437,19 +374,13 @@ app.get('/api/admin/reviews', verifyAdmin, async (req, res) => {
     }
 });
 
-// Delete review (unchanged)
 app.delete('/api/admin/reviews/:id', verifyAdmin, async (req, res) => {
+    // ... (your existing delete review code) ...
     try {
         const reviewId = req.params.id;
-        
         const [result] = await db.query('DELETE FROM reviews WHERE id = ?', [reviewId]);
-        
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ error: 'Review not found' });
-        }
-        
+        if (result.affectedRows === 0) return res.status(404).json({ error: 'Review not found' });
         await createAuditLog(req.admin.id, 'DELETE_REVIEW', `Deleted review ID: ${reviewId}`, req.ip);
-        
         res.json({ success: true, message: 'Review deleted successfully' });
     } catch (error) {
         console.error('Error deleting review:', error);
@@ -457,17 +388,13 @@ app.delete('/api/admin/reviews/:id', verifyAdmin, async (req, res) => {
     }
 });
 
-// Get statistics (unchanged)
 app.get('/api/admin/stats', verifyAdmin, async (req, res) => {
+    // ... (your existing stats code) ...
     try {
         const [teacherCount] = await db.query('SELECT COUNT(*) as count FROM teachers');
         const [reviewCount] = await db.query('SELECT COUNT(*) as count FROM reviews');
         const [avgRating] = await db.query('SELECT AVG(rating) as avg FROM reviews WHERE is_approved = 1');
-        const [recentReviews] = await db.query(`
-            SELECT COUNT(*) as count FROM reviews 
-            WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-        `);
-        
+        const [recentReviews] = await db.query('SELECT COUNT(*) as count FROM reviews WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)');
         res.json({
             total_teachers: teacherCount[0].count,
             total_reviews: reviewCount[0].count,
@@ -480,7 +407,7 @@ app.get('/api/admin/stats', verifyAdmin, async (req, res) => {
     }
 });
 
-// Health check (unchanged)
+// Health check
 app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
@@ -493,6 +420,7 @@ app.get('/api/db-test', async (req, res) => {
         res.status(500).json({ status: 'DB connection failed', error: error.message });
     }
 });
+
 // Start server
 app.listen(PORT, () => {
     console.log(`\n🚀 Server running on http://localhost:${PORT}`);
