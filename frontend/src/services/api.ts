@@ -27,9 +27,16 @@ api.interceptors.request.use(
 /**
  * Get all teachers with average ratings
  */
-export const getTeachers = () => {
-    console.log('📚 Fetching all teachers...');
-    return api.get('/teachers');
+export const getTeachers = (page: number = 1) => {
+    return api.get(`/teachers?page=${page}&limit=20`);
+};
+
+// Add this new function:
+export const searchAllTeachers = (query: string) => {
+    if (!query || query.trim() === '') {
+        return Promise.resolve({ data: [] });
+    }
+    return api.get(`/teachers/search?q=${encodeURIComponent(query)}`);
 };
 
 /**
@@ -120,9 +127,21 @@ export const deleteTeacher = (id: number) => {
 /**
  * Get all reviews for moderation (admin only)
  */
+// In your api.ts file - update the getAdminReviews function
+
+/**
+ * Get all reviews for moderation (admin only)
+ */
 export const getAdminReviews = () => {
     console.log('📋 Fetching all reviews for admin...');
-    return api.get('/admin/reviews');
+    return api.get('/admin/reviews').then(response => {
+        // Ensure consistent response structure
+        console.log('📋 Admin reviews API response:', response.data);
+        return response;
+    }).catch(error => {
+        console.error('❌ Error fetching admin reviews:', error);
+        throw error;
+    });
 };
 
 /**

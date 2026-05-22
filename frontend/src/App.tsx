@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import React, { useState, useEffect, useCallback, memo, useRef } from 'react';
 import { 
     getTeachers, 
+    searchAllTeachers,      // <-- new import
     getTeacherDetail, 
     adminLogin, 
     addTeacher, 
@@ -14,7 +15,7 @@ import ForgotPassword from './components/ForgotPassword';
 import ResetPassword from './components/ResetPassword';
 import './App.css';
 
-// ========== LOCAL INTERFACES (UPDATED) ==========
+// ========== INTERFACES ==========
 interface Teacher {
     id: number;
     name: string;
@@ -39,7 +40,7 @@ interface TeacherDetail extends Teacher {
     total_reviews: number;
 }
 
-// ========== ADMIN PANEL COMPONENT (memoized) ==========
+// ========== ADMIN PANEL (unchanged) ==========
 const AdminPanel = memo(({ 
     teachers, 
     reviewsForModeration, 
@@ -64,14 +65,23 @@ const AdminPanel = memo(({
         return '⭐'.repeat(fullStars) + '☆'.repeat(emptyStars);
     };
 
+    const totalReviews = reviewsForModeration?.length || 0;
+    const totalTeachers = teachers?.length || 0;
+    
+    let avgRating = Number(adminStats.average_rating) || 0;
+    if (avgRating === 0 && totalReviews > 0) {
+        const totalRating = reviewsForModeration.reduce((sum: number, review: any) => sum + (Number(review.rating) || 0), 0);
+        avgRating = totalRating / totalReviews;
+    }
+
     return (
         <div className="admin-panel">
             <div className="admin-header">
                 <h2>Admin Dashboard</h2>
                 <div className="admin-stats">
-                    <span>📚 {Number(adminStats.total_teachers) || teachers.length} Teachers</span>
-                    <span>💬 {Number(adminStats.total_reviews) || reviewsForModeration.length} Reviews</span>
-                    <span>⭐ {Number(adminStats.average_rating || 0).toFixed(1)} Avg</span>
+                    <span>📚 {totalTeachers} Teachers</span>
+                    <span>💬 {totalReviews} Reviews</span>
+                    <span>⭐ {avgRating.toFixed(1)} Avg</span>
                 </div>
                 <button onClick={onLogout} className="logout-btn">Logout</button>
             </div>
@@ -82,34 +92,34 @@ const AdminPanel = memo(({
                 </button>
                 
                 {showAddTeacherForm && (
-    <form onSubmit={onAddTeacher} className="add-teacher-form">
-        <input
-            type="text"
-            placeholder="Teacher Name"
-            value={newTeacherName}
-            onChange={(e) => setNewTeacherName(e.target.value)}
-            required
-        />
-        <input
-            type="text"
-            placeholder="Department"
-            value={newTeacherDepartment}
-            onChange={(e) => setNewTeacherDepartment(e.target.value)}
-            required
-        />
-        <input
-            type="url"
-            placeholder="Image URL (optional, e.g., https://...)"
-            value={newTeacherImage}
-            onChange={(e) => setNewTeacherImage(e.target.value)}
-        />
-        <button type="submit">Save Teacher</button>
-    </form>
-)}
+                    <form onSubmit={onAddTeacher} className="add-teacher-form">
+                        <input
+                            type="text"
+                            placeholder="Teacher Name"
+                            value={newTeacherName}
+                            onChange={(e) => setNewTeacherName(e.target.value)}
+                            required
+                        />
+                        <input
+                            type="text"
+                            placeholder="Department"
+                            value={newTeacherDepartment}
+                            onChange={(e) => setNewTeacherDepartment(e.target.value)}
+                            required
+                        />
+                        <input
+                            type="url"
+                            placeholder="Image URL (optional)"
+                            value={newTeacherImage}
+                            onChange={(e) => setNewTeacherImage(e.target.value)}
+                        />
+                        <button type="submit">Save Teacher</button>
+                    </form>
+                )}
             </div>
             
             <div className="admin-section">
-                <h3>Manage Teachers ({teachers.length})</h3>
+                <h3>Manage Teachers ({totalTeachers})</h3>
                 <div className="admin-list">
                     {teachers.map((teacher: Teacher) => (
                         <div key={teacher.id} className="admin-item">
@@ -121,12 +131,10 @@ const AdminPanel = memo(({
             </div>
             
             <div className="admin-section">
-                <h3>Manage Reviews ({reviewsForModeration.length})</h3>
+                <h3>Manage Reviews ({totalReviews})</h3>
                 <div className="admin-list">
-                    {reviewsForModeration.length === 0 ? (
-                        <p style={{textAlign: 'center', padding: '20px', color: '#999'}}>
-                            📭 No reviews yet.
-                        </p>
+                    {totalReviews === 0 ? (
+                        <p style={{textAlign: 'center', padding: '20px', color: '#999'}}>📭 No reviews yet.</p>
                     ) : (
                         reviewsForModeration.map((review: any) => (
                             <div key={review.id} className="admin-item">
@@ -149,7 +157,7 @@ const AdminPanel = memo(({
     );
 });
 
-// ========== LOGIN FORM COMPONENT (memoized) ==========
+// ========== LOGIN FORM (unchanged) ==========
 const LoginForm = memo(({ 
     adminUsername, 
     setAdminUsername, 
@@ -190,16 +198,21 @@ const LoginForm = memo(({
     </div>
 ));
 
-// ========== MAIN APP COMPONENT ==========
+// ========== MAIN APP ==========
 const App: React.FC = () => {
-    // ALL useState hooks first
+    // State
     const [teachers, setTeachers] = useState<Teacher[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [hasMore, setHasMore] = useState(true);
+    const [totalTeachersCount, setTotalTeachersCount] = useState(0);
+    const [isSearching, setIsSearching] = useState(false);
+    const [searchResults, setSearchResults] = useState<Teacher[]>([]);
+    const [searchTerm, setSearchTerm] = useState('');
+    
     const [selectedTeacher, setSelectedTeacher] = useState<TeacherDetail | null>(null);
     const [showReviewForm, setShowReviewForm] = useState(false);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [debouncedTerm, setDebouncedTerm] = useState('');
-    
     const [reviewRating, setReviewRating] = useState(5);
     const [reviewComment, setReviewComment] = useState('');
     const [reviewUserName, setReviewUserName] = useState('');
@@ -218,56 +231,99 @@ const App: React.FC = () => {
     const [reviewsForModeration, setReviewsForModeration] = useState<any[]>([]);
     const [adminStats, setAdminStats] = useState<any>({});
 
-    // Debounce effect – updates debouncedTerm 300ms after searchTerm stops changing
-    useEffect(() => {
-        const timer = setTimeout(() => setDebouncedTerm(searchTerm), 300);
-        return () => clearTimeout(timer);
-    }, [searchTerm]);
+    // Refs
+    const loadMoreRef = useRef<HTMLDivElement>(null);
 
-    // ALL useEffect and useCallback hooks next
+    // ========== TEACHER LOADING (PAGINATED) ==========
+    const loadTeachers = async (page: number = 1) => {
+        try {
+            if (page === 1) setLoading(true);
+            else setLoadingMore(true);
+
+            const response = await getTeachers(page);
+            const data = response.data;
+            const newTeachers = data.teachers || [];
+            
+            if (page === 1) setTeachers(newTeachers);
+            else setTeachers(prev => [...prev, ...newTeachers]);
+
+            if (data.pagination) {
+                setHasMore(page < data.pagination.totalPages);
+                setTotalTeachersCount(data.pagination.total);
+            } else {
+                setHasMore(false);
+            }
+        } catch (error) {
+            console.error('Error loading teachers:', error);
+        } finally {
+            if (page === 1) setLoading(false);
+            else setLoadingMore(false);
+        }
+    };
+
+    // ========== SEARCH (ALL TEACHERS) ==========
+    const handleSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setSearchTerm(value);
+        
+        if (value.trim()) {
+            setIsSearching(true);
+            setLoading(true);
+            try {
+                const res = await searchAllTeachers(value);
+                setSearchResults(res.data || []);
+            } catch (error) {
+                console.error('Search error:', error);
+                setSearchResults([]);
+            } finally {
+                setLoading(false);
+            }
+        } else {
+            // Clear search – reset to normal paginated view
+            setIsSearching(false);
+            setSearchResults([]);
+            setCurrentPage(1);
+            loadTeachers(1);
+        }
+    };
+
+    // Load next page when currentPage changes (only if not searching)
     useEffect(() => {
-        loadTeachers();
+        if (!isSearching && currentPage > 1) {
+            loadTeachers(currentPage);
+        }
+    }, [currentPage, isSearching]);
+
+    // Initial load
+    useEffect(() => {
+        loadTeachers(1);
         checkAdminLogin();
     }, []);
 
     const checkAdminLogin = () => {
         const token = localStorage.getItem('admin_token');
-        if (token) {
-            setIsAdminLoggedIn(true);
-        }
+        if (token) setIsAdminLoggedIn(true);
     };
 
-    const loadTeachers = async () => {
-        try {
-            setLoading(true);
-            const response = await getTeachers();
-            let teachersData = response.data;
-            
-            if (teachersData && teachersData.teachers) {
-                teachersData = teachersData.teachers;
-            }
-            if (Array.isArray(teachersData)) {
-                setTeachers(teachersData);
-            } else {
-                setTeachers([]);
-            }
-        } catch (error) {
-            console.error('Error loading teachers:', error);
-            setTeachers([]);
-        } finally {
-            setLoading(false);
-        }
-    };
-
+    // ========== ADMIN DATA ==========
     const loadAdminData = async () => {
         try {
             const reviewsRes = await getAdminReviews();
-            const reviewsData = Array.isArray(reviewsRes.data) ? reviewsRes.data : [];
-            console.log('✅ Admin reviews loaded:', reviewsData.length);
+            let reviewsData = [];
+            if (reviewsRes.data) {
+                if (Array.isArray(reviewsRes.data)) reviewsData = reviewsRes.data;
+                else if (reviewsRes.data.reviews) reviewsData = reviewsRes.data.reviews;
+                else if (reviewsRes.data.data) reviewsData = reviewsRes.data.data;
+            }
             setReviewsForModeration(reviewsData);
             
             const statsRes = await getAdminStats();
-            setAdminStats(statsRes.data || {});
+            const stats = statsRes.data || {};
+            setAdminStats({
+                total_teachers: stats.total_teachers || 0,
+                total_reviews: reviewsData.length,
+                average_rating: stats.average_rating || 0
+            });
         } catch (error) {
             console.error('Error loading admin data:', error);
         }
@@ -284,7 +340,7 @@ const App: React.FC = () => {
             setAdminPassword('');
             alert('✅ Admin login successful!');
             await loadAdminData();
-            await loadTeachers();
+            await loadTeachers(1);
         } catch (error: any) {
             setAdminError(error.response?.data?.error || 'Login failed');
         }
@@ -299,35 +355,35 @@ const App: React.FC = () => {
     }, []);
 
     const handleAddTeacher = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTeacherName || !newTeacherDepartment) {
-        alert('Please fill in all fields');
-        return;
-    }
-    try {
-        await addTeacher({ 
-            name: newTeacherName, 
-            department: newTeacherDepartment,
-            image_url: newTeacherImage || undefined
-        });
-        alert('✅ Teacher added successfully!');
-        setNewTeacherName('');
-        setNewTeacherDepartment('');
-        setNewTeacherImage('');
-        setShowAddTeacherForm(false);
-        loadTeachers();
-        await loadAdminData();
-    } catch (error) {
-        alert('Failed to add teacher');
-    }
-}, [newTeacherName, newTeacherDepartment, newTeacherImage]);
+        e.preventDefault();
+        if (!newTeacherName || !newTeacherDepartment) {
+            alert('Please fill in all fields');
+            return;
+        }
+        try {
+            await addTeacher({ 
+                name: newTeacherName, 
+                department: newTeacherDepartment,
+                image_url: newTeacherImage || undefined
+            });
+            alert('✅ Teacher added successfully!');
+            setNewTeacherName('');
+            setNewTeacherDepartment('');
+            setNewTeacherImage('');
+            setShowAddTeacherForm(false);
+            loadTeachers(1);
+            await loadAdminData();
+        } catch (error) {
+            alert('Failed to add teacher');
+        }
+    }, [newTeacherName, newTeacherDepartment, newTeacherImage]);
 
     const handleDeleteTeacher = useCallback(async (id: number) => {
         if (window.confirm('Are you sure you want to delete this teacher? All reviews will also be deleted.')) {
             try {
                 await deleteTeacher(id);
                 alert('✅ Teacher deleted successfully!');
-                loadTeachers();
+                loadTeachers(1);
                 if (selectedTeacher?.id === id) {
                     setSelectedTeacher(null);
                     setShowReviewForm(false);
@@ -367,20 +423,16 @@ const App: React.FC = () => {
 
     const handleSubmitReview = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
-        
         if (!selectedTeacher) {
             setReviewError('No teacher selected');
             return;
         }
-        
         if (!reviewComment.trim()) {
             setReviewError('Please write a review');
             return;
         }
-        
         setSubmitting(true);
         setReviewError('');
-        
         try {
             await submitReview({
                 teacher_id: selectedTeacher.id,
@@ -407,7 +459,7 @@ const App: React.FC = () => {
                 image_url: data.image_url || data.teacher?.image_url || null,
                 reviews: data.reviews || [],
             });
-            await loadTeachers();
+            await loadTeachers(1);
             await loadAdminData();
         } catch (err: any) {
             console.error('Submit error:', err);
@@ -417,19 +469,10 @@ const App: React.FC = () => {
         }
     }, [selectedTeacher, reviewRating, reviewComment, reviewUserName]);
 
-    // Use debouncedTerm for filtering (search happens only after user stops typing)
-    const filteredTeachers = teachers.filter((teacher: Teacher) =>
-        teacher.name?.toLowerCase().includes(debouncedTerm.toLowerCase()) ||
-        teacher.department?.toLowerCase().includes(debouncedTerm.toLowerCase())
-    );
-
     const handleTeacherClick = useCallback(async (teacher: Teacher) => {
-        console.log('Teacher clicked:', teacher);
         try {
             const response = await getTeacherDetail(teacher.id);
             const data = response.data;
-            console.log('API response:', data);
-            
             const teacherData: TeacherDetail = {
                 id: data.id || teacher.id,
                 name: data.name || data.teacher?.name || teacher.name,
@@ -440,7 +483,6 @@ const App: React.FC = () => {
                 image_url: data.image_url || data.teacher?.image_url || null,
                 reviews: data.reviews || [],
             };
-            
             setSelectedTeacher(teacherData);
             setShowReviewForm(false);
             setReviewComment('');
@@ -459,7 +501,17 @@ const App: React.FC = () => {
         return '⭐'.repeat(fullStars) + '☆'.repeat(emptyStars);
     };
 
-    // Show admin panel if admin is logged in and panel is open
+    // Determine which teachers to display
+    const displayTeachers = isSearching ? searchResults : teachers;
+
+    // Load more button handler
+    const loadMore = () => {
+        if (!isSearching && hasMore && !loadingMore) {
+            setCurrentPage(prev => prev + 1);
+        }
+    };
+
+    // ========== RENDER ==========
     if (showAdminPanel) {
         if (!isAdminLoggedIn) {
             return (
@@ -510,33 +562,28 @@ const App: React.FC = () => {
         );
     }
 
-    // ========== ROUTE CHECK ==========
+    // Password reset routes
     const pathname = window.location.pathname;
-    if (pathname === '/forgot-password') {
-        return <ForgotPassword />;
-    }
-    if (pathname === '/reset-password') {
-        return <ResetPassword />;
-    }
+    if (pathname === '/forgot-password') return <ForgotPassword />;
+    if (pathname === '/reset-password') return <ResetPassword />;
 
     // Main site view
     return (
         <div className="app">
-            
             <header className="header">
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px' }}>
-        <img 
-            src="https://www.umt.edu.pk/images/umt-logo.png" 
-            alt="UMT Logo" 
-            style={{ height: '60px', width: 'auto' }}
-        />
-        <h1 style={{ margin: 0 }}>UMT Teacher Reviews</h1>
-    </div>
-    <p>Rate and review your professors anonymously</p>
-    <button onClick={() => setShowAdminPanel(true)} className="admin-login-btn">
-        Admin Login
-    </button>
-</header>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px' }}>
+                    <img 
+                        src="https://www.umt.edu.pk/images/umt-logo.png" 
+                        alt="UMT Logo" 
+                        style={{ height: '60px', width: 'auto' }}
+                    />
+                    <h1 style={{ margin: 0 }}>UMT Teacher Reviews</h1>
+                </div>
+                <p>Rate and review your professors anonymously</p>
+                <button onClick={() => setShowAdminPanel(true)} className="admin-login-btn">
+                    Admin Login
+                </button>
+            </header>
 
             <div className="container">
                 <div className="sidebar">
@@ -545,31 +592,60 @@ const App: React.FC = () => {
                             type="text"
                             placeholder="🔍 Search by teacher name or department..."
                             value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onChange={handleSearch}
                             className="search-input"
                         />
+                        {isSearching && searchTerm && (
+                            <div className="search-info">
+                                Found {searchResults.length} teacher{searchResults.length !== 1 ? 's' : ''} matching "{searchTerm}"
+                            </div>
+                        )}
                     </div>
                     
                     <div className="teacher-list">
-                        {loading ? (
+                        {(loading && !isSearching && currentPage === 1) ? (
                             <div className="loading">Loading teachers...</div>
-                        ) : filteredTeachers.length === 0 ? (
-                            <div className="no-results">No teachers found</div>
+                        ) : displayTeachers.length === 0 ? (
+                            <div className="no-results">
+                                {isSearching ? `No teachers found matching "${searchTerm}"` : 'No teachers found'}
+                            </div>
                         ) : (
-                            filteredTeachers.map((teacher: Teacher) => (
-                                <div 
-                                    key={teacher.id} 
-                                    className="teacher-card" 
-                                    onClick={() => handleTeacherClick(teacher)}
-                                >
-                                    <h3>{teacher.name}</h3>
-                                    <p className="department">{teacher.department}</p>
-                                    <div className="rating">
-                                        <span className="stars">{renderStars(teacher.avg_rating)}</span>
-                                        <span className="reviews-count">({teacher.review_count} reviews)</span>
+                            <>
+                                {displayTeachers.map((teacher: Teacher) => (
+                                    <div 
+                                        key={teacher.id} 
+                                        className="teacher-card" 
+                                        onClick={() => handleTeacherClick(teacher)}
+                                    >
+                                        {teacher.image_url && (
+                                            <div className="teacher-card-image">
+                                                <img src={teacher.image_url} alt={teacher.name} />
+                                            </div>
+                                        )}
+                                        <div className="teacher-card-info">
+                                            <h3>{teacher.name}</h3>
+                                            <p className="department">{teacher.department}</p>
+                                            <div className="rating">
+                                                <span className="stars">{renderStars(teacher.avg_rating)}</span>
+                                                <span className="reviews-count">({teacher.review_count} reviews)</span>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                            ))
+                                ))}
+                                {loadingMore && (
+                                    <div className="loading-more">Loading more teachers...</div>
+                                )}
+                                {!isSearching && hasMore && !loadingMore && (
+                                    <div ref={loadMoreRef} className="load-more-container">
+                                        <button onClick={loadMore} className="load-more-btn">
+                                            Load More ({teachers.length} / {totalTeachersCount})
+                                        </button>
+                                    </div>
+                                )}
+                                {!isSearching && !hasMore && teachers.length > 0 && (
+                                    <div className="end-of-list">✨ You've seen all {totalTeachersCount} teachers</div>
+                                )}
+                            </>
                         )}
                     </div>
                 </div>
@@ -613,13 +689,8 @@ const App: React.FC = () => {
                             {!showReviewForm ? (
                                 <button 
                                     onClick={() => {
-                                        console.log('Write review button clicked');
-                                        console.log('Selected teacher:', selectedTeacher);
-                                        if (selectedTeacher && selectedTeacher.id) {
-                                            setShowReviewForm(true);
-                                        } else {
-                                            setReviewError('Please select a teacher first');
-                                        }
+                                        if (selectedTeacher && selectedTeacher.id) setShowReviewForm(true);
+                                        else setReviewError('Please select a teacher first');
                                     }} 
                                     className="btn-write-review"
                                 >
@@ -628,9 +699,7 @@ const App: React.FC = () => {
                             ) : (
                                 <div className="review-form-container">
                                     <h3 className="review-form-title">✏️ Write a Review for {selectedTeacher.name}</h3>
-                                    
                                     {reviewError && <div className="error-message">{reviewError}</div>}
-                                    
                                     <form onSubmit={handleSubmitReview}>
                                         <div className="form-group">
                                             <label>⭐ Rating (1-5)</label>
@@ -646,7 +715,6 @@ const App: React.FC = () => {
                                                 <option value="1">1 Star - Very Poor ⭐</option>
                                             </select>
                                         </div>
-                                        
                                         <div className="form-group">
                                             <label>👤 Your Name (optional)</label>
                                             <input 
@@ -656,7 +724,6 @@ const App: React.FC = () => {
                                                 placeholder="Leave blank to post anonymously"
                                             />
                                         </div>
-                                        
                                         <div className="form-group">
                                             <label>💬 Your Review *</label>
                                             <textarea 
@@ -667,11 +734,8 @@ const App: React.FC = () => {
                                                 required
                                             />
                                         </div>
-                                        
                                         <div className="form-buttons">
-                                            <button type="button" onClick={() => setShowReviewForm(false)} className="btn-cancel">
-                                                Cancel
-                                            </button>
+                                            <button type="button" onClick={() => setShowReviewForm(false)} className="btn-cancel">Cancel</button>
                                             <button type="submit" disabled={submitting} className="btn-submit">
                                                 {submitting ? 'Submitting...' : 'Submit Review'}
                                             </button>
@@ -688,15 +752,9 @@ const App: React.FC = () => {
                                     selectedTeacher.reviews.map((review: Review) => (
                                         <div key={review.id} className="review-card">
                                             <div className="review-header">
-                                                <span className="reviewer-name">
-                                                    👤 {review.user_name || 'Anonymous'}
-                                                </span>
-                                                <span className="review-rating">
-                                                    {renderStars(review.rating)}
-                                                </span>
-                                                <span className="review-date">
-                                                    📅 {new Date(review.created_at).toLocaleDateString()}
-                                                </span>
+                                                <span className="reviewer-name">👤 {review.user_name || 'Anonymous'}</span>
+                                                <span className="review-rating">{renderStars(review.rating)}</span>
+                                                <span className="review-date">📅 {new Date(review.created_at).toLocaleDateString()}</span>
                                             </div>
                                             <p className="review-comment">"{review.comment}"</p>
                                         </div>
@@ -716,4 +774,4 @@ const App: React.FC = () => {
     );
 };
 
-export default App;// trigger rebuild
+export default App;
