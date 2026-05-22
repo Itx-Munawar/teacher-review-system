@@ -53,7 +53,9 @@ const AdminPanel = memo(({
     newTeacherName,
     setNewTeacherName,
     newTeacherDepartment,
-    setNewTeacherDepartment
+    setNewTeacherDepartment,
+    newTeacherImage,
+    setNewTeacherImage
 }: any) => {
     const renderStars = (rating: number) => {
         const numRating = Number(rating) || 0;
@@ -80,25 +82,30 @@ const AdminPanel = memo(({
                 </button>
                 
                 {showAddTeacherForm && (
-                    <form onSubmit={onAddTeacher} className="add-teacher-form">
-                        <input
-                            type="text"
-                            placeholder="Teacher Name"
-                            value={newTeacherName}
-                            onChange={(e) => setNewTeacherName(e.target.value)}
-                            required
-                            autoFocus
-                        />
-                        <input
-                            type="text"
-                            placeholder="Department"
-                            value={newTeacherDepartment}
-                            onChange={(e) => setNewTeacherDepartment(e.target.value)}
-                            required
-                        />
-                        <button type="submit">Save Teacher</button>
-                    </form>
-                )}
+    <form onSubmit={onAddTeacher} className="add-teacher-form">
+        <input
+            type="text"
+            placeholder="Teacher Name"
+            value={newTeacherName}
+            onChange={(e) => setNewTeacherName(e.target.value)}
+            required
+        />
+        <input
+            type="text"
+            placeholder="Department"
+            value={newTeacherDepartment}
+            onChange={(e) => setNewTeacherDepartment(e.target.value)}
+            required
+        />
+        <input
+            type="url"
+            placeholder="Image URL (optional, e.g., https://...)"
+            value={newTeacherImage}
+            onChange={(e) => setNewTeacherImage(e.target.value)}
+        />
+        <button type="submit">Save Teacher</button>
+    </form>
+)}
             </div>
             
             <div className="admin-section">
@@ -207,6 +214,7 @@ const App: React.FC = () => {
     const [showAddTeacherForm, setShowAddTeacherForm] = useState(false);
     const [newTeacherName, setNewTeacherName] = useState('');
     const [newTeacherDepartment, setNewTeacherDepartment] = useState('');
+    const [newTeacherImage, setNewTeacherImage] = useState('');
     const [reviewsForModeration, setReviewsForModeration] = useState<any[]>([]);
     const [adminStats, setAdminStats] = useState<any>({});
 
@@ -291,23 +299,28 @@ const App: React.FC = () => {
     }, []);
 
     const handleAddTeacher = useCallback(async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!newTeacherName || !newTeacherDepartment) {
-            alert('Please fill in all fields');
-            return;
-        }
-        try {
-            await addTeacher({ name: newTeacherName, department: newTeacherDepartment });
-            alert('✅ Teacher added successfully!');
-            setNewTeacherName('');
-            setNewTeacherDepartment('');
-            setShowAddTeacherForm(false);
-            loadTeachers();
-            await loadAdminData();
-        } catch (error) {
-            alert('Failed to add teacher');
-        }
-    }, [newTeacherName, newTeacherDepartment]);
+    e.preventDefault();
+    if (!newTeacherName || !newTeacherDepartment) {
+        alert('Please fill in all fields');
+        return;
+    }
+    try {
+        await addTeacher({ 
+            name: newTeacherName, 
+            department: newTeacherDepartment,
+            image_url: newTeacherImage || undefined
+        });
+        alert('✅ Teacher added successfully!');
+        setNewTeacherName('');
+        setNewTeacherDepartment('');
+        setNewTeacherImage('');
+        setShowAddTeacherForm(false);
+        loadTeachers();
+        await loadAdminData();
+    } catch (error) {
+        alert('Failed to add teacher');
+    }
+}, [newTeacherName, newTeacherDepartment, newTeacherImage]);
 
     const handleDeleteTeacher = useCallback(async (id: number) => {
         if (window.confirm('Are you sure you want to delete this teacher? All reviews will also be deleted.')) {
@@ -489,6 +502,8 @@ const App: React.FC = () => {
                         setNewTeacherName={setNewTeacherName}
                         newTeacherDepartment={newTeacherDepartment}
                         setNewTeacherDepartment={setNewTeacherDepartment}
+                        newTeacherImage={newTeacherImage}
+                        setNewTeacherImage={setNewTeacherImage}
                     />
                 </div>
             </div>

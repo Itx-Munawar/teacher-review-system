@@ -361,10 +361,11 @@ app.post('/api/admin/setup', async (req, res) => {
     }
 });
 
-// Add teacher (unchanged)
+// Add teacher (images are just URLs for simplicity) with validation and audit log
 app.post('/api/admin/teachers', verifyAdmin, [
     body('name').isLength({ min: 2, max: 100 }).withMessage('Name must be 2-100 characters'),
-    body('department').isLength({ min: 2, max: 100 }).withMessage('Department must be 2-100 characters')
+    body('department').isLength({ min: 2, max: 100 }).withMessage('Department must be 2-100 characters'),
+    body('image_url').optional().isURL().withMessage('Image URL must be a valid URL')
 ], async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -372,13 +373,14 @@ app.post('/api/admin/teachers', verifyAdmin, [
     }
     
     try {
-        const { name, department } = req.body;
+        const { name, department, image_url } = req.body;
         const sanitizedName = validator.escape(name.trim());
         const sanitizedDept = validator.escape(department.trim());
+        const sanitizedImageUrl = image_url ? validator.escape(image_url.trim()) : null;
         
         const [result] = await db.query(
-            'INSERT INTO teachers (name, department) VALUES (?, ?)',
-            [sanitizedName, sanitizedDept]
+            'INSERT INTO teachers (name, department, image_url) VALUES (?, ?, ?)',
+            [sanitizedName, sanitizedDept, sanitizedImageUrl]
         );
         
         await createAuditLog(req.admin.id, 'ADD_TEACHER', `Added teacher: ${sanitizedName}`, req.ip);

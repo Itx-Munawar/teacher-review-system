@@ -95,7 +95,7 @@ export const adminLogin = (username: string, password: string) => {
 /**
  * Add a new teacher (admin only)
  */
-export const addTeacher = (data: { name: string; department: string }) => {
+export const addTeacher = (data: { name: string; department: string; image_url?: string }) => {
     console.log('➕ Adding new teacher:', data);
     return api.post('/admin/teachers', data);
 };
