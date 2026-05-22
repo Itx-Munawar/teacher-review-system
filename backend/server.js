@@ -108,7 +108,18 @@ app.get('/api/teachers', async (req, res) => {
         const limit = 20;
         const offset = (page - 1) * limit;
         
-        // Get paginated teachers
+        console.log('=== DEBUG ===');
+        console.log('Page:', page, 'Limit:', limit, 'Offset:', offset);
+        
+        // First, just count total teachers
+        const [countResult] = await db.query('SELECT COUNT(*) as total FROM teachers');
+        console.log('Total teachers in DB:', countResult[0].total);
+        
+        // Try a simple LIMIT query without JOIN to see if it works
+        const [simpleTeachers] = await db.query('SELECT * FROM teachers LIMIT ? OFFSET ?', [limit, offset]);
+        console.log('Simple query returned:', simpleTeachers.length, 'teachers');
+        
+        // Now the full query with JOIN
         const [teachers] = await db.query(`
             SELECT t.*, 
                    COALESCE(ROUND(AVG(r.rating), 1), 0) as avg_rating,
@@ -120,22 +131,23 @@ app.get('/api/teachers', async (req, res) => {
             LIMIT ? OFFSET ?
         `, [limit, offset]);
         
-        // Get total count
-        const [countResult] = await db.query('SELECT COUNT(*) as total FROM teachers');
-        const total = countResult[0].total;
+        console.log('Full query returned:', teachers.length, 'teachers');
         
         res.json({
             teachers: teachers,
             pagination: {
                 page: page,
                 limit: limit,
-                total: total,
-                totalPages: Math.ceil(total / limit)
+                total: countResult[0].total,
+                totalPages: Math.ceil(countResult[0].total / limit)
+            },
+            debug: {
+                simpleCount: simpleTeachers.length
             }
         });
     } catch (error) {
-        console.error('Error fetching teachers:', error);
-        res.status(500).json({ error: 'Database error' });
+        console.error('Error:', error);
+        res.status(500).json({ error: error.message });
     }
 });
 
