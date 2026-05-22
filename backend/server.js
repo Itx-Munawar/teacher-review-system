@@ -101,15 +101,51 @@ const createAuditLog = async (adminId, action, details, ip = 'unknown') => {
 // ========== PUBLIC API ENDPOINTS ==========
 
 // Get all teachers (NO pagination – returns full list for client‑side search)
+// Get all teachers with PAGINATION (20 per page)
 app.get('/api/teachers', async (req, res) => {
     try {
-        const search = req.query.search || '';
-        let searchQuery = '';
-        let params = [];
+        const page = parseInt(req.query.page) || 1;
+        const limit = 20;
+        const offset = (page - 1) * limit;
         
-        if (search) {
-            searchQuery = 'WHERE t.name LIKE ? OR t.department LIKE ?';
-            params = [`%${search}%`, `%${search}%`];
+        // Get paginated teachers
+        const [teachers] = await db.query(`
+            SELECT t.*, 
+                   COALESCE(ROUND(AVG(r.rating), 1), 0) as avg_rating,
+                   COUNT(r.id) as review_count
+            FROM teachers t
+            LEFT JOIN reviews r ON t.id = r.teacher_id AND r.is_approved = 1
+            GROUP BY t.id
+            ORDER BY t.name
+            LIMIT ? OFFSET ?
+        `, [limit, offset]);
+        
+        // Get total count
+        const [countResult] = await db.query('SELECT COUNT(*) as total FROM teachers');
+        const total = countResult[0].total;
+        
+        res.json({
+            teachers: teachers,
+            pagination: {
+                page: page,
+                limit: limit,
+                total: total,
+                totalPages: Math.ceil(total / limit)
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching teachers:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// NEW: Search all teachers (no pagination - returns ALL matches)
+app.get('/api/teachers/search', async (req, res) => {
+    try {
+        const searchTerm = req.query.q;
+        
+        if (!searchTerm || searchTerm.trim() === '') {
+            return res.json([]);
         }
         
         const [teachers] = await db.query(`
@@ -118,52 +154,14 @@ app.get('/api/teachers', async (req, res) => {
                    COUNT(r.id) as review_count
             FROM teachers t
             LEFT JOIN reviews r ON t.id = r.teacher_id AND r.is_approved = 1
-            ${searchQuery}
+            WHERE t.name LIKE ? OR t.department LIKE ?
             GROUP BY t.id
             ORDER BY t.name
-        `, params);
+        `, [`%${searchTerm}%`, `%${searchTerm}%`]);
         
         res.json(teachers);
     } catch (error) {
-        console.error('Error fetching teachers:', error);
-        res.status(500).json({ error: 'Database error' });
-    }
-});
-
-// Get single teacher with reviews
-app.get('/api/teachers/:id', async (req, res) => {
-    try {
-        const teacherId = req.params.id;
-        
-        const [teachers] = await db.query(
-            'SELECT * FROM teachers WHERE id = ?',
-            [teacherId]
-        );
-        
-        if (teachers.length === 0) {
-            return res.status(404).json({ error: 'Teacher not found' });
-        }
-        
-        const [reviews] = await db.query(
-            `SELECT * FROM reviews 
-             WHERE teacher_id = ? AND is_approved = 1 
-             ORDER BY created_at DESC`,
-            [teacherId]
-        );
-        
-        const [ratingData] = await db.query(
-            'SELECT AVG(rating) as avg_rating, COUNT(*) as total FROM reviews WHERE teacher_id = ? AND is_approved = 1',
-            [teacherId]
-        );
-        
-        res.json({
-            teacher: teachers[0],
-            reviews: reviews,
-            avg_rating: ratingData[0].avg_rating || 0,
-            total_reviews: ratingData[0].total || 0
-        });
-    } catch (error) {
-        console.error('Error fetching teacher details:', error);
+        console.error('Error searching teachers:', error);
         res.status(500).json({ error: 'Database error' });
     }
 });
