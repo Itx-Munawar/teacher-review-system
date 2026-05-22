@@ -507,13 +507,21 @@ const App: React.FC = () => {
     // Main site view
     return (
         <div className="app">
+            
             <header className="header">
-                <h1>📚 Teacher Review System</h1>
-                <p>Rate and review your professors anonymously</p>
-                <button onClick={() => setShowAdminPanel(true)} className="admin-login-btn">
-                    Admin Login
-                </button>
-            </header>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px' }}>
+        <img 
+            src="https://www.umt.edu.pk/images/umt-logo.png" 
+            alt="UMT Logo" 
+            style={{ height: '60px', width: 'auto' }}
+        />
+        <h1 style={{ margin: 0 }}>UMT Teacher Reviews</h1>
+    </div>
+    <p>Rate and review your professors anonymously</p>
+    <button onClick={() => setShowAdminPanel(true)} className="admin-login-btn">
+        Admin Login
+    </button>
+</header>
 
             <div className="container">
                 <div className="sidebar">
