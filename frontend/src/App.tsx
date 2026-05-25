@@ -230,36 +230,49 @@ const App: React.FC = () => {
     const [newTeacherImage, setNewTeacherImage] = useState('');
     const [reviewsForModeration, setReviewsForModeration] = useState<any[]>([]);
     const [adminStats, setAdminStats] = useState<any>({});
+    const [error, setError] = useState<string | null>(null);
 
     // Refs
     const loadMoreRef = useRef<HTMLDivElement>(null);
 
     // ========== TEACHER LOADING (PAGINATED) ==========
-    const loadTeachers = async (page: number = 1) => {
-        try {
-            if (page === 1) setLoading(true);
-            else setLoadingMore(true);
+   const loadTeachers = async (page: number = 1, retryCount: number = 0) => {
+    try {
+        if (page === 1) setLoading(true);
+        else setLoadingMore(true);
+        setError(null);
 
-            const response = await getTeachers(page);
-            const data = response.data;
-            const newTeachers = data.teachers || [];
-            
-            if (page === 1) setTeachers(newTeachers);
-            else setTeachers(prev => [...prev, ...newTeachers]);
+        const response = await getTeachers(page);
+        const data = response.data;
+        const newTeachers = data.teachers || [];
 
-            if (data.pagination) {
-                setHasMore(page < data.pagination.totalPages);
-                setTotalTeachersCount(data.pagination.total);
-            } else {
-                setHasMore(false);
-            }
-        } catch (error) {
-            console.error('Error loading teachers:', error);
-        } finally {
-            if (page === 1) setLoading(false);
-            else setLoadingMore(false);
+        if (page === 1) {
+            setTeachers(newTeachers);
+        } else {
+            setTeachers(prev => [...prev, ...newTeachers]);
         }
-    };
+
+        if (data.pagination) {
+            setHasMore(page < data.pagination.totalPages);
+            setTotalTeachersCount(data.pagination.total);
+        }
+    } catch (err: any) {
+        console.error('Failed to load teachers:', err);
+        
+        // Auto-retry once on timeout or network error
+        if (retryCount === 0 && (err.code === 'ECONNABORTED' || err.message.includes('timeout'))) {
+            console.log('Auto-retrying after timeout...');
+            setTimeout(() => loadTeachers(page, 1), 2000);
+            return;
+        }
+        
+        setError('Failed to load teachers. Please refresh the page.');
+    } finally {
+        if (page === 1 && retryCount === 0) setLoading(false);
+        else if (page === 1 && retryCount === 1) setLoading(false);
+        else if (page !== 1) setLoadingMore(false);
+    }
+};
 
     // ========== SEARCH (ALL TEACHERS) ==========
     const handleSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -613,13 +626,15 @@ const App: React.FC = () => {
                     </div>
                     
                     <div className="teacher-list">
-                        {(loading && !isSearching && currentPage === 1) ? (
-                            <div className="loading">Loading teachers...</div>
-                        ) : displayTeachers.length === 0 ? (
-                            <div className="no-results">
-                                {isSearching ? `No teachers found matching "${searchTerm}"` : 'No teachers found'}
-                            </div>
-                        ) : (
+                       {loading ? (
+    <div className="loading">Loading teachers...</div>
+) : error ? (
+    <div className="error-message">
+        {error} <button onClick={() => loadTeachers(1)}>Retry</button>
+    </div>
+) : displayTeachers.length === 0 ? (
+    <div className="no-results">No teachers found</div>
+                         ) : (
                             <>
                                 {displayTeachers.map((teacher: Teacher) => (
                                     <div 
