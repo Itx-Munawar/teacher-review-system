@@ -1121,3 +1121,12 @@ body {
         font-size: 0.75rem;
     }
 }
+.modal-content ul {
+    list-style: none;
+    padding: 0;
+}
+
+.modal-content li {
+    margin: 0.3rem 0;
+    font-size: 0.95rem;
+}
