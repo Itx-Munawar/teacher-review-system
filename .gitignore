@@ -1,7 +1,20 @@
+# Backend environment variables
 backend/.env
-backend/.env
-<<<<<<< HEAD
-=======
 .env
+
+# Node modules (never commit)
 node_modules/
->>>>>>> 3cbd2a1a008e02ecb8cb7a045969b6168c953dae
+/frontend/node_modules/
+/backend/node_modules/
+
+# Build outputs (optional)
+/frontend/build/
+/backend/build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db

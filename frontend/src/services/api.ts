@@ -5,7 +5,7 @@ const API_BASE = 'https://teacher-review-system.onrender.com/api';
 const api = axios.create({
     baseURL: API_BASE,
     headers: { 'Content-Type': 'application/json' },
-    timeout: 60000,
+    timeout: 60000, // 60 seconds for cold start
 });
 
 // Add token to requests if exists
@@ -17,21 +17,21 @@ api.interceptors.request.use(
         }
         return config;
     },
-    (error) => {
-        return Promise.reject(error);
-    }
+    (error) => Promise.reject(error)
 );
 
 // ========== PUBLIC APIs ==========
 
 /**
- * Get all teachers with average ratings
+ * Get teachers with pagination (20 per page)
  */
 export const getTeachers = (page: number = 1) => {
     return api.get(`/teachers?page=${page}&limit=20`);
 };
 
-// Add this new function:
+/**
+ * Search all teachers (no pagination) – returns all matches
+ */
 export const searchAllTeachers = (query: string) => {
     if (!query || query.trim() === '') {
         return Promise.resolve({ data: [] });
@@ -40,15 +40,14 @@ export const searchAllTeachers = (query: string) => {
 };
 
 /**
- * Get single teacher details with all reviews
+ * Get single teacher details + reviews
  */
 export const getTeacherDetail = (id: number) => {
-    console.log(`📚 Fetching teacher details for ID: ${id}`);
     return api.get(`/teachers/${id}`);
 };
 
 /**
- * Submit a new review (no login required)
+ * Submit a new review
  */
 export const submitReview = (data: { 
     teacher_id: number; 
@@ -56,149 +55,61 @@ export const submitReview = (data: {
     comment: string; 
     user_name?: string;
 }) => {
-    // Ensure teacher_id is a valid number
     const teacherId = Number(data.teacher_id);
     if (isNaN(teacherId) || teacherId <= 0) {
         return Promise.reject({ response: { data: { error: 'Invalid teacher ID' } } });
     }
-    
     const reviewData = {
         teacher_id: teacherId,
         rating: Number(data.rating),
         comment: data.comment,
         user_name: data.user_name || 'Anonymous'
     };
-    
-    console.log('✏️ Submitting review:', reviewData);
     return api.post('/reviews', reviewData);
 };
 
-/**
- * Search teachers by name (typeahead)
- */
-export const searchTeachers = (query: string) => {
-    console.log(`🔍 Searching teachers with query: ${query}`);
-    return api.get(`/search/teachers?q=${query}`);
-};
-
-/**
- * Health check endpoint
- */
-export const healthCheck = () => {
-    console.log('🏥 Health check...');
-    return api.get('/health');
-};
-
-// ========== ADMIN APIs (require authentication) ==========
+// ========== ADMIN APIs ==========
 
 /**
  * Admin login
  */
 export const adminLogin = (username: string, password: string) => {
-    console.log(`🔐 Admin login attempt: ${username}`);
     return api.post('/admin/login', { username, password });
 };
 
 /**
- * Add a new teacher (admin only)
+ * Add a new teacher
  */
 export const addTeacher = (data: { name: string; department: string; image_url?: string }) => {
-    console.log('➕ Adding new teacher:', data);
     return api.post('/admin/teachers', data);
 };
 
 /**
- * Update an existing teacher (admin only)
- */
-export const updateTeacher = (id: number, data: { name: string; department: string }) => {
-    console.log(`✏️ Updating teacher ID ${id}:`, data);
-    return api.put(`/admin/teachers/${id}`, data);
-};
-
-/**
- * Delete a teacher (admin only)
- * This will also delete all reviews for this teacher
+ * Delete a teacher (and all their reviews)
  */
 export const deleteTeacher = (id: number) => {
-    console.log(`🗑️ Deleting teacher ID: ${id}`);
     return api.delete(`/admin/teachers/${id}`);
 };
 
 /**
- * Get all reviews for moderation (admin only)
- */
-// In your api.ts file - update the getAdminReviews function
-
-/**
- * Get all reviews for moderation (admin only)
+ * Get all reviews for admin moderation
  */
 export const getAdminReviews = () => {
-    console.log('📋 Fetching all reviews for admin...');
-    return api.get('/admin/reviews').then(response => {
-        // Ensure consistent response structure
-        console.log('📋 Admin reviews API response:', response.data);
-        return response;
-    }).catch(error => {
-        console.error('❌ Error fetching admin reviews:', error);
-        throw error;
-    });
+    return api.get('/admin/reviews');
 };
 
 /**
- * Delete a review (admin only)
+ * Delete a review
  */
 export const deleteReview = (id: number) => {
-    console.log(`🗑️ Deleting review ID: ${id}`);
     return api.delete(`/admin/reviews/${id}`);
 };
 
 /**
- * Get admin dashboard statistics (admin only)
+ * Get admin dashboard statistics
  */
 export const getAdminStats = () => {
-    console.log('📊 Fetching admin statistics...');
     return api.get('/admin/stats');
-};
-
-/**
- * Get all teachers for admin panel (admin only)
- */
-export const getAdminTeachers = () => {
-    console.log('📚 Fetching all teachers for admin...');
-    return api.get('/admin/teachers');
-};
-
-// ========== Helper Functions ==========
-
-/**
- * Check if user is logged in as admin
- */
-export const isAdminLoggedIn = (): boolean => {
-    const token = localStorage.getItem('admin_token');
-    return !!token;
-};
-
-/**
- * Get admin token
- */
-export const getAdminToken = (): string | null => {
-    return localStorage.getItem('admin_token');
-};
-
-/**
- * Logout admin (remove token)
- */
-export const adminLogout = (): void => {
-    console.log('🚪 Admin logging out...');
-    localStorage.removeItem('admin_token');
-};
-
-/**
- * Set admin token (used after login)
- */
-export const setAdminToken = (token: string): void => {
-    console.log('🔑 Setting admin token');
-    localStorage.setItem('admin_token', token);
 };
 
 export default api;

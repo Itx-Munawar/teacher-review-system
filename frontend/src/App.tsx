@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, memo, useRef } from 'react';
 import { 
     getTeachers, 
-    searchAllTeachers,      // <-- new import
+    searchAllTeachers,
     getTeacherDetail, 
     adminLogin, 
     addTeacher, 
@@ -40,7 +40,7 @@ interface TeacherDetail extends Teacher {
     total_reviews: number;
 }
 
-// ========== ADMIN PANEL (unchanged) ==========
+// ========== ADMIN PANEL ==========
 const AdminPanel = memo(({ 
     teachers, 
     reviewsForModeration, 
@@ -157,7 +157,7 @@ const AdminPanel = memo(({
     );
 });
 
-// ========== LOGIN FORM (unchanged) ==========
+// ========== LOGIN FORM ==========
 const LoginForm = memo(({ 
     adminUsername, 
     setAdminUsername, 
@@ -210,6 +210,7 @@ const App: React.FC = () => {
     const [isSearching, setIsSearching] = useState(false);
     const [searchResults, setSearchResults] = useState<Teacher[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
+    const [error, setError] = useState<string | null>(null);
     
     const [selectedTeacher, setSelectedTeacher] = useState<TeacherDetail | null>(null);
     const [showReviewForm, setShowReviewForm] = useState(false);
@@ -230,49 +231,43 @@ const App: React.FC = () => {
     const [newTeacherImage, setNewTeacherImage] = useState('');
     const [reviewsForModeration, setReviewsForModeration] = useState<any[]>([]);
     const [adminStats, setAdminStats] = useState<any>({});
-    const [error, setError] = useState<string | null>(null);
 
-    // Refs
     const loadMoreRef = useRef<HTMLDivElement>(null);
 
     // ========== TEACHER LOADING (PAGINATED) ==========
-   const loadTeachers = async (page: number = 1, retryCount: number = 0) => {
-    try {
-        if (page === 1) setLoading(true);
-        else setLoadingMore(true);
-        setError(null);
+    const loadTeachers = useCallback(async (page: number = 1, retryCount: number = 0) => {
+        try {
+            if (page === 1) setLoading(true);
+            else setLoadingMore(true);
+            setError(null);
 
-        const response = await getTeachers(page);
-        const data = response.data;
-        const newTeachers = data.teachers || [];
+            const response = await getTeachers(page);
+            const data = response.data;
+            const newTeachers = data.teachers || [];
 
-        if (page === 1) {
-            setTeachers(newTeachers);
-        } else {
-            setTeachers(prev => [...prev, ...newTeachers]);
-        }
+            if (page === 1) {
+                setTeachers(newTeachers);
+            } else {
+                setTeachers(prev => [...prev, ...newTeachers]);
+            }
 
-        if (data.pagination) {
-            setHasMore(page < data.pagination.totalPages);
-            setTotalTeachersCount(data.pagination.total);
+            if (data.pagination) {
+                setHasMore(page < data.pagination.totalPages);
+                setTotalTeachersCount(data.pagination.total);
+            }
+        } catch (err: any) {
+            console.error('Failed to load teachers:', err);
+            if (retryCount === 0 && (err.code === 'ECONNABORTED' || err.message?.includes('timeout'))) {
+                console.log('Auto-retrying after timeout...');
+                setTimeout(() => loadTeachers(page, 1), 2000);
+                return;
+            }
+            setError('Failed to load teachers. Please refresh the page.');
+        } finally {
+            if (page === 1) setLoading(false);
+            else setLoadingMore(false);
         }
-    } catch (err: any) {
-        console.error('Failed to load teachers:', err);
-        
-        // Auto-retry once on timeout or network error
-        if (retryCount === 0 && (err.code === 'ECONNABORTED' || err.message.includes('timeout'))) {
-            console.log('Auto-retrying after timeout...');
-            setTimeout(() => loadTeachers(page, 1), 2000);
-            return;
-        }
-        
-        setError('Failed to load teachers. Please refresh the page.');
-    } finally {
-        if (page === 1 && retryCount === 0) setLoading(false);
-        else if (page === 1 && retryCount === 1) setLoading(false);
-        else if (page !== 1) setLoadingMore(false);
-    }
-};
+    }, []);
 
     // ========== SEARCH (ALL TEACHERS) ==========
     const handleSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -292,7 +287,6 @@ const App: React.FC = () => {
                 setLoading(false);
             }
         } else {
-            // Clear search – reset to normal paginated view
             setIsSearching(false);
             setSearchResults([]);
             setCurrentPage(1);
@@ -305,12 +299,13 @@ const App: React.FC = () => {
         if (!isSearching && currentPage > 1) {
             loadTeachers(currentPage);
         }
-    }, [currentPage, isSearching]);
+    }, [currentPage, isSearching, loadTeachers]);
 
     // Initial load
     useEffect(() => {
         loadTeachers(1);
         checkAdminLogin();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const checkAdminLogin = () => {
@@ -319,7 +314,7 @@ const App: React.FC = () => {
     };
 
     // ========== ADMIN DATA ==========
-    const loadAdminData = async () => {
+    const loadAdminData = useCallback(async () => {
         try {
             const reviewsRes = await getAdminReviews();
             let reviewsData = [];
@@ -340,7 +335,7 @@ const App: React.FC = () => {
         } catch (error) {
             console.error('Error loading admin data:', error);
         }
-    };
+    }, []);
 
     const handleAdminLogin = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
@@ -357,7 +352,7 @@ const App: React.FC = () => {
         } catch (error: any) {
             setAdminError(error.response?.data?.error || 'Login failed');
         }
-    }, [adminUsername, adminPassword]);
+    }, [adminUsername, adminPassword, loadAdminData, loadTeachers]);
 
     const handleAdminLogout = useCallback(() => {
         localStorage.removeItem('admin_token');
@@ -389,7 +384,7 @@ const App: React.FC = () => {
         } catch (error) {
             alert('Failed to add teacher');
         }
-    }, [newTeacherName, newTeacherDepartment, newTeacherImage]);
+    }, [newTeacherName, newTeacherDepartment, newTeacherImage, loadTeachers, loadAdminData]);
 
     const handleDeleteTeacher = useCallback(async (id: number) => {
         if (window.confirm('Are you sure you want to delete this teacher? All reviews will also be deleted.')) {
@@ -406,7 +401,7 @@ const App: React.FC = () => {
                 alert('Failed to delete teacher');
             }
         }
-    }, [selectedTeacher]);
+    }, [selectedTeacher, loadTeachers, loadAdminData]);
 
     const handleDeleteReview = useCallback(async (id: number) => {
         if (window.confirm('Are you sure you want to delete this review?')) {
@@ -432,7 +427,7 @@ const App: React.FC = () => {
                 alert('Failed to delete review');
             }
         }
-    }, [selectedTeacher]);
+    }, [selectedTeacher, loadAdminData]);
 
     const handleSubmitReview = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
@@ -480,42 +475,38 @@ const App: React.FC = () => {
         } finally {
             setSubmitting(false);
         }
-    }, [selectedTeacher, reviewRating, reviewComment, reviewUserName]);
+    }, [selectedTeacher, reviewRating, reviewComment, reviewUserName, loadTeachers, loadAdminData]);
 
     const handleTeacherClick = useCallback(async (teacher: Teacher) => {
-    console.log('🔍 Teacher clicked:', teacher);
-    try {
-        const response = await getTeacherDetail(teacher.id);
-        const data = response.data;
+        try {
+            const response = await getTeacherDetail(teacher.id);
+            const data = response.data;
+            const teacherInfo = data.teacher;
+            const reviewsList = data.reviews || [];
+            const avgRating = Number(data.avg_rating) || 0;
+            const totalReviews = data.total_reviews || 0;
 
-        // Extract data from backend response
-        const teacherInfo = data.teacher;
-        const reviewsList = data.reviews || [];
-        const avgRating = Number(data.avg_rating) || 0;
-        const totalReviews = data.total_reviews || 0;
-
-        const teacherData: TeacherDetail = {
-            id: teacherInfo.id,
-            name: teacherInfo.name,
-            department: teacherInfo.department,
-            avg_rating: avgRating,
-            review_count: totalReviews,
-            total_reviews: totalReviews,
-            image_url: teacherInfo.image_url || null,
-            reviews: reviewsList,
-        };
-
-        setSelectedTeacher(teacherData);
-        setShowReviewForm(false);
-        setReviewComment('');
-        setReviewRating(5);
-        setReviewUserName('');
-        setReviewError('');
-    } catch (error) {
-        console.error('❌ Error loading teacher details:', error);
-        alert('Failed to load teacher details');
-    }
-}, []);
+            const teacherData: TeacherDetail = {
+                id: teacherInfo.id,
+                name: teacherInfo.name,
+                department: teacherInfo.department,
+                avg_rating: avgRating,
+                review_count: totalReviews,
+                total_reviews: totalReviews,
+                image_url: teacherInfo.image_url || null,
+                reviews: reviewsList,
+            };
+            setSelectedTeacher(teacherData);
+            setShowReviewForm(false);
+            setReviewComment('');
+            setReviewRating(5);
+            setReviewUserName('');
+            setReviewError('');
+        } catch (error) {
+            console.error('Error loading teacher details:', error);
+            alert('Failed to load teacher details');
+        }
+    }, []);
 
     const renderStars = (rating: number) => {
         const numRating = Number(rating) || 0;
@@ -524,10 +515,8 @@ const App: React.FC = () => {
         return '⭐'.repeat(fullStars) + '☆'.repeat(emptyStars);
     };
 
-    // Determine which teachers to display
     const displayTeachers = isSearching ? searchResults : teachers;
 
-    // Load more button handler
     const loadMore = () => {
         if (!isSearching && hasMore && !loadingMore) {
             setCurrentPage(prev => prev + 1);
@@ -585,12 +574,10 @@ const App: React.FC = () => {
         );
     }
 
-    // Password reset routes
     const pathname = window.location.pathname;
     if (pathname === '/forgot-password') return <ForgotPassword />;
     if (pathname === '/reset-password') return <ResetPassword />;
 
-    // Main site view
     return (
         <div className="app">
             <header className="header">
@@ -626,15 +613,15 @@ const App: React.FC = () => {
                     </div>
                     
                     <div className="teacher-list">
-                       {loading ? (
-    <div className="loading">Loading teachers...</div>
-) : error ? (
-    <div className="error-message">
-        {error} <button onClick={() => loadTeachers(1)}>Retry</button>
-    </div>
-) : displayTeachers.length === 0 ? (
-    <div className="no-results">No teachers found</div>
-                         ) : (
+                        {loading ? (
+                            <div className="loading">Loading teachers...</div>
+                        ) : error ? (
+                            <div className="error-message">
+                                {error} <button onClick={() => loadTeachers(1)}>Retry</button>
+                            </div>
+                        ) : displayTeachers.length === 0 ? (
+                            <div className="no-results">No teachers found</div>
+                        ) : (
                             <>
                                 {displayTeachers.map((teacher: Teacher) => (
                                     <div 
@@ -657,9 +644,7 @@ const App: React.FC = () => {
                                         </div>
                                     </div>
                                 ))}
-                                {loadingMore && (
-                                    <div className="loading-more">Loading more teachers...</div>
-                                )}
+                                {loadingMore && <div className="loading-more">Loading more teachers...</div>}
                                 {!isSearching && hasMore && !loadingMore && (
                                     <div ref={loadMoreRef} className="load-more-container">
                                         <button onClick={loadMore} className="load-more-btn">
@@ -678,22 +663,12 @@ const App: React.FC = () => {
                 <div className="main-content">
                     {selectedTeacher ? (
                         <div className="teacher-detail">
-                            <button 
-                                onClick={() => {
-                                    setSelectedTeacher(null);
-                                    setShowReviewForm(false);
-                                }}
-                                className="back-button"
-                            >
+                            <button onClick={() => { setSelectedTeacher(null); setShowReviewForm(false); }} className="back-button">
                                 ← Back to list
                             </button>
                             
                             {selectedTeacher.image_url && (
-                                <img 
-                                    src={selectedTeacher.image_url} 
-                                    alt={selectedTeacher.name} 
-                                    className="teacher-detail-image" 
-                                />
+                                <img src={selectedTeacher.image_url} alt={selectedTeacher.name} className="teacher-detail-image" />
                             )}
                             
                             <h1 className="teacher-name-heading">{selectedTeacher.name || 'Teacher'}</h1>
@@ -701,24 +676,14 @@ const App: React.FC = () => {
                             
                             <div className="rating-summary">
                                 <div className="average-rating">
-                                    <span className="stars">
-                                        {renderStars(selectedTeacher.avg_rating)}
-                                    </span>
-                                    <span className="rating-number">
-                                        {Number(selectedTeacher.avg_rating).toFixed(1)}/5
-                                    </span>
+                                    <span className="stars">{renderStars(selectedTeacher.avg_rating)}</span>
+                                    <span className="rating-number">{Number(selectedTeacher.avg_rating).toFixed(1)}/5</span>
                                 </div>
                                 <p>Based on {selectedTeacher.total_reviews || selectedTeacher.reviews?.length || 0} reviews</p>
                             </div>
                             
                             {!showReviewForm ? (
-                                <button 
-                                    onClick={() => {
-                                        if (selectedTeacher && selectedTeacher.id) setShowReviewForm(true);
-                                        else setReviewError('Please select a teacher first');
-                                    }} 
-                                    className="btn-write-review"
-                                >
+                                <button onClick={() => { if (selectedTeacher && selectedTeacher.id) setShowReviewForm(true); else setReviewError('Please select a teacher first'); }} className="btn-write-review">
                                     ✏️ Write a Review for {selectedTeacher.name}
                                 </button>
                             ) : (
@@ -728,11 +693,7 @@ const App: React.FC = () => {
                                     <form onSubmit={handleSubmitReview}>
                                         <div className="form-group">
                                             <label>⭐ Rating (1-5)</label>
-                                            <select 
-                                                value={reviewRating} 
-                                                onChange={(e) => setReviewRating(Number(e.target.value))} 
-                                                required
-                                            >
+                                            <select value={reviewRating} onChange={(e) => setReviewRating(Number(e.target.value))} required>
                                                 <option value="5">5 Stars - Excellent ⭐⭐⭐⭐⭐</option>
                                                 <option value="4">4 Stars - Very Good ⭐⭐⭐⭐</option>
                                                 <option value="3">3 Stars - Average ⭐⭐⭐</option>
@@ -742,28 +703,15 @@ const App: React.FC = () => {
                                         </div>
                                         <div className="form-group">
                                             <label>👤 Your Name (optional)</label>
-                                            <input 
-                                                type="text" 
-                                                value={reviewUserName} 
-                                                onChange={(e) => setReviewUserName(e.target.value)} 
-                                                placeholder="Leave blank to post anonymously"
-                                            />
+                                            <input type="text" value={reviewUserName} onChange={(e) => setReviewUserName(e.target.value)} placeholder="Leave blank to post anonymously" />
                                         </div>
                                         <div className="form-group">
                                             <label>💬 Your Review *</label>
-                                            <textarea 
-                                                rows={4} 
-                                                value={reviewComment} 
-                                                onChange={(e) => setReviewComment(e.target.value)} 
-                                                placeholder="Share your experience with this teacher..."
-                                                required
-                                            />
+                                            <textarea rows={4} value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} placeholder="Share your experience with this teacher..." required />
                                         </div>
                                         <div className="form-buttons">
                                             <button type="button" onClick={() => setShowReviewForm(false)} className="btn-cancel">Cancel</button>
-                                            <button type="submit" disabled={submitting} className="btn-submit">
-                                                {submitting ? 'Submitting...' : 'Submit Review'}
-                                            </button>
+                                            <button type="submit" disabled={submitting} className="btn-submit">{submitting ? 'Submitting...' : 'Submit Review'}</button>
                                         </div>
                                     </form>
                                 </div>
