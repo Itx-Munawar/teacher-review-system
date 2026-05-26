@@ -969,6 +969,90 @@ body {
         height: 100px;
     }
 }
+/* Contact & About buttons */
+.contact-btn, .about-btn {
+    background: white;
+    color: #667eea;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 25px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 600;
+    transition: all 0.3s;
+}
+
+.contact-btn:hover, .about-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    background: #f0f4ff;
+}
+
+/* Modal overlay */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(3px);
+}
+
+.modal-content {
+    background: white;
+    padding: 2rem;
+    border-radius: 16px;
+    max-width: 400px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 20px 35px rgba(0,0,0,0.2);
+    animation: fadeInUp 0.3s ease-out;
+}
+
+.modal-content h3 {
+    margin-top: 0;
+    color: #667eea;
+    font-size: 1.6rem;
+}
+
+.modal-content p {
+    margin: 1rem 0;
+    color: #333;
+    line-height: 1.5;
+}
+
+.modal-close-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 25px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 600;
+    margin-top: 1rem;
+    transition: transform 0.2s;
+}
+
+.modal-close-btn:hover {
+    transform: translateY(-2px);
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
 
 /* Tablets (600px to 768px) */
 @media (min-width: 601px) and (max-width: 768px) {
@@ -1007,5 +1091,33 @@ body {
 
     .header h1 {
         font-size: 1.2rem;
+    }
+}
+/* Footer Styles */
+.app-footer {
+    background: linear-gradient(135deg, #2c1a4d 0%, #1a0f2e 100%);
+    color: #ffd966;
+    text-align: center;
+    padding: 1.5rem;
+    margin-top: 2rem;
+    font-size: 0.85rem;
+    border-top: 3px solid #ffd966;
+}
+
+.footer-content p {
+    margin: 0.25rem 0;
+}
+
+.footer-disclaimer {
+    font-size: 0.75rem;
+    opacity: 0.8;
+    color: #ffd966;
+}
+
+/* Responsive footer */
+@media (max-width: 600px) {
+    .app-footer {
+        padding: 1rem;
+        font-size: 0.75rem;
     }
 }

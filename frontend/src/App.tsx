@@ -233,6 +233,8 @@ const App: React.FC = () => {
     const [adminStats, setAdminStats] = useState<any>({});
 
     const loadMoreRef = useRef<HTMLDivElement>(null);
+    const [showAboutModal, setShowAboutModal] = useState(false);
+    const [showContactModal, setShowContactModal] = useState(false);
 
     // ========== TEACHER LOADING (PAGINATED) ==========
     const loadTeachers = useCallback(async (page: number = 1, retryCount: number = 0) => {
@@ -581,21 +583,35 @@ const App: React.FC = () => {
     return (
         <div className="app">
             <header className="header">
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px' }}>
-                    <img 
-                        src="https://www.umt.edu.pk/images/umt-logo.png" 
-                        alt="UMT Logo" 
-                        style={{ height: '60px', width: 'auto' }}
-                    />
-                    <h1 style={{ margin: 0 }}>UMT Teacher Reviews</h1>
-                </div>
-                <p>Rate and review your professors anonymously</p>
-                <button onClick={() => setShowAdminPanel(true)} className="admin-login-btn">
-                    Admin Login
-                </button>
-            </header>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', flexWrap: 'wrap' }}>
+          <img 
+            src="https://www.umt.edu.pk/images/umt-logo.png" 
+            alt="UMT Logo" 
+            style={{ height: '60px', width: 'auto' }}
+           />
+             <h1 style={{ margin: 0 }}>UMT Teacher Reviews</h1>
+             </div>
+            <p>Rate and review your professors anonymously</p>
+           <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', flexWrap: 'wrap' }}>
+    <button onClick={() => setShowAdminPanel(true)} className="admin-login-btn">
+        🔒 Admin Login
+    </button>
+    <button 
+        onClick={() => setShowContactModal(true)}
+        className="admin-login-btn"
+    >
+        📧 Contact Us
+    </button>
+    <button 
+        onClick={() => setShowAboutModal(true)}
+        className="admin-login-btn"
+    >
+        ℹ️ About
+    </button>
+</div>
+             </header>
 
-            <div className="container">
+             <div className="container">
                 <div className="sidebar">
                     <div className="search-box">
                         <input
@@ -743,7 +759,40 @@ const App: React.FC = () => {
                     )}
                 </div>
             </div>
+            {/* About Modal */}
+{showAboutModal && (
+    <div className="modal-overlay" onClick={() => setShowAboutModal(false)}>
+        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>📖 About UMT Teacher Reviews</h3>
+            <p>This platform allows students to rate and review their teachers anonymously.</p>
+            <p><strong>Developer:</strong> Munawar Hussain</p>
+            <p><strong>Version:</strong> 2.0</p>
+            <button onClick={() => setShowAboutModal(false)} className="modal-close-btn">Close</button>
         </div>
+    </div>
+)}
+{/* Contact Modal */}
+{showContactModal && (
+    <div className="modal-overlay" onClick={() => setShowContactModal(false)}>
+        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>📧 Contact Us</h3>
+            <p>If you have any questions, need help, or want to give feedback, please send an email to:</p>
+            <p><strong>umt.teacher.reviews@gmail.com</strong></p>
+            <button onClick={() => setShowContactModal(false)} className="modal-close-btn">Close</button>
+        </div>
+    </div>
+)}
+<footer className="app-footer">
+    <div className="footer-content">
+        <p>© {new Date().getFullYear()} UMT Teacher Reviews. All rights reserved.</p>
+        <p>Developed by Munawar Hussain</p>
+        <p className="footer-disclaimer">All reviews are student opinions and not official university statements.</p>
+    </div>
+</footer>
+
+     </div>
+     
+        
     );
 };
 
