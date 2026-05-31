@@ -56,7 +56,15 @@ const AdminPanel = memo(({
     newTeacherDepartment,
     setNewTeacherDepartment,
     newTeacherImage,
-    setNewTeacherImage
+    setNewTeacherImage,
+    totalTeachersCount,
+    loadingMore,
+    onLoadMore,
+    // New search props
+    adminSearchTerm,
+    onAdminSearchChange,
+    adminSearchResults,
+    adminIsSearching
 }: any) => {
     const renderStars = (rating: number) => {
         const numRating = Number(rating) || 0;
@@ -66,7 +74,6 @@ const AdminPanel = memo(({
     };
 
     const totalReviews = reviewsForModeration?.length || 0;
-    const totalTeachers = teachers?.length || 0;
     
     let avgRating = Number(adminStats.average_rating) || 0;
     if (avgRating === 0 && totalReviews > 0) {
@@ -74,12 +81,17 @@ const AdminPanel = memo(({
         avgRating = totalRating / totalReviews;
     }
 
+    // Determine which teachers to display
+    const displayTeachers = adminSearchTerm ? adminSearchResults : teachers;
+    const displayCount = adminSearchTerm ? adminSearchResults.length : teachers.length;
+    const displayTotal = adminSearchTerm ? adminSearchResults.length : totalTeachersCount;
+
     return (
         <div className="admin-panel">
             <div className="admin-header">
                 <h2>Admin Dashboard</h2>
                 <div className="admin-stats">
-                    <span>📚 {totalTeachers} Teachers</span>
+                    <span>📚 {totalTeachersCount || teachers.length} Teachers</span>
                     <span>💬 {totalReviews} Reviews</span>
                     <span>⭐ {avgRating.toFixed(1)} Avg</span>
                 </div>
@@ -90,44 +102,66 @@ const AdminPanel = memo(({
                 <button onClick={() => setShowAddTeacherForm(!showAddTeacherForm)} className="add-teacher-btn">
                     {showAddTeacherForm ? 'Cancel' : '+ Add New Teacher'}
                 </button>
-                
                 {showAddTeacherForm && (
                     <form onSubmit={onAddTeacher} className="add-teacher-form">
-                        <input
-                            type="text"
-                            placeholder="Teacher Name"
-                            value={newTeacherName}
-                            onChange={(e) => setNewTeacherName(e.target.value)}
-                            required
-                        />
-                        <input
-                            type="text"
-                            placeholder="Department"
-                            value={newTeacherDepartment}
-                            onChange={(e) => setNewTeacherDepartment(e.target.value)}
-                            required
-                        />
-                        <input
-                            type="url"
-                            placeholder="Image URL (optional)"
-                            value={newTeacherImage}
-                            onChange={(e) => setNewTeacherImage(e.target.value)}
-                        />
+                        <input type="text" placeholder="Teacher Name" value={newTeacherName} onChange={(e) => setNewTeacherName(e.target.value)} required />
+                        <input type="text" placeholder="Department" value={newTeacherDepartment} onChange={(e) => setNewTeacherDepartment(e.target.value)} required />
+                        <input type="url" placeholder="Image URL (optional)" value={newTeacherImage} onChange={(e) => setNewTeacherImage(e.target.value)} />
                         <button type="submit">Save Teacher</button>
                     </form>
                 )}
             </div>
             
             <div className="admin-section">
-                <h3>Manage Teachers ({totalTeachers})</h3>
-                <div className="admin-list">
-                    {teachers.map((teacher: Teacher) => (
-                        <div key={teacher.id} className="admin-item">
-                            <span><strong>{teacher.name}</strong> - {teacher.department}</span>
-                            <button onClick={() => onDeleteTeacher(teacher.id)} className="delete-btn">Delete</button>
+                <h3>Manage Teachers</h3>
+                
+                {/* Search input */}
+                <div className="search-box" style={{ marginBottom: '1rem' }}>
+                    <input
+                        type="text"
+                        placeholder="🔍 Search teachers by name or department..."
+                        value={adminSearchTerm}
+                        onChange={onAdminSearchChange}
+                        className="search-input"
+                    />
+                    {adminSearchTerm && (
+                        <div className="search-info">
+                            Found {adminSearchResults.length} teacher{adminSearchResults.length !== 1 ? 's' : ''} matching "{adminSearchTerm}"
                         </div>
-                    ))}
+                    )}
                 </div>
+
+                <div className="admin-list">
+                    {adminIsSearching ? (
+                        <div className="loading">Searching...</div>
+                    ) : displayTeachers.length === 0 ? (
+                        <p style={{textAlign: 'center', padding: '20px', color: '#999'}}>
+                            {adminSearchTerm ? 'No teachers found' : 'No teachers added yet'}
+                        </p>
+                    ) : (
+                        displayTeachers.map((teacher: Teacher) => (
+                            <div key={teacher.id} className="admin-item">
+                                <span><strong>{teacher.name}</strong> - {teacher.department}</span>
+                                <button onClick={() => onDeleteTeacher(teacher.id)} className="delete-btn">Delete</button>
+                            </div>
+                        ))
+                    )}
+                </div>
+
+                {/* Load More – only when not searching */}
+                {!adminSearchTerm && (
+                    <>
+                        {loadingMore && <div className="loading-more">Loading more teachers...</div>}
+                        {!loadingMore && teachers.length < totalTeachersCount && (
+                            <button onClick={onLoadMore} className="load-more-btn" style={{ marginTop: '1rem', width: '100%' }}>
+                                Load More ({teachers.length} / {totalTeachersCount})
+                            </button>
+                        )}
+                        {teachers.length === totalTeachersCount && totalTeachersCount > 0 && (
+                            <div className="end-of-list">✨ You've seen all {totalTeachersCount} teachers</div>
+                        )}
+                    </>
+                )}
             </div>
             
             <div className="admin-section">
@@ -142,10 +176,7 @@ const AdminPanel = memo(({
                                     <strong>{review.teacher_name}</strong>
                                     <span style={{marginLeft: '10px'}}>{renderStars(review.rating)}</span>
                                     <p style={{marginTop: '8px', marginBottom: '5px'}}>"{review.comment}"</p>
-                                    <small>
-                                        👤 {review.user_name || 'Anonymous'} | 
-                                        📅 {new Date(review.created_at).toLocaleDateString()}
-                                    </small>
+                                    <small>👤 {review.user_name || 'Anonymous'} | 📅 {new Date(review.created_at).toLocaleDateString()}</small>
                                 </div>
                                 <button onClick={() => onDeleteReview(review.id)} className="delete-btn">Delete</button>
                             </div>
@@ -235,6 +266,10 @@ const App: React.FC = () => {
     const loadMoreRef = useRef<HTMLDivElement>(null);
     const [showAboutModal, setShowAboutModal] = useState(false);
     const [showContactModal, setShowContactModal] = useState(false);
+    // Admin panel search state
+const [adminSearchTerm, setAdminSearchTerm] = useState('');
+const [adminSearchResults, setAdminSearchResults] = useState<Teacher[]>([]);
+const [adminIsSearching, setAdminIsSearching] = useState(false);
 
     // ========== TEACHER LOADING (PAGINATED) ==========
     const loadTeachers = useCallback(async (page: number = 1, retryCount: number = 0) => {
@@ -295,6 +330,28 @@ const App: React.FC = () => {
             loadTeachers(1);
         }
     };
+
+    // Admin panel search (search all teachers without pagination)
+    const handleAdminSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setAdminSearchTerm(value);
+    
+    if (value.trim()) {
+        setAdminIsSearching(true);
+        try {
+            const res = await searchAllTeachers(value);
+            setAdminSearchResults(res.data || []);
+        } catch (error) {
+            console.error('Admin search error:', error);
+            setAdminSearchResults([]);
+        } finally {
+            setAdminIsSearching(false);
+        }
+    } else {
+        setAdminIsSearching(false);
+        setAdminSearchResults([]);
+    }
+};
 
     // Load next page when currentPage changes (only if not searching)
     useEffect(() => {
@@ -554,23 +611,30 @@ const App: React.FC = () => {
                     <button onClick={() => setShowAdminPanel(false)} className="back-to-site-btn">← Back to Site</button>
                 </header>
                 <div className="container">
-                    <AdminPanel
-                        teachers={teachers}
-                        reviewsForModeration={reviewsForModeration}
-                        adminStats={adminStats}
-                        onAddTeacher={handleAddTeacher}
-                        onDeleteTeacher={handleDeleteTeacher}
-                        onDeleteReview={handleDeleteReview}
-                        onLogout={handleAdminLogout}
-                        showAddTeacherForm={showAddTeacherForm}
-                        setShowAddTeacherForm={setShowAddTeacherForm}
-                        newTeacherName={newTeacherName}
-                        setNewTeacherName={setNewTeacherName}
-                        newTeacherDepartment={newTeacherDepartment}
-                        setNewTeacherDepartment={setNewTeacherDepartment}
-                        newTeacherImage={newTeacherImage}
-                        setNewTeacherImage={setNewTeacherImage}
-                    />
+                   <AdminPanel
+    teachers={teachers}
+    reviewsForModeration={reviewsForModeration}
+    adminStats={adminStats}
+    onAddTeacher={handleAddTeacher}
+    onDeleteTeacher={handleDeleteTeacher}
+    onDeleteReview={handleDeleteReview}
+    onLogout={handleAdminLogout}
+    showAddTeacherForm={showAddTeacherForm}
+    setShowAddTeacherForm={setShowAddTeacherForm}
+    newTeacherName={newTeacherName}
+    setNewTeacherName={setNewTeacherName}
+    newTeacherDepartment={newTeacherDepartment}
+    setNewTeacherDepartment={setNewTeacherDepartment}
+    newTeacherImage={newTeacherImage}
+    setNewTeacherImage={setNewTeacherImage}
+    totalTeachersCount={totalTeachersCount}
+    loadingMore={loadingMore}
+    onLoadMore={() => setCurrentPage(prev => prev + 1)}
+    adminSearchTerm={adminSearchTerm}
+onAdminSearchChange={handleAdminSearch}
+adminSearchResults={adminSearchResults}
+adminIsSearching={adminIsSearching}
+/>
                 </div>
             </div>
         );
