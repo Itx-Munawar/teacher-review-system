@@ -271,6 +271,7 @@ const [adminSearchTerm, setAdminSearchTerm] = useState('');
 const [adminSearchResults, setAdminSearchResults] = useState<Teacher[]>([]);
 const [adminIsSearching, setAdminIsSearching] = useState(false);
 
+
     // ========== TEACHER LOADING (PAGINATED) ==========
     const loadTeachers = useCallback(async (page: number = 1, retryCount: number = 0) => {
         try {
@@ -353,48 +354,76 @@ const [adminIsSearching, setAdminIsSearching] = useState(false);
     }
 };
 
-    // Load next page when currentPage changes (only if not searching)
-    useEffect(() => {
-        if (!isSearching && currentPage > 1) {
-            loadTeachers(currentPage);
-        }
-    }, [currentPage, isSearching, loadTeachers]);
-
-    // Initial load
-    useEffect(() => {
-        loadTeachers(1);
-        checkAdminLogin();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    const checkAdminLogin = () => {
-        const token = localStorage.getItem('admin_token');
-        if (token) setIsAdminLoggedIn(true);
-    };
 
     // ========== ADMIN DATA ==========
     const loadAdminData = useCallback(async () => {
-        try {
-            const reviewsRes = await getAdminReviews();
-            let reviewsData = [];
-            if (reviewsRes.data) {
-                if (Array.isArray(reviewsRes.data)) reviewsData = reviewsRes.data;
-                else if (reviewsRes.data.reviews) reviewsData = reviewsRes.data.reviews;
-                else if (reviewsRes.data.data) reviewsData = reviewsRes.data.data;
+    try {
+        console.log('🔄 Loading admin data...');
+        const reviewsRes = await getAdminReviews();
+        console.log('📋 Raw admin reviews response:', reviewsRes);
+        
+        let reviewsData = [];
+        if (reviewsRes.data) {
+            if (Array.isArray(reviewsRes.data)) {
+                reviewsData = reviewsRes.data;
+                console.log('✅ Reviews is array, length:', reviewsData.length);
+            } else if (reviewsRes.data.reviews && Array.isArray(reviewsRes.data.reviews)) {
+                reviewsData = reviewsRes.data.reviews;
+                console.log('✅ Reviews from .reviews, length:', reviewsData.length);
+            } else if (reviewsRes.data.data && Array.isArray(reviewsRes.data.data)) {
+                reviewsData = reviewsRes.data.data;
+                console.log('✅ Reviews from .data, length:', reviewsData.length);
+            } else {
+                console.log('⚠️ Unknown response structure:', reviewsRes.data);
             }
-            setReviewsForModeration(reviewsData);
-            
-            const statsRes = await getAdminStats();
-            const stats = statsRes.data || {};
-            setAdminStats({
-                total_teachers: stats.total_teachers || 0,
-                total_reviews: reviewsData.length,
-                average_rating: stats.average_rating || 0
-            });
-        } catch (error) {
-            console.error('Error loading admin data:', error);
+        } else {
+            console.log('⚠️ No data in response');
         }
-    }, []);
+        
+        setReviewsForModeration(reviewsData);
+        
+        const statsRes = await getAdminStats();
+        console.log('📊 Admin stats response:', statsRes.data);
+        const stats = statsRes.data || {};
+        setAdminStats({
+            total_teachers: stats.total_teachers || 0,
+            total_reviews: reviewsData.length,
+            average_rating: stats.average_rating || 0
+        });
+    } catch (error) {
+        console.error('Error loading admin data:', error);
+        setReviewsForModeration([]);
+        setAdminStats({ total_teachers: 0, total_reviews: 0, average_rating: 0 });
+    }
+}, []);
+
+    useEffect(() => {
+    if (!isSearching && currentPage > 1) {
+        loadTeachers(currentPage);
+    }
+}, [currentPage, isSearching, loadTeachers]);
+
+// Initial load
+useEffect(() => {
+    loadTeachers(1);
+    checkAdminLogin();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
+
+// Load admin data when admin is logged in (after refresh or login)
+// Load admin data when admin is logged in (after refresh or login)
+useEffect(() => {
+    if (isAdminLoggedIn) {
+        console.log('Admin is logged in, loading admin data...');
+        loadAdminData();
+        loadTeachers(1); // also refresh teacher list for admin panel
+    }
+}, [isAdminLoggedIn, loadAdminData, loadTeachers]);
+
+const checkAdminLogin = () => {
+    const token = localStorage.getItem('admin_token');
+    setIsAdminLoggedIn(!!token);
+};
 
     const handleAdminLogin = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
@@ -657,9 +686,16 @@ adminIsSearching={adminIsSearching}
              </div>
             <p>Rate and review your professors anonymously</p>
            <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', flexWrap: 'wrap' }}>
-    <button onClick={() => setShowAdminPanel(true)} className="admin-login-btn">
-        🔒 Admin Login
-    </button>
+    <button onClick={() => {
+    setShowAdminPanel(true);
+    if (isAdminLoggedIn) {
+        loadAdminData();
+        loadTeachers(1);
+    }
+}} className="admin-login-btn">
+    🔒 Admin Login
+</button>
+
     <button 
         onClick={() => setShowContactModal(true)}
         className="admin-login-btn"
