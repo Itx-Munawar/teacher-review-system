@@ -14,6 +14,7 @@ import {
 import ForgotPassword from './components/ForgotPassword';
 import ResetPassword from './components/ResetPassword';
 import './App.css';
+import { useSearchParams } from 'react-router-dom';
 
 // ========== INTERFACES ==========
 interface Teacher {
@@ -271,6 +272,8 @@ const [adminSearchTerm, setAdminSearchTerm] = useState('');
 const [adminSearchResults, setAdminSearchResults] = useState<Teacher[]>([]);
 const [adminIsSearching, setAdminIsSearching] = useState(false);
 
+const [searchParams, setSearchParams] = useSearchParams();
+
 
     // ========== TEACHER LOADING (PAGINATED) ==========
     const loadTeachers = useCallback(async (page: number = 1, retryCount: number = 0) => {
@@ -311,7 +314,14 @@ const [adminIsSearching, setAdminIsSearching] = useState(false);
     const handleSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
         setSearchTerm(value);
-        
+
+        //update URL search params
+         if (value) {
+        setSearchParams({ search: value });
+    } else {
+        searchParams.delete('search');
+        setSearchParams(searchParams);
+    }
         if (value.trim()) {
             setIsSearching(true);
             setLoading(true);
@@ -419,6 +429,51 @@ useEffect(() => {
         loadTeachers(1); // also refresh teacher list for admin panel
     }
 }, [isAdminLoggedIn, loadAdminData, loadTeachers]);
+
+
+// Restore search and selected teacher from URL on initial load
+useEffect(() => {
+    const teacherId = searchParams.get('teacher');
+    const searchQuery = searchParams.get('search');
+    
+    if (searchQuery) {
+        // Restore search
+        setSearchTerm(searchQuery);
+        // Trigger search after load
+        (async () => {
+            const res = await searchAllTeachers(searchQuery);
+            setSearchResults(res.data || []);
+            setIsSearching(true);
+        })();
+    }
+    
+    if (teacherId) {
+        // Restore selected teacher
+        (async () => {
+            try {
+                const response = await getTeacherDetail(parseInt(teacherId));
+                const data = response.data;
+                const teacherInfo = data.teacher;
+                const reviewsList = data.reviews || [];
+                const avgRating = Number(data.avg_rating) || 0;
+                const totalReviews = data.total_reviews || 0;
+                const teacherData: TeacherDetail = {
+                    id: teacherInfo.id,
+                    name: teacherInfo.name,
+                    department: teacherInfo.department,
+                    avg_rating: avgRating,
+                    review_count: totalReviews,
+                    total_reviews: totalReviews,
+                    image_url: teacherInfo.image_url || null,
+                    reviews: reviewsList,
+                };
+                setSelectedTeacher(teacherData);
+            } catch (error) {
+                console.error('Failed to restore teacher:', error);
+            }
+        })();
+    }
+}, []); // Run once on mount
 
 const checkAdminLogin = () => {
     const token = localStorage.getItem('admin_token');
@@ -590,6 +645,8 @@ const checkAdminLogin = () => {
             setReviewRating(5);
             setReviewUserName('');
             setReviewError('');
+             // After setting selectedTeacher, update URL
+        setSearchParams({ teacher: teacher.id.toString() });
         } catch (error) {
             console.error('Error loading teacher details:', error);
             alert('Failed to load teacher details');
@@ -602,6 +659,14 @@ const checkAdminLogin = () => {
         const emptyStars = 5 - fullStars;
         return '⭐'.repeat(fullStars) + '☆'.repeat(emptyStars);
     };
+
+    // Clear selected teacher and review form when going back to list
+    const clearSelectedTeacher = () => {
+    setSelectedTeacher(null);
+    setShowReviewForm(false);
+    searchParams.delete('teacher');
+    setSearchParams(searchParams);
+};
 
     const displayTeachers = isSearching ? searchResults : teachers;
 
@@ -779,9 +844,14 @@ adminIsSearching={adminIsSearching}
                 <div className="main-content">
                     {selectedTeacher ? (
                         <div className="teacher-detail">
-                            <button onClick={() => { setSelectedTeacher(null); setShowReviewForm(false); }} className="back-button">
-                                ← Back to list
-                            </button>
+                            <button onClick={() => {
+    setSelectedTeacher(null);
+    setShowReviewForm(false);
+    searchParams.delete('teacher');
+    setSearchParams(searchParams);
+}} className="back-button">
+    ← Back to list
+</button>
                             
                             {selectedTeacher.image_url && (
                                 <img src={selectedTeacher.image_url} alt={selectedTeacher.name} className="teacher-detail-image" />
