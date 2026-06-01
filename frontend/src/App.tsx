@@ -265,6 +265,7 @@ const App: React.FC = () => {
     const [adminStats, setAdminStats] = useState<any>({});
 
     const loadMoreRef = useRef<HTMLDivElement>(null);
+    const mainContentRef = useRef<HTMLDivElement>(null);
     const [showAboutModal, setShowAboutModal] = useState(false);
     const [showContactModal, setShowContactModal] = useState(false);
     // Admin panel search state
@@ -621,37 +622,45 @@ const checkAdminLogin = () => {
     }, [selectedTeacher, reviewRating, reviewComment, reviewUserName, loadTeachers, loadAdminData]);
 
     const handleTeacherClick = useCallback(async (teacher: Teacher) => {
-        try {
-            const response = await getTeacherDetail(teacher.id);
-            const data = response.data;
-            const teacherInfo = data.teacher;
-            const reviewsList = data.reviews || [];
-            const avgRating = Number(data.avg_rating) || 0;
-            const totalReviews = data.total_reviews || 0;
+    try {
+        const response = await getTeacherDetail(teacher.id);
+        const data = response.data;
+        const teacherInfo = data.teacher;
+        const reviewsList = data.reviews || [];
+        const avgRating = Number(data.avg_rating) || 0;
+        const totalReviews = data.total_reviews || 0;
 
-            const teacherData: TeacherDetail = {
-                id: teacherInfo.id,
-                name: teacherInfo.name,
-                department: teacherInfo.department,
-                avg_rating: avgRating,
-                review_count: totalReviews,
-                total_reviews: totalReviews,
-                image_url: teacherInfo.image_url || null,
-                reviews: reviewsList,
-            };
-            setSelectedTeacher(teacherData);
-            setShowReviewForm(false);
-            setReviewComment('');
-            setReviewRating(5);
-            setReviewUserName('');
-            setReviewError('');
-             // After setting selectedTeacher, update URL
-        setSearchParams({ teacher: teacher.id.toString() });
-        } catch (error) {
-            console.error('Error loading teacher details:', error);
-            alert('Failed to load teacher details');
+        const teacherData: TeacherDetail = {
+            id: teacherInfo.id,
+            name: teacherInfo.name,
+            department: teacherInfo.department,
+            avg_rating: avgRating,
+            review_count: totalReviews,
+            total_reviews: totalReviews,
+            image_url: teacherInfo.image_url || null,
+            reviews: reviewsList,
+        };
+        setSelectedTeacher(teacherData);
+        setShowReviewForm(false);
+        setReviewComment('');
+        setReviewRating(5);
+        setReviewUserName('');
+        setReviewError('');
+        
+        // ✅ NEW: Auto-scroll on mobile
+        if (window.innerWidth <= 768 && mainContentRef.current) {
+            setTimeout(() => {
+                mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
         }
-    }, []);
+        
+        // Update URL (if you have already implemented URL persistence)
+        setSearchParams({ teacher: teacher.id.toString() });
+    } catch (error) {
+        console.error('Error loading teacher details:', error);
+        alert('Failed to load teacher details');
+    }
+}, [setSearchParams]);
 
     const renderStars = (rating: number) => {
         const numRating = Number(rating) || 0;
@@ -841,7 +850,7 @@ adminIsSearching={adminIsSearching}
                     </div>
                 </div>
 
-                <div className="main-content">
+                <div className="main-content" ref={mainContentRef}>
                     {selectedTeacher ? (
                         <div className="teacher-detail">
                             <button onClick={() => {
