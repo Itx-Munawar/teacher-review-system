@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, memo, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
     getTeachers, 
     searchAllTeachers,
@@ -14,7 +15,6 @@ import {
 import ForgotPassword from './components/ForgotPassword';
 import ResetPassword from './components/ResetPassword';
 import './App.css';
-import { useSearchParams } from 'react-router-dom';
 
 // ========== INTERFACES ==========
 interface Teacher {
@@ -61,7 +61,6 @@ const AdminPanel = memo(({
     totalTeachersCount,
     loadingMore,
     onLoadMore,
-    // New search props
     adminSearchTerm,
     onAdminSearchChange,
     adminSearchResults,
@@ -82,10 +81,7 @@ const AdminPanel = memo(({
         avgRating = totalRating / totalReviews;
     }
 
-    // Determine which teachers to display
     const displayTeachers = adminSearchTerm ? adminSearchResults : teachers;
-    const displayCount = adminSearchTerm ? adminSearchResults.length : teachers.length;
-    const displayTotal = adminSearchTerm ? adminSearchResults.length : totalTeachersCount;
 
     return (
         <div className="admin-panel">
@@ -115,8 +111,6 @@ const AdminPanel = memo(({
             
             <div className="admin-section">
                 <h3>Manage Teachers</h3>
-                
-                {/* Search input */}
                 <div className="search-box" style={{ marginBottom: '1rem' }}>
                     <input
                         type="text"
@@ -149,7 +143,6 @@ const AdminPanel = memo(({
                     )}
                 </div>
 
-                {/* Load More – only when not searching */}
                 {!adminSearchTerm && (
                     <>
                         {loadingMore && <div className="loading-more">Loading more teachers...</div>}
@@ -232,6 +225,8 @@ const LoginForm = memo(({
 
 // ========== MAIN APP ==========
 const App: React.FC = () => {
+    const [searchParams, setSearchParams] = useSearchParams();
+    
     // State
     const [teachers, setTeachers] = useState<Teacher[]>([]);
     const [loading, setLoading] = useState(true);
@@ -268,13 +263,10 @@ const App: React.FC = () => {
     const mainContentRef = useRef<HTMLDivElement>(null);
     const [showAboutModal, setShowAboutModal] = useState(false);
     const [showContactModal, setShowContactModal] = useState(false);
-    // Admin panel search state
-const [adminSearchTerm, setAdminSearchTerm] = useState('');
-const [adminSearchResults, setAdminSearchResults] = useState<Teacher[]>([]);
-const [adminIsSearching, setAdminIsSearching] = useState(false);
-
-const [searchParams, setSearchParams] = useSearchParams();
-
+    
+    const [adminSearchTerm, setAdminSearchTerm] = useState('');
+    const [adminSearchResults, setAdminSearchResults] = useState<Teacher[]>([]);
+    const [adminIsSearching, setAdminIsSearching] = useState(false);
 
     // ========== TEACHER LOADING (PAGINATED) ==========
     const loadTeachers = useCallback(async (page: number = 1, retryCount: number = 0) => {
@@ -316,13 +308,13 @@ const [searchParams, setSearchParams] = useSearchParams();
         const value = e.target.value;
         setSearchTerm(value);
 
-        //update URL search params
-         if (value) {
-        setSearchParams({ search: value });
-    } else {
-        searchParams.delete('search');
-        setSearchParams(searchParams);
-    }
+        if (value) {
+            setSearchParams({ search: value });
+        } else {
+            searchParams.delete('search');
+            setSearchParams(searchParams);
+        }
+
         if (value.trim()) {
             setIsSearching(true);
             setLoading(true);
@@ -343,143 +335,118 @@ const [searchParams, setSearchParams] = useSearchParams();
         }
     };
 
-    // Admin panel search (search all teachers without pagination)
     const handleAdminSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setAdminSearchTerm(value);
-    
-    if (value.trim()) {
-        setAdminIsSearching(true);
-        try {
-            const res = await searchAllTeachers(value);
-            setAdminSearchResults(res.data || []);
-        } catch (error) {
-            console.error('Admin search error:', error);
-            setAdminSearchResults([]);
-        } finally {
+        const value = e.target.value;
+        setAdminSearchTerm(value);
+        
+        if (value.trim()) {
+            setAdminIsSearching(true);
+            try {
+                const res = await searchAllTeachers(value);
+                setAdminSearchResults(res.data || []);
+            } catch (error) {
+                console.error('Admin search error:', error);
+                setAdminSearchResults([]);
+            } finally {
+                setAdminIsSearching(false);
+            }
+        } else {
             setAdminIsSearching(false);
+            setAdminSearchResults([]);
         }
-    } else {
-        setAdminIsSearching(false);
-        setAdminSearchResults([]);
-    }
-};
-
+    };
 
     // ========== ADMIN DATA ==========
     const loadAdminData = useCallback(async () => {
-    try {
-        console.log('🔄 Loading admin data...');
-        const reviewsRes = await getAdminReviews();
-        console.log('📋 Raw admin reviews response:', reviewsRes);
-        
-        let reviewsData = [];
-        if (reviewsRes.data) {
-            if (Array.isArray(reviewsRes.data)) {
-                reviewsData = reviewsRes.data;
-                console.log('✅ Reviews is array, length:', reviewsData.length);
-            } else if (reviewsRes.data.reviews && Array.isArray(reviewsRes.data.reviews)) {
-                reviewsData = reviewsRes.data.reviews;
-                console.log('✅ Reviews from .reviews, length:', reviewsData.length);
-            } else if (reviewsRes.data.data && Array.isArray(reviewsRes.data.data)) {
-                reviewsData = reviewsRes.data.data;
-                console.log('✅ Reviews from .data, length:', reviewsData.length);
-            } else {
-                console.log('⚠️ Unknown response structure:', reviewsRes.data);
+        try {
+            const reviewsRes = await getAdminReviews();
+            let reviewsData = [];
+            if (reviewsRes.data) {
+                if (Array.isArray(reviewsRes.data)) reviewsData = reviewsRes.data;
+                else if (reviewsRes.data.reviews) reviewsData = reviewsRes.data.reviews;
+                else if (reviewsRes.data.data) reviewsData = reviewsRes.data.data;
             }
-        } else {
-            console.log('⚠️ No data in response');
+            setReviewsForModeration(reviewsData);
+            
+            const statsRes = await getAdminStats();
+            const stats = statsRes.data || {};
+            setAdminStats({
+                total_teachers: stats.total_teachers || 0,
+                total_reviews: reviewsData.length,
+                average_rating: stats.average_rating || 0
+            });
+        } catch (error) {
+            console.error('Error loading admin data:', error);
+            setReviewsForModeration([]);
+            setAdminStats({ total_teachers: 0, total_reviews: 0, average_rating: 0 });
         }
-        
-        setReviewsForModeration(reviewsData);
-        
-        const statsRes = await getAdminStats();
-        console.log('📊 Admin stats response:', statsRes.data);
-        const stats = statsRes.data || {};
-        setAdminStats({
-            total_teachers: stats.total_teachers || 0,
-            total_reviews: reviewsData.length,
-            average_rating: stats.average_rating || 0
-        });
-    } catch (error) {
-        console.error('Error loading admin data:', error);
-        setReviewsForModeration([]);
-        setAdminStats({ total_teachers: 0, total_reviews: 0, average_rating: 0 });
-    }
-}, []);
+    }, []);
+
+    // Effects
+    useEffect(() => {
+        if (!isSearching && currentPage > 1) {
+            loadTeachers(currentPage);
+        }
+    }, [currentPage, isSearching, loadTeachers]);
 
     useEffect(() => {
-    if (!isSearching && currentPage > 1) {
-        loadTeachers(currentPage);
-    }
-}, [currentPage, isSearching, loadTeachers]);
+        loadTeachers(1);
+        checkAdminLogin();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
-// Initial load
-useEffect(() => {
-    loadTeachers(1);
-    checkAdminLogin();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
+    useEffect(() => {
+        if (isAdminLoggedIn) {
+            loadAdminData();
+            loadTeachers(1);
+        }
+    }, [isAdminLoggedIn, loadAdminData, loadTeachers]);
 
-// Load admin data when admin is logged in (after refresh or login)
-// Load admin data when admin is logged in (after refresh or login)
-useEffect(() => {
-    if (isAdminLoggedIn) {
-        console.log('Admin is logged in, loading admin data...');
-        loadAdminData();
-        loadTeachers(1); // also refresh teacher list for admin panel
-    }
-}, [isAdminLoggedIn, loadAdminData, loadTeachers]);
+    // Restore state from URL on mount
+    useEffect(() => {
+        const teacherId = searchParams.get('teacher');
+        const searchQuery = searchParams.get('search');
+        
+        if (searchQuery) {
+            setSearchTerm(searchQuery);
+            (async () => {
+                const res = await searchAllTeachers(searchQuery);
+                setSearchResults(res.data || []);
+                setIsSearching(true);
+            })();
+        }
+        
+        if (teacherId) {
+            (async () => {
+                try {
+                    const response = await getTeacherDetail(parseInt(teacherId));
+                    const data = response.data;
+                    const teacherInfo = data.teacher;
+                    const reviewsList = data.reviews || [];
+                    const avgRating = Number(data.avg_rating) || 0;
+                    const totalReviews = data.total_reviews || 0;
+                    const teacherData: TeacherDetail = {
+                        id: teacherInfo.id,
+                        name: teacherInfo.name,
+                        department: teacherInfo.department,
+                        avg_rating: avgRating,
+                        review_count: totalReviews,
+                        total_reviews: totalReviews,
+                        image_url: teacherInfo.image_url || null,
+                        reviews: reviewsList,
+                    };
+                    setSelectedTeacher(teacherData);
+                } catch (error) {
+                    console.error('Failed to restore teacher:', error);
+                }
+            })();
+        }
+    }, []); // run once
 
-
-// Restore search and selected teacher from URL on initial load
-useEffect(() => {
-    const teacherId = searchParams.get('teacher');
-    const searchQuery = searchParams.get('search');
-    
-    if (searchQuery) {
-        // Restore search
-        setSearchTerm(searchQuery);
-        // Trigger search after load
-        (async () => {
-            const res = await searchAllTeachers(searchQuery);
-            setSearchResults(res.data || []);
-            setIsSearching(true);
-        })();
-    }
-    
-    if (teacherId) {
-        // Restore selected teacher
-        (async () => {
-            try {
-                const response = await getTeacherDetail(parseInt(teacherId));
-                const data = response.data;
-                const teacherInfo = data.teacher;
-                const reviewsList = data.reviews || [];
-                const avgRating = Number(data.avg_rating) || 0;
-                const totalReviews = data.total_reviews || 0;
-                const teacherData: TeacherDetail = {
-                    id: teacherInfo.id,
-                    name: teacherInfo.name,
-                    department: teacherInfo.department,
-                    avg_rating: avgRating,
-                    review_count: totalReviews,
-                    total_reviews: totalReviews,
-                    image_url: teacherInfo.image_url || null,
-                    reviews: reviewsList,
-                };
-                setSelectedTeacher(teacherData);
-            } catch (error) {
-                console.error('Failed to restore teacher:', error);
-            }
-        })();
-    }
-}, []); // Run once on mount
-
-const checkAdminLogin = () => {
-    const token = localStorage.getItem('admin_token');
-    setIsAdminLoggedIn(!!token);
-};
+    const checkAdminLogin = () => {
+        const token = localStorage.getItem('admin_token');
+        setIsAdminLoggedIn(!!token);
+    };
 
     const handleAdminLogin = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
@@ -593,6 +560,15 @@ const checkAdminLogin = () => {
                 user_name: reviewUserName.trim() || 'Anonymous'
             });
             alert('✅ Review submitted successfully!');
+            // Confetti
+            if ((window as any).canvasConfetti) {
+                (window as any).canvasConfetti({
+                    particleCount: 100,
+                    spread: 70,
+                    origin: { y: 0.6 },
+                    colors: ['#667eea', '#764ba2', '#fbbf24']
+                });
+            }
             setShowReviewForm(false);
             setReviewComment('');
             setReviewRating(5);
@@ -622,45 +598,44 @@ const checkAdminLogin = () => {
     }, [selectedTeacher, reviewRating, reviewComment, reviewUserName, loadTeachers, loadAdminData]);
 
     const handleTeacherClick = useCallback(async (teacher: Teacher) => {
-    try {
-        const response = await getTeacherDetail(teacher.id);
-        const data = response.data;
-        const teacherInfo = data.teacher;
-        const reviewsList = data.reviews || [];
-        const avgRating = Number(data.avg_rating) || 0;
-        const totalReviews = data.total_reviews || 0;
+        try {
+            const response = await getTeacherDetail(teacher.id);
+            const data = response.data;
+            const teacherInfo = data.teacher;
+            const reviewsList = data.reviews || [];
+            const avgRating = Number(data.avg_rating) || 0;
+            const totalReviews = data.total_reviews || 0;
 
-        const teacherData: TeacherDetail = {
-            id: teacherInfo.id,
-            name: teacherInfo.name,
-            department: teacherInfo.department,
-            avg_rating: avgRating,
-            review_count: totalReviews,
-            total_reviews: totalReviews,
-            image_url: teacherInfo.image_url || null,
-            reviews: reviewsList,
-        };
-        setSelectedTeacher(teacherData);
-        setShowReviewForm(false);
-        setReviewComment('');
-        setReviewRating(5);
-        setReviewUserName('');
-        setReviewError('');
-        
-        // ✅ NEW: Auto-scroll on mobile
-        if (window.innerWidth <= 768 && mainContentRef.current) {
-            setTimeout(() => {
-                mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 100);
+            const teacherData: TeacherDetail = {
+                id: teacherInfo.id,
+                name: teacherInfo.name,
+                department: teacherInfo.department,
+                avg_rating: avgRating,
+                review_count: totalReviews,
+                total_reviews: totalReviews,
+                image_url: teacherInfo.image_url || null,
+                reviews: reviewsList,
+            };
+            setSelectedTeacher(teacherData);
+            setShowReviewForm(false);
+            setReviewComment('');
+            setReviewRating(5);
+            setReviewUserName('');
+            setReviewError('');
+            
+            // Auto-scroll on mobile
+            if (window.innerWidth <= 768 && mainContentRef.current) {
+                setTimeout(() => {
+                    mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 100);
+            }
+            
+            setSearchParams({ teacher: teacher.id.toString() });
+        } catch (error) {
+            console.error('Error loading teacher details:', error);
+            alert('Failed to load teacher details');
         }
-        
-        // Update URL (if you have already implemented URL persistence)
-        setSearchParams({ teacher: teacher.id.toString() });
-    } catch (error) {
-        console.error('Error loading teacher details:', error);
-        alert('Failed to load teacher details');
-    }
-}, [setSearchParams]);
+    }, [setSearchParams]);
 
     const renderStars = (rating: number) => {
         const numRating = Number(rating) || 0;
@@ -669,13 +644,12 @@ const checkAdminLogin = () => {
         return '⭐'.repeat(fullStars) + '☆'.repeat(emptyStars);
     };
 
-    // Clear selected teacher and review form when going back to list
     const clearSelectedTeacher = () => {
-    setSelectedTeacher(null);
-    setShowReviewForm(false);
-    searchParams.delete('teacher');
-    setSearchParams(searchParams);
-};
+        setSelectedTeacher(null);
+        setShowReviewForm(false);
+        searchParams.delete('teacher');
+        setSearchParams(searchParams);
+    };
 
     const displayTeachers = isSearching ? searchResults : teachers;
 
@@ -714,30 +688,30 @@ const checkAdminLogin = () => {
                     <button onClick={() => setShowAdminPanel(false)} className="back-to-site-btn">← Back to Site</button>
                 </header>
                 <div className="container">
-                   <AdminPanel
-    teachers={teachers}
-    reviewsForModeration={reviewsForModeration}
-    adminStats={adminStats}
-    onAddTeacher={handleAddTeacher}
-    onDeleteTeacher={handleDeleteTeacher}
-    onDeleteReview={handleDeleteReview}
-    onLogout={handleAdminLogout}
-    showAddTeacherForm={showAddTeacherForm}
-    setShowAddTeacherForm={setShowAddTeacherForm}
-    newTeacherName={newTeacherName}
-    setNewTeacherName={setNewTeacherName}
-    newTeacherDepartment={newTeacherDepartment}
-    setNewTeacherDepartment={setNewTeacherDepartment}
-    newTeacherImage={newTeacherImage}
-    setNewTeacherImage={setNewTeacherImage}
-    totalTeachersCount={totalTeachersCount}
-    loadingMore={loadingMore}
-    onLoadMore={() => setCurrentPage(prev => prev + 1)}
-    adminSearchTerm={adminSearchTerm}
-onAdminSearchChange={handleAdminSearch}
-adminSearchResults={adminSearchResults}
-adminIsSearching={adminIsSearching}
-/>
+                    <AdminPanel
+                        teachers={teachers}
+                        reviewsForModeration={reviewsForModeration}
+                        adminStats={adminStats}
+                        onAddTeacher={handleAddTeacher}
+                        onDeleteTeacher={handleDeleteTeacher}
+                        onDeleteReview={handleDeleteReview}
+                        onLogout={handleAdminLogout}
+                        showAddTeacherForm={showAddTeacherForm}
+                        setShowAddTeacherForm={setShowAddTeacherForm}
+                        newTeacherName={newTeacherName}
+                        setNewTeacherName={setNewTeacherName}
+                        newTeacherDepartment={newTeacherDepartment}
+                        setNewTeacherDepartment={setNewTeacherDepartment}
+                        newTeacherImage={newTeacherImage}
+                        setNewTeacherImage={setNewTeacherImage}
+                        totalTeachersCount={totalTeachersCount}
+                        loadingMore={loadingMore}
+                        onLoadMore={() => setCurrentPage(prev => prev + 1)}
+                        adminSearchTerm={adminSearchTerm}
+                        onAdminSearchChange={handleAdminSearch}
+                        adminSearchResults={adminSearchResults}
+                        adminIsSearching={adminIsSearching}
+                    />
                 </div>
             </div>
         );
@@ -750,42 +724,35 @@ adminIsSearching={adminIsSearching}
     return (
         <div className="app">
             <header className="header">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', flexWrap: 'wrap' }}>
-          <img 
-            src="https://www.umt.edu.pk/images/umt-logo.png" 
-            alt="UMT Logo" 
-            style={{ height: '60px', width: 'auto' }}
-           />
-             <h1 style={{ margin: 0 }}>UMT Teacher Reviews</h1>
-             </div>
-            <p>Rate and review your professors anonymously</p>
-           <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', flexWrap: 'wrap' }}>
-    <button onClick={() => {
-    setShowAdminPanel(true);
-    if (isAdminLoggedIn) {
-        loadAdminData();
-        loadTeachers(1);
-    }
-}} className="admin-login-btn">
-    🔒 Admin Login
-</button>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', flexWrap: 'wrap' }}>
+                    <img 
+                        src="https://www.umt.edu.pk/images/umt-logo.png" 
+                        alt="UMT Logo" 
+                        style={{ height: '60px', width: 'auto' }}
+                    />
+                    <h1 style={{ margin: 0 }}>UMT Teacher Reviews</h1>
+                </div>
+                <p>Rate and review your professors anonymously</p>
+                <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <button onClick={() => {
+                        setShowAdminPanel(true);
+                        if (isAdminLoggedIn) {
+                            loadAdminData();
+                            loadTeachers(1);
+                        }
+                    }} className="admin-login-btn">
+                        🔒 Admin Login
+                    </button>
+                    <button onClick={() => setShowContactModal(true)} className="admin-login-btn">
+                        📧 Contact Us
+                    </button>
+                    <button onClick={() => setShowAboutModal(true)} className="admin-login-btn">
+                        ℹ️ About
+                    </button>
+                </div>
+            </header>
 
-    <button 
-        onClick={() => setShowContactModal(true)}
-        className="admin-login-btn"
-    >
-        📧 Contact Us
-    </button>
-    <button 
-        onClick={() => setShowAboutModal(true)}
-        className="admin-login-btn"
-    >
-        ℹ️ About
-    </button>
-</div>
-             </header>
-
-             <div className="container">
+            <div className="container">
                 <div className="sidebar">
                     <div className="search-box">
                         <input
@@ -804,7 +771,17 @@ adminIsSearching={adminIsSearching}
                     
                     <div className="teacher-list">
                         {loading ? (
-                            <div className="loading">Loading teachers...</div>
+                            <>
+                                {[...Array(5)].map((_, i) => (
+                                    <div key={i} className="skeleton-card">
+                                        <div className="skeleton-image"></div>
+                                        <div className="skeleton-text">
+                                            <div className="skeleton-text-line"></div>
+                                            <div className="skeleton-text-line"></div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </>
                         ) : error ? (
                             <div className="error-message">
                                 {error} <button onClick={() => loadTeachers(1)}>Retry</button>
@@ -813,27 +790,39 @@ adminIsSearching={adminIsSearching}
                             <div className="no-results">No teachers found</div>
                         ) : (
                             <>
-                                {displayTeachers.map((teacher: Teacher) => (
-                                    <div 
-                                        key={teacher.id} 
-                                        className="teacher-card" 
-                                        onClick={() => handleTeacherClick(teacher)}
-                                    >
-                                        {teacher.image_url && (
-                                            <div className="teacher-card-image">
-                                                <img src={teacher.image_url} alt={teacher.name} />
-                                            </div>
-                                        )}
-                                        <div className="teacher-card-info">
-                                            <h3>{teacher.name}</h3>
-                                            <p className="department">{teacher.department}</p>
-                                            <div className="rating">
-                                                <span className="stars">{renderStars(teacher.avg_rating)}</span>
-                                                <span className="reviews-count">({teacher.review_count} reviews)</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
+                                {displayTeachers.map((teacher: Teacher) => {
+    const avgRatingNum = Number(teacher.avg_rating); // convert to number
+    return (
+        <div 
+            key={teacher.id} 
+            className="teacher-card" 
+            onClick={() => handleTeacherClick(teacher)}
+        >
+            {teacher.image_url && (
+                <div className="teacher-card-image">
+                    <img src={teacher.image_url} alt={teacher.name} />
+                </div>
+            )}
+            <div className="teacher-card-info">
+                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <h3>{teacher.name}</h3>
+                    <span className={`rating-badge ${
+                        avgRatingNum >= 4.5 ? 'excellent' :
+                        avgRatingNum >= 4 ? 'good' :
+                        avgRatingNum >= 3 ? 'average' : 'poor'
+                    }`}>
+                        {avgRatingNum.toFixed(1)} ★
+                    </span>
+                </div>
+                <p className="department">{teacher.department}</p>
+                <div className="rating">
+                    <span className="stars">{renderStars(avgRatingNum)}</span>
+                    <span className="reviews-count">({teacher.review_count} reviews)</span>
+                </div>
+            </div>
+        </div>
+    );
+})}
                                 {loadingMore && <div className="loading-more">Loading more teachers...</div>}
                                 {!isSearching && hasMore && !loadingMore && (
                                     <div ref={loadMoreRef} className="load-more-container">
@@ -853,14 +842,9 @@ adminIsSearching={adminIsSearching}
                 <div className="main-content" ref={mainContentRef}>
                     {selectedTeacher ? (
                         <div className="teacher-detail">
-                            <button onClick={() => {
-    setSelectedTeacher(null);
-    setShowReviewForm(false);
-    searchParams.delete('teacher');
-    setSearchParams(searchParams);
-}} className="back-button">
-    ← Back to list
-</button>
+                            <button onClick={clearSelectedTeacher} className="back-button">
+                                ← Back to list
+                            </button>
                             
                             {selectedTeacher.image_url && (
                                 <img src={selectedTeacher.image_url} alt={selectedTeacher.name} className="teacher-detail-image" />
@@ -906,7 +890,9 @@ adminIsSearching={adminIsSearching}
                                         </div>
                                         <div className="form-buttons">
                                             <button type="button" onClick={() => setShowReviewForm(false)} className="btn-cancel">Cancel</button>
-                                            <button type="submit" disabled={submitting} className="btn-submit">{submitting ? 'Submitting...' : 'Submit Review'}</button>
+                                            <button type="submit" disabled={submitting} className="btn-submit">
+                                                {submitting ? <><span className="spinner-small"></span> Submitting...</> : 'Submit Review'}
+                                            </button>
                                         </div>
                                     </form>
                                 </div>
@@ -938,53 +924,48 @@ adminIsSearching={adminIsSearching}
                     )}
                 </div>
             </div>
-            {/* About Modal */}
-{/* About Modal */}
-{showAboutModal && (
-    <div className="modal-overlay" onClick={() => setShowAboutModal(false)}>
-        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>📖 About UMT Teacher Reviews</h3>
-            <p>This platform allows students to rate and review their teachers anonymously.</p>
-            <hr />
-            <p><strong>👨‍💻 Developer:</strong> Munawar Hussain</p>
-            <p><strong>🙏 Supporters & Contributors:</strong></p>
-            <ul style={{ textAlign: 'left', display: 'inline-block', margin: '0 auto', paddingLeft: '1.5rem' }}>
-                <li>Ahtasham Bilal</li>
-                <li>Amjad Ali Awan</li>
-                <li>Muhammad Anas</li>
-                <li>Muhamad Ahmad</li>
-                <li>Muhammad Dawood</li>
-                <li>Umair Hassan</li>
-                <li>Muhammad Khaleel</li>
-                <li>Farhan Sarwar</li>
-            </ul>
-            <p><strong>Version:</strong> 2.0</p>
-            <button onClick={() => setShowAboutModal(false)} className="modal-close-btn">Close</button>
-        </div>
-    </div>
-)}
-{/* Contact Modal */}
-{showContactModal && (
-    <div className="modal-overlay" onClick={() => setShowContactModal(false)}>
-        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>📧 Contact Us</h3>
-            <p>If you have any questions, need help, or want to give feedback, please send an email to:</p>
-            <p><strong>umt.teacher.reviews@gmail.com</strong></p>
-            <button onClick={() => setShowContactModal(false)} className="modal-close-btn">Close</button>
-        </div>
-    </div>
-)}
-<footer className="app-footer">
-    <div className="footer-content">
-        <p>© {new Date().getFullYear()} UMT Teacher Reviews. All rights reserved.</p>
-        <p>Developed by Munawar Hussain</p>
-        <p className="footer-disclaimer">All reviews are student opinions and not official university statements.</p>
-    </div>
-</footer>
 
-     </div>
-     
-        
+            {showAboutModal && (
+                <div className="modal-overlay" onClick={() => setShowAboutModal(false)}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <h3>📖 About UMT Teacher Reviews</h3>
+                        <p>This platform allows students to rate and review their teachers anonymously.</p>
+                        <hr />
+                        <p><strong>👨‍💻 Developer:</strong> Munawar Hussain</p>
+                        <p><strong>🙏 Supporters & Contributors:</strong></p>
+                        <ul style={{ textAlign: 'left', display: 'inline-block', margin: '0 auto', paddingLeft: '1.5rem' }}>
+                            <li>Ahtasham Bilal</li>
+                            <li>Amjad Ali Awan</li>
+                            <li>Muhammad Anas</li>
+                            <li>Muhamad Ahmad</li>
+                            <li>Muhammad Dawood</li>
+                            <li>Umair Hassan</li>
+                            <li>Muhammad Khaleel</li>
+                            <li>Farhan Sarwar</li>
+                        </ul>
+                        <p><strong>Version:</strong> 2.0</p>
+                        <button onClick={() => setShowAboutModal(false)} className="modal-close-btn">Close</button>
+                    </div>
+                </div>
+            )}
+            {showContactModal && (
+                <div className="modal-overlay" onClick={() => setShowContactModal(false)}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <h3>📧 Contact Us</h3>
+                        <p>If you have any questions, need help, or want to give feedback, please send an email to:</p>
+                        <p><strong>umt.teacher.reviews@gmail.com</strong></p>
+                        <button onClick={() => setShowContactModal(false)} className="modal-close-btn">Close</button>
+                    </div>
+                </div>
+            )}
+            <footer className="app-footer">
+                <div className="footer-content">
+                    <p>© {new Date().getFullYear()} UMT Teacher Reviews. All rights reserved.</p>
+                    <p>Developed by Munawar Hussain</p>
+                    <p className="footer-disclaimer">All reviews are student opinions and not official university statements.</p>
+                </div>
+            </footer>
+        </div>
     );
 };
 
