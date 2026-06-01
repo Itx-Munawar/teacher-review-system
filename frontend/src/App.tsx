@@ -261,12 +261,16 @@ const App: React.FC = () => {
 
     const loadMoreRef = useRef<HTMLDivElement>(null);
     const mainContentRef = useRef<HTMLDivElement>(null);
+const logoutTimerRef = useRef<NodeJS.Timeout | null>(null);
+    
     const [showAboutModal, setShowAboutModal] = useState(false);
     const [showContactModal, setShowContactModal] = useState(false);
     
     const [adminSearchTerm, setAdminSearchTerm] = useState('');
     const [adminSearchResults, setAdminSearchResults] = useState<Teacher[]>([]);
     const [adminIsSearching, setAdminIsSearching] = useState(false);
+
+    
 
     // ========== TEACHER LOADING (PAGINATED) ==========
     const loadTeachers = useCallback(async (page: number = 1, retryCount: number = 0) => {
@@ -402,6 +406,8 @@ const App: React.FC = () => {
         }
     }, [isAdminLoggedIn, loadAdminData, loadTeachers]);
 
+
+    
     // Restore state from URL on mount
     useEffect(() => {
         const teacherId = searchParams.get('teacher');
@@ -443,6 +449,8 @@ const App: React.FC = () => {
         }
     }, []); // run once
 
+    
+
     const checkAdminLogin = () => {
         const token = localStorage.getItem('admin_token');
         setIsAdminLoggedIn(!!token);
@@ -465,13 +473,62 @@ const App: React.FC = () => {
         }
     }, [adminUsername, adminPassword, loadAdminData, loadTeachers]);
 
-    const handleAdminLogout = useCallback(() => {
-        localStorage.removeItem('admin_token');
-        setIsAdminLoggedIn(false);
-        setShowAdminPanel(false);
-        setShowAddTeacherForm(false);
-        alert('Logged out successfully');
-    }, []);
+   const handleAdminLogout = useCallback(() => {
+    localStorage.removeItem('admin_token');
+    setIsAdminLoggedIn(false);
+    setShowAdminPanel(false);
+    setShowAddTeacherForm(false);
+    if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
+    alert('Logged out successfully');
+}, []);
+
+
+
+// ---------- Auto‑logout timer (admin only) ----------
+const startLogoutTimer = useCallback(() => {
+    if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
+    logoutTimerRef.current = setTimeout(() => {
+        if (isAdminLoggedIn && showAdminPanel) {
+            console.log('Auto-logging out due to inactivity');
+            handleAdminLogout();
+            setShowAdminPanel(false);
+            alert('You have been logged out due to inactivity.');
+        }
+    }, 30 * 60 * 1000);
+}, [isAdminLoggedIn, showAdminPanel, handleAdminLogout]);
+
+const resetLogoutTimer = useCallback(() => {
+    if (isAdminLoggedIn && showAdminPanel) {
+        startLogoutTimer();
+    }
+}, [isAdminLoggedIn, showAdminPanel, startLogoutTimer]);
+
+useEffect(() => {
+    if (isAdminLoggedIn && showAdminPanel) {
+        startLogoutTimer();
+        const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+        events.forEach(event => window.addEventListener(event, resetLogoutTimer));
+        return () => {
+            events.forEach(event => window.removeEventListener(event, resetLogoutTimer));
+            if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
+        };
+    }
+}, [isAdminLoggedIn, showAdminPanel, startLogoutTimer, resetLogoutTimer]);
+
+useEffect(() => {
+    const handleSessionExpired = () => {
+        if (isAdminLoggedIn) {
+            alert('Your admin session has expired. Please log in again.');
+            handleAdminLogout();
+            setShowAdminPanel(false);
+        }
+    };
+    window.addEventListener('admin-session-expired', handleSessionExpired);
+    return () => window.removeEventListener('admin-session-expired', handleSessionExpired);
+}, [isAdminLoggedIn, handleAdminLogout]);
+
+// ---------- End of auto‑logout code ----------
+
 
     const handleAddTeacher = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
