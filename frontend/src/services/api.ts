@@ -85,6 +85,14 @@ export const deleteTeacher = (id: number) => {
     return api.delete(`/admin/teachers/${id}`);
 };
 
+/**
+ * Update an existing teacher (admin only)
+ */
+export const updateTeacher = (id: number, data: { name: string; department: string; image_url?: string }) => {
+    console.log(`✏️ Updating teacher ID ${id}:`, data);
+    return api.put(`/admin/teachers/${id}`, data);
+};
+
 export const getAdminReviews = () => {
     return api.get('/admin/reviews');
 };
