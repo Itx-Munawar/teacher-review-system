@@ -1,4 +1,3 @@
-# https://www.robotstxt.org/robotstxt.html
 User-agent: *
 Allow: /
 Sitemap: https://teacher-review-system-zeta.vercel.app/sitemap.xml
