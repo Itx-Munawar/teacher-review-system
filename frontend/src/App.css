@@ -1215,6 +1215,19 @@ body {
     vertical-align: middle;
 }
 
+.edit-btn {
+    background: #f59e0b;
+    color: white;
+    border: none;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.edit-btn:hover {
+    background: #d97706;
+}
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }

@@ -6,6 +6,7 @@ import {
     getTeacherDetail, 
     adminLogin, 
     addTeacher, 
+    updateTeacher,
     deleteTeacher, 
     deleteReview, 
     getAdminReviews, 
@@ -48,6 +49,7 @@ const AdminPanel = memo(({
     adminStats,
     onAddTeacher, 
     onDeleteTeacher, 
+    onUpdateTeacher,
     onDeleteReview, 
     onLogout,
     showAddTeacherForm,
@@ -82,6 +84,35 @@ const AdminPanel = memo(({
     }
 
     const displayTeachers = adminSearchTerm ? adminSearchResults : teachers;
+
+        // Edit state
+    const [editingTeacherId, setEditingTeacherId] = useState<number | null>(null);
+    const [editName, setEditName] = useState('');
+    const [editDepartment, setEditDepartment] = useState('');
+    const [editImageUrl, setEditImageUrl] = useState('');
+    // Edit handlers
+const startEdit = (teacher: Teacher) => {
+    setEditingTeacherId(teacher.id);
+    setEditName(teacher.name);
+    setEditDepartment(teacher.department);
+    setEditImageUrl(teacher.image_url || '');
+};
+
+const cancelEdit = () => {
+    setEditingTeacherId(null);
+    setEditName('');
+    setEditDepartment('');
+    setEditImageUrl('');
+};
+
+const handleUpdate = async (id: number) => {
+    await onUpdateTeacher(id, {
+        name: editName,
+        department: editDepartment,
+        image_url: editImageUrl || undefined
+    });
+    cancelEdit();
+};
 
     return (
         <div className="admin-panel">
@@ -126,22 +157,63 @@ const AdminPanel = memo(({
                     )}
                 </div>
 
-                <div className="admin-list">
-                    {adminIsSearching ? (
-                        <div className="loading">Searching...</div>
-                    ) : displayTeachers.length === 0 ? (
-                        <p style={{textAlign: 'center', padding: '20px', color: '#999'}}>
-                            {adminSearchTerm ? 'No teachers found' : 'No teachers added yet'}
-                        </p>
+               <div className="admin-list">
+    {adminIsSearching ? (
+        <div className="loading">Searching...</div>
+    ) : displayTeachers.length === 0 ? (
+        <p style={{textAlign: 'center', padding: '20px', color: '#999'}}>
+            {adminSearchTerm ? 'No teachers found' : 'No teachers added yet'}
+        </p>
+    ) : (
+        displayTeachers.map((teacher: Teacher) => {
+            const isEditing = editingTeacherId === teacher.id;
+            return (
+                <div key={teacher.id} className="admin-item">
+                    {isEditing ? (
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <input
+                                type="text"
+                                value={editName}
+                                onChange={(e) => setEditName(e.target.value)}
+                                placeholder="Name"
+                                className="search-input"
+                                style={{ margin: 0 }}
+                            />
+                            <input
+                                type="text"
+                                value={editDepartment}
+                                onChange={(e) => setEditDepartment(e.target.value)}
+                                placeholder="Department"
+                                className="search-input"
+                                style={{ margin: 0 }}
+                            />
+                            <input
+                                type="url"
+                                value={editImageUrl}
+                                onChange={(e) => setEditImageUrl(e.target.value)}
+                                placeholder="Image URL (optional)"
+                                className="search-input"
+                                style={{ margin: 0 }}
+                            />
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <button onClick={() => handleUpdate(teacher.id)} className="btn-submit" style={{ padding: '4px 12px' }}>Save</button>
+                                <button onClick={cancelEdit} className="btn-cancel" style={{ padding: '4px 12px' }}>Cancel</button>
+                            </div>
+                        </div>
                     ) : (
-                        displayTeachers.map((teacher: Teacher) => (
-                            <div key={teacher.id} className="admin-item">
-                                <span><strong>{teacher.name}</strong> - {teacher.department}</span>
+                        <>
+                            <span><strong>{teacher.name}</strong> - {teacher.department}</span>
+                            <div>
+                                <button onClick={() => startEdit(teacher)} className="edit-btn" style={{ marginRight: '8px' }}>✏️</button>
                                 <button onClick={() => onDeleteTeacher(teacher.id)} className="delete-btn">Delete</button>
                             </div>
-                        ))
+                        </>
                     )}
                 </div>
+            );
+        })
+    )}
+</div>
 
                 {!adminSearchTerm && (
                     <>
@@ -529,6 +601,17 @@ useEffect(() => {
 
 // ---------- End of auto‑logout code ----------
 
+const handleUpdateTeacher = useCallback(async (id: number, data: { name: string; department: string; image_url?: string }) => {
+    try {
+        await updateTeacher(id, data);
+        alert('✅ Teacher updated successfully!');
+        loadTeachers(1);
+        await loadAdminData();
+    } catch (error) {
+        console.error('Update error:', error);
+        alert('Failed to update teacher');
+    }
+}, [loadTeachers, loadAdminData]);
 
     const handleAddTeacher = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
@@ -553,6 +636,7 @@ useEffect(() => {
             alert('Failed to add teacher');
         }
     }, [newTeacherName, newTeacherDepartment, newTeacherImage, loadTeachers, loadAdminData]);
+
 
     const handleDeleteTeacher = useCallback(async (id: number) => {
         if (window.confirm('Are you sure you want to delete this teacher? All reviews will also be deleted.')) {
@@ -750,6 +834,7 @@ useEffect(() => {
                         reviewsForModeration={reviewsForModeration}
                         adminStats={adminStats}
                         onAddTeacher={handleAddTeacher}
+                        onUpdateTeacher={handleUpdateTeacher} 
                         onDeleteTeacher={handleDeleteTeacher}
                         onDeleteReview={handleDeleteReview}
                         onLogout={handleAdminLogout}
