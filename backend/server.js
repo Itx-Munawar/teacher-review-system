@@ -358,6 +358,47 @@ app.delete('/api/admin/teachers/:id', verifyAdmin, async (req, res) => {
     }
 });
 
+// ========== UPDATE TEACHER (admin only) ==========
+app.put('/api/admin/teachers/:id', verifyAdmin, [
+    body('name').isLength({ min: 2, max: 100 }).withMessage('Name must be 2-100 characters'),
+    body('department').isLength({ min: 2, max: 100 }).withMessage('Department must be 2-100 characters'),
+    body('image_url').optional().isURL().withMessage('Image URL must be a valid URL')
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ error: errors.array()[0].msg });
+    }
+
+    try {
+        const teacherId = req.params.id;
+        const { name, department, image_url } = req.body;
+        const sanitizedName = validator.escape(name.trim());
+        const sanitizedDept = validator.escape(department.trim());
+        const sanitizedImageUrl = image_url ? validator.escape(image_url.trim()) : null;
+
+        // Check if teacher exists
+        const [existing] = await db.query('SELECT id FROM teachers WHERE id = ?', [teacherId]);
+        if (existing.length === 0) {
+            return res.status(404).json({ error: 'Teacher not found' });
+        }
+
+        await db.query(
+            'UPDATE teachers SET name = ?, department = ?, image_url = ? WHERE id = ?',
+            [sanitizedName, sanitizedDept, sanitizedImageUrl, teacherId]
+        );
+
+        await createAuditLog(req.admin.id, 'UPDATE_TEACHER', `Updated teacher: ${sanitizedName} (ID: ${teacherId})`, req.ip);
+
+        res.json({
+            success: true,
+            message: 'Teacher updated successfully'
+        });
+    } catch (error) {
+        console.error('Error updating teacher:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
 app.get('/api/admin/reviews', verifyAdmin, async (req, res) => {
     // ... (your existing get admin reviews code) ...
     try {
