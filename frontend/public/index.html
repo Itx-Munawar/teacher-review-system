@@ -53,14 +53,59 @@
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
-      "@type": "Organization",
+      "@type": "EducationalOrganization",
       "name": "UMT Teacher Reviews",
       "url": "https://teacher-review-system-zeta.vercel.app/",
       "description": "A platform for UMT students to anonymously rate and review their professors.",
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "Lahore",
+        "addressCountry": "PK"
+      },
       "founder": {
         "@type": "Person",
         "name": "Munawar Hussain"
       }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What is UMT Teacher Reviews?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "UMT Teacher Reviews is a platform where students of University of Management and Technology, Lahore can anonymously rate and review their professors."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How do I leave a review for a teacher?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Select a teacher from the list, click 'Write a Review', choose a rating from 1 to 5 stars, write your review, and submit. You can post anonymously."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Are the reviews anonymous?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes, all reviews are anonymous. You can optionally enter a name, but it is not required."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is this an official UMT website?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No, this is an independent student-made platform. Reviews are student opinions and not official university statements."
+          }
+        }
+      ]
     }
     </script>
   </head>
