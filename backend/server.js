@@ -92,6 +92,26 @@ const createAuditLog = async (adminId, action, details, ip = 'unknown') => {
     }
 };
 
+// ========== IN-MEMORY CACHE ==========
+const cache = new Map();
+const CACHE_TTL = 60 * 1000; // 60 seconds
+
+const getCached = (key) => {
+    const entry = cache.get(key);
+    if (entry && Date.now() - entry.time < CACHE_TTL) return entry.data;
+    return null;
+};
+
+const setCache = (key, data) => {
+    cache.set(key, { data, time: Date.now() });
+};
+
+const invalidateCache = (pattern) => {
+    for (const key of cache.keys()) {
+        if (key.startsWith(pattern)) cache.delete(key);
+    }
+};
+
 // ========== PUBLIC API ENDPOINTS ==========
 
 // GET /api/teachers - paginated list (20 per page)
@@ -101,7 +121,9 @@ app.get('/api/teachers', async (req, res) => {
         const limit = 20;
         const offset = (page - 1) * limit;
 
-        console.log(`📚 Page=${page}, Limit=${limit}, Offset=${offset}`);
+        const cacheKey = `teachers:${page}`;
+        const cached = getCached(cacheKey);
+        if (cached) return res.json(cached);
 
         const query = `
             SELECT t.*, 
@@ -115,12 +137,11 @@ app.get('/api/teachers', async (req, res) => {
         `;
         
         const [teachers] = await db.query(query);
-        console.log(`✅ Returned ${teachers.length} teachers`);
 
         const [countResult] = await db.query('SELECT COUNT(*) as total FROM teachers');
         const total = countResult[0].total;
 
-        res.json({
+        const result = {
             teachers: teachers,
             pagination: {
                 page: page,
@@ -128,7 +149,10 @@ app.get('/api/teachers', async (req, res) => {
                 total: total,
                 totalPages: Math.ceil(total / limit)
             }
-        });
+        };
+
+        setCache(cacheKey, result);
+        res.json(result);
     } catch (error) {
         console.error('Error fetching teachers:', error);
         res.status(500).json({ error: 'Database error' });
@@ -229,6 +253,7 @@ app.post('/api/reviews', reviewLimiter, [
             [teacher_id, rating, sanitizedComment, sanitizedName]
         );
         
+        invalidateCache('teachers');
         res.json({
             success: true,
             review_id: result.insertId,
@@ -336,6 +361,7 @@ app.post('/api/admin/teachers', verifyAdmin, [
         const sanitizedImageUrl = image_url ? validator.escape(image_url.trim()) : null;
         const [result] = await db.query('INSERT INTO teachers (name, department, image_url) VALUES (?, ?, ?)', [sanitizedName, sanitizedDept, sanitizedImageUrl]);
         await createAuditLog(req.admin.id, 'ADD_TEACHER', `Added teacher: ${sanitizedName}`, req.ip);
+        invalidateCache('teachers');
         res.json({ success: true, id: result.insertId, message: 'Teacher added successfully' });
     } catch (error) {
         console.error('Error adding teacher:', error);
@@ -351,6 +377,7 @@ app.delete('/api/admin/teachers/:id', verifyAdmin, async (req, res) => {
         const [result] = await db.query('DELETE FROM teachers WHERE id = ?', [teacherId]);
         if (result.affectedRows === 0) return res.status(404).json({ error: 'Teacher not found' });
         await createAuditLog(req.admin.id, 'DELETE_TEACHER', `Deleted teacher: ${teachers[0]?.name || teacherId}`, req.ip);
+        invalidateCache('teachers');
         res.json({ success: true, message: 'Teacher deleted successfully' });
     } catch (error) {
         console.error('Error deleting teacher:', error);
@@ -389,6 +416,7 @@ app.put('/api/admin/teachers/:id', verifyAdmin, [
 
         await createAuditLog(req.admin.id, 'UPDATE_TEACHER', `Updated teacher: ${sanitizedName} (ID: ${teacherId})`, req.ip);
 
+        invalidateCache('teachers');
         res.json({
             success: true,
             message: 'Teacher updated successfully'
