@@ -1,23 +1,20 @@
 import React, { useState, useEffect, useCallback, memo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { 
-    getTeachers, 
+import {
+    getTeachers,
     searchAllTeachers,
-    getTeacherDetail, 
-    adminLogin, 
-    addTeacher, 
+    getTeacherDetail,
+    adminLogin,
+    addTeacher,
     updateTeacher,
-    deleteTeacher, 
-    deleteReview, 
-    getAdminReviews, 
+    deleteTeacher,
+    deleteReview,
+    getAdminReviews,
     submitReview,
-    getAdminStats 
+    getAdminStats
 } from './services/api';
 import ForgotPassword from './components/ForgotPassword';
 import ResetPassword from './components/ResetPassword';
-import { FloatingOrb } from './components/3d/FloatingOrb';
-import { HoverCard } from './components/3d/HoverCard';
-import { Background3D } from './components/3d/Background3D';
 import './App.css';
 
 // ========== INTERFACES ==========
@@ -868,13 +865,11 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
 
     return (
         <div className="app">
-            <Background3D />
             <header className="header">
-                <FloatingOrb />
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', flexWrap: 'wrap' }}>
-                    <img 
-                        src="https://www.umt.edu.pk/images/umt-logo.png" 
-                        alt="UMT Logo" 
+                    <img
+                        src="https://www.umt.edu.pk/images/umt-logo.png"
+                        alt="UMT Logo"
                         style={{ height: '60px', width: 'auto' }}
                     />
                     <h1 style={{ margin: 0 }}>UMT Teacher Reviews</h1>
@@ -940,8 +935,8 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                                 {displayTeachers.map((teacher: Teacher) => {
     const avgRatingNum = Number(teacher.avg_rating); // convert to number
     return (
-        <HoverCard key={teacher.id} className="teacher-card-wrapper">
             <div
+                key={teacher.id}
                 className="teacher-card"
                 onClick={() => handleTeacherClick(teacher)}
             >
@@ -968,7 +963,6 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                     </div>
                 </div>
             </div>
-        </HoverCard>
     );
 })}
                                 {loadingMore && <div className="loading-more">Loading more teachers...</div>}
