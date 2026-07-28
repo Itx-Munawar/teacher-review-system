@@ -15,6 +15,9 @@ import {
 } from './services/api';
 import ForgotPassword from './components/ForgotPassword';
 import ResetPassword from './components/ResetPassword';
+import { FloatingOrb } from './components/3d/FloatingOrb';
+import { HoverCard } from './components/3d/HoverCard';
+import { Background3D } from './components/3d/Background3D';
 import './App.css';
 
 // ========== INTERFACES ==========
@@ -865,7 +868,9 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
 
     return (
         <div className="app">
+            <Background3D />
             <header className="header">
+                <FloatingOrb />
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', flexWrap: 'wrap' }}>
                     <img 
                         src="https://www.umt.edu.pk/images/umt-logo.png" 
@@ -935,34 +940,35 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                                 {displayTeachers.map((teacher: Teacher) => {
     const avgRatingNum = Number(teacher.avg_rating); // convert to number
     return (
-        <div 
-            key={teacher.id} 
-            className="teacher-card" 
-            onClick={() => handleTeacherClick(teacher)}
-        >
-            {teacher.image_url && (
-                <div className="teacher-card-image">
-                    <img src={teacher.image_url} alt={teacher.name} />
-                </div>
-            )}
-            <div className="teacher-card-info">
-                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <h3>{teacher.name}</h3>
-                    <span className={`rating-badge ${
-                        avgRatingNum >= 4.5 ? 'excellent' :
-                        avgRatingNum >= 4 ? 'good' :
-                        avgRatingNum >= 3 ? 'average' : 'poor'
-                    }`}>
-                        {avgRatingNum.toFixed(1)} ★
-                    </span>
-                </div>
-                <p className="department">{teacher.department}</p>
-                <div className="rating">
-                    <span className="stars">{renderStars(avgRatingNum)}</span>
-                    <span className="reviews-count">({teacher.review_count} reviews)</span>
+        <HoverCard key={teacher.id} className="teacher-card-wrapper">
+            <div
+                className="teacher-card"
+                onClick={() => handleTeacherClick(teacher)}
+            >
+                {teacher.image_url && (
+                    <div className="teacher-card-image">
+                        <img src={teacher.image_url} alt={teacher.name} />
+                    </div>
+                )}
+                <div className="teacher-card-info">
+                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <h3>{teacher.name}</h3>
+                        <span className={`rating-badge ${
+                            avgRatingNum >= 4.5 ? 'excellent' :
+                            avgRatingNum >= 4 ? 'good' :
+                            avgRatingNum >= 3 ? 'average' : 'poor'
+                        }`}>
+                            {avgRatingNum.toFixed(1)} ★
+                        </span>
+                    </div>
+                    <p className="department">{teacher.department}</p>
+                    <div className="rating">
+                        <span className="stars">{renderStars(avgRatingNum)}</span>
+                        <span className="reviews-count">({teacher.review_count} reviews)</span>
+                    </div>
                 </div>
             </div>
-        </div>
+        </HoverCard>
     );
 })}
                                 {loadingMore && <div className="loading-more">Loading more teachers...</div>}

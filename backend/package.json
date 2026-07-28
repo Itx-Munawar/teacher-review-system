@@ -18,6 +18,7 @@
     "express-validator": "^7.0.1",
     "helmet": "^7.0.0",
     "jsonwebtoken": "^9.0.0",
+    "lru-cache": "^11.5.2",
     "mysql2": "^3.6.0",
     "nodemailer": "^8.0.7",
     "validator": "^13.11.0"

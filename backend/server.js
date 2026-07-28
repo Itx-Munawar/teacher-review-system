@@ -93,17 +93,18 @@ const createAuditLog = async (adminId, action, details, ip = 'unknown') => {
 };
 
 // ========== IN-MEMORY CACHE ==========
-const cache = new Map();
-const CACHE_TTL = 60 * 1000; // 60 seconds
+const { LRUCache } = require('lru-cache');
+const cache = new LRUCache({
+    max: 500, // Maximum number of items in cache
+    ttl: 60 * 1000, // 60 seconds
+});
 
 const getCached = (key) => {
-    const entry = cache.get(key);
-    if (entry && Date.now() - entry.time < CACHE_TTL) return entry.data;
-    return null;
+    return cache.get(key) || null;
 };
 
 const setCache = (key, data) => {
-    cache.set(key, { data, time: Date.now() });
+    cache.set(key, data);
 };
 
 const invalidateCache = (pattern) => {
