@@ -2,7 +2,6 @@ export interface Teacher {
     id: number;
     name: string;
     department: string;
-    avg_rating: number;
     review_count: number;
     created_at?: string;
     image_url?: string;   // teacher profile image
@@ -11,7 +10,6 @@ export interface Teacher {
 export interface Review {
     id: number;
     teacher_id: number;
-    rating: number;
     comment: string;
     user_name: string;
     created_at: string;

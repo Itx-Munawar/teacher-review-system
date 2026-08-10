@@ -17,6 +17,11 @@ const ParticleBackground: React.FC = () => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
     useEffect(() => {
+        // Skip the animation on touch/mobile devices and when the user prefers reduced motion
+        if (window.matchMedia('(pointer: coarse)').matches || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            return;
+        }
+
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
@@ -27,7 +32,7 @@ const ParticleBackground: React.FC = () => {
         const mouse = { x: -9999, y: -9999 };
 
         const setupCanvas = () => {
-            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+            const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
             width = window.innerWidth;
             height = window.innerHeight;
             canvas.width = Math.floor(width * dpr);
@@ -36,7 +41,7 @@ const ParticleBackground: React.FC = () => {
         };
         setupCanvas();
 
-        const count = Math.min(100, Math.max(36, Math.floor((width * height) / 17000)));
+        const count = Math.min(80, Math.max(24, Math.floor((width * height) / 24000)));
         const particles: Particle[] = Array.from({ length: count }, () => ({
             x: Math.random() * width,
             y: Math.random() * height,
@@ -109,13 +114,32 @@ const ParticleBackground: React.FC = () => {
             ctx.globalAlpha = 1;
             raf = requestAnimationFrame(tick);
         };
+
+        const start = () => {
+            cancelAnimationFrame(raf);
+            raf = requestAnimationFrame(tick);
+        };
+
+        const stop = () => {
+            cancelAnimationFrame(raf);
+            raf = 0;
+        };
+
+        // Pause the animation while the tab is hidden to save battery/CPU
+        const handleVisibility = () => {
+            if (document.hidden) stop();
+            else start();
+        };
+
         tick();
+        document.addEventListener('visibilitychange', handleVisibility);
 
         return () => {
             cancelAnimationFrame(raf);
             window.removeEventListener('resize', handleResize);
             window.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseleave', handleMouseLeave);
+            document.removeEventListener('visibilitychange', handleVisibility);
         };
     }, []);
 

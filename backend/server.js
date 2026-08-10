@@ -127,12 +127,9 @@ app.get('/api/teachers', async (req, res) => {
         if (cached) return res.json(cached);
 
         const query = `
-            SELECT t.*, 
-                   COALESCE(ROUND(AVG(r.rating), 1), 0) as avg_rating,
-                   COUNT(r.id) as review_count
+            SELECT t.*,
+                   (SELECT COUNT(*) FROM reviews r WHERE r.teacher_id = t.id AND r.is_approved = 1) as review_count
             FROM teachers t
-            LEFT JOIN reviews r ON t.id = r.teacher_id AND r.is_approved = 1
-            GROUP BY t.id
             ORDER BY t.name
             LIMIT ${limit} OFFSET ${offset}
         `;
@@ -169,13 +166,10 @@ app.get('/api/teachers/search', async (req, res) => {
         }
         
         const [teachers] = await db.query(`
-            SELECT t.*, 
-                   COALESCE(ROUND(AVG(r.rating), 1), 0) as avg_rating,
-                   COUNT(r.id) as review_count
+            SELECT t.*,
+                   (SELECT COUNT(*) FROM reviews r WHERE r.teacher_id = t.id AND r.is_approved = 1) as review_count
             FROM teachers t
-            LEFT JOIN reviews r ON t.id = r.teacher_id AND r.is_approved = 1
             WHERE t.name LIKE ? OR t.department LIKE ?
-            GROUP BY t.id
             ORDER BY t.name
         `, [`%${searchTerm}%`, `%${searchTerm}%`]);
         
@@ -208,17 +202,16 @@ app.get('/api/teachers/:id', async (req, res) => {
             [teacherId]
         );
 
-        // Get average rating and total review count
-        const [ratingData] = await db.query(
-            'SELECT AVG(rating) as avg_rating, COUNT(*) as total FROM reviews WHERE teacher_id = ? AND is_approved = 1',
+        // Get total review count
+        const [countData] = await db.query(
+            'SELECT COUNT(*) as total FROM reviews WHERE teacher_id = ? AND is_approved = 1',
             [teacherId]
         );
 
         res.json({
             teacher: teachers[0],
             reviews: reviews,
-            avg_rating: ratingData[0].avg_rating || 0,
-            total_reviews: ratingData[0].total || 0
+            total_reviews: countData[0].total || 0
         });
     } catch (error) {
         console.error('Error fetching teacher details:', error);
@@ -229,7 +222,6 @@ app.get('/api/teachers/:id', async (req, res) => {
 // POST /api/reviews - submit a new review
 app.post('/api/reviews', reviewLimiter, [
     body('teacher_id').isInt({ min: 1 }).withMessage('Invalid teacher ID'),
-    body('rating').isInt({ min: 1, max: 5 }).withMessage('Rating must be between 1 and 5'),
     body('comment').isLength({ min: 3, max: 1000 }).withMessage('Comment must be 3-1000 characters'),
     body('user_name').optional().isLength({ max: 100 }).withMessage('Name too long')
 ], async (req, res) => {
@@ -251,7 +243,7 @@ app.post('/api/reviews', reviewLimiter, [
         const [result] = await db.query(
             `INSERT INTO reviews (teacher_id, rating, comment, user_name, is_approved) 
              VALUES (?, ?, ?, ?, 1)`,
-            [teacher_id, rating, sanitizedComment, sanitizedName]
+            [teacher_id, Number(rating) || 5, sanitizedComment, sanitizedName]
         );
         
         invalidateCache('teachers');
@@ -463,12 +455,10 @@ app.get('/api/admin/stats', verifyAdmin, async (req, res) => {
     try {
         const [teacherCount] = await db.query('SELECT COUNT(*) as count FROM teachers');
         const [reviewCount] = await db.query('SELECT COUNT(*) as count FROM reviews');
-        const [avgRating] = await db.query('SELECT AVG(rating) as avg FROM reviews WHERE is_approved = 1');
         const [recentReviews] = await db.query('SELECT COUNT(*) as count FROM reviews WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)');
         res.json({
             total_teachers: teacherCount[0].count,
             total_reviews: reviewCount[0].count,
-            average_rating: avgRating[0].avg || 0,
             reviews_last_week: recentReviews[0].count
         });
     } catch (error) {

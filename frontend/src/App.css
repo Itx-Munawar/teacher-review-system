@@ -301,18 +301,6 @@ body::after {
     margin-bottom: 0.5rem;
 }
 
-.teacher-card .rating {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.teacher-card .stars {
-    color: var(--c-gold);
-    font-size: 0.875rem;
-    filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.6));
-}
-
 .teacher-card .reviews-count {
     font-size: 0.75rem;
     color: #6b7280;
@@ -380,42 +368,6 @@ body::after {
     margin-bottom: 1rem;
     font-weight: 600;
     text-align: center;
-}
-
-/* Rating Summary */
-.rating-summary {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(243, 232, 255, 0.9));
-    backdrop-filter: blur(8px);
-    padding: 1.5rem;
-    border-radius: var(--radius-md);
-    margin: 1.5rem 0;
-    text-align: center;
-    border: 1px solid rgba(255, 255, 255, 0.7);
-    box-shadow: 0 6px 20px rgba(120, 70, 200, 0.12);
-}
-
-.average-rating {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 1rem;
-    margin-bottom: 0.5rem;
-}
-
-.average-rating .stars {
-    font-size: 1.5rem;
-    color: var(--c-gold);
-    filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.6));
-}
-
-.rating-number {
-    font-size: 1.5rem;
-    font-weight: 800;
-    background: linear-gradient(90deg, #ff5e9c, #a855f7, #00c9ff);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    color: transparent;
 }
 
 .btn-write-review {
@@ -564,11 +516,6 @@ body::after {
 .reviewer-name {
     font-weight: 700;
     color: #1e1b4b;
-}
-
-.review-rating {
-    color: var(--c-gold);
-    filter: drop-shadow(0 0 3px rgba(251, 191, 36, 0.5));
 }
 
 .review-date {
@@ -1023,37 +970,8 @@ body::after {
 }
 
 @keyframes floatY {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
-}
-
-/* Rating badge */
-.rating-badge {
-    display: inline-block;
-    color: white;
-    border-radius: 20px;
-    padding: 3px 10px;
-    font-size: 0.7rem;
-    font-weight: 800;
-    margin-left: 8px;
-    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
-}
-
-.rating-badge.excellent {
-    background: linear-gradient(120deg, #fbbf24, #f59e0b);
-    color: #4a2c00;
-}
-
-.rating-badge.good {
-    background: linear-gradient(120deg, #10b981, #059669);
-}
-
-.rating-badge.average {
-    background: linear-gradient(120deg, #f59e0b, #f97316);
-}
-
-.rating-badge.poor {
-    background: linear-gradient(120deg, #ef4444, #dc2626);
+     0%, 100% { transform: translateY(0); }
+     50% { transform: translateY(-10px); }
 }
 
 /* Skeleton loading styles */
@@ -1274,6 +1192,11 @@ body::after {
         margin-bottom: 0;
     }
 
+    .teacher-list {
+        max-height: none;
+        overflow-y: visible;
+    }
+
     .teacher-card {
         padding: 0.75rem;
         gap: 0.75rem;
@@ -1293,7 +1216,6 @@ body::after {
         font-size: 0.75rem;
     }
 
-    .teacher-card-info .stars,
     .teacher-card-info .reviews-count {
         font-size: 0.75rem;
     }
@@ -1313,18 +1235,6 @@ body::after {
 
     .teacher-department {
         font-size: 1rem;
-    }
-
-    .rating-summary {
-        padding: 1rem;
-    }
-
-    .average-rating .stars {
-        font-size: 1.2rem;
-    }
-
-    .rating-number {
-        font-size: 1.2rem;
     }
 
     .btn-write-review {
@@ -1469,5 +1379,55 @@ body::after {
 
     .header h1 {
         font-size: 1.2rem;
+    }
+}
+
+/* ========== TOUCH / MOBILE PERFORMANCE ========== */
+/* On touch devices disable the heavy visual effects that cause jank:
+   backdrop blurs, full-screen animated gradients, blurred floating blobs
+   and 3D card tilt/entrance animations. */
+@media (hover: none), (pointer: coarse) {
+    /* Disable expensive backdrop blur on every element (re-composited on each scroll frame) */
+    *,
+    *::before,
+    *::after {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+
+    /* Stop full-screen animated gradients (repaint every frame) */
+    body {
+        background-size: 100% 100%;
+        animation: none;
+    }
+
+    .header {
+        background-size: 100% 100%;
+        animation: none;
+    }
+
+    .gradient-text {
+        animation: none;
+    }
+
+    /* Remove blurred floating blobs (re-blurred behind scrolling content) */
+    body::before,
+    body::after {
+        display: none;
+    }
+
+    /* Disable 3D tilt + glare layer on cards */
+    .tilt-card {
+        transform-style: flat;
+        transition: box-shadow 0.3s ease, border-color 0.3s ease;
+    }
+
+    .tilt-card.with-glare::after {
+        display: none;
+    }
+
+    /* Lighter entrance animation (no 3D perspective transform) */
+    .teacher-card-enter {
+        animation: fadeIn 0.3s ease-out both;
     }
 }

@@ -10,8 +10,7 @@ import {
     deleteTeacher,
     deleteReview,
     getAdminReviews,
-    submitReview,
-    getAdminStats
+    submitReview
 } from './services/api';
 import ForgotPassword from './components/ForgotPassword';
 import ResetPassword from './components/ResetPassword';
@@ -24,7 +23,6 @@ interface Teacher {
     id: number;
     name: string;
     department: string;
-    avg_rating: number;
     review_count: number;
     created_at?: string;
     image_url?: string;
@@ -33,7 +31,6 @@ interface Teacher {
 interface Review {
     id: number;
     teacher_id: number;
-    rating: number;
     comment: string;
     user_name: string;
     created_at: string;
@@ -48,7 +45,6 @@ interface TeacherDetail extends Teacher {
 const AdminPanel = memo(({ 
     teachers, 
     reviewsForModeration, 
-    adminStats,
     onAddTeacher, 
     onDeleteTeacher, 
     onUpdateTeacher,
@@ -70,20 +66,7 @@ const AdminPanel = memo(({
     adminSearchResults,
     adminIsSearching
 }: any) => {
-    const renderStars = (rating: number) => {
-        const numRating = Number(rating) || 0;
-        const fullStars = Math.floor(numRating);
-        const emptyStars = 5 - fullStars;
-        return '⭐'.repeat(fullStars) + '☆'.repeat(emptyStars);
-    };
-
     const totalReviews = reviewsForModeration?.length || 0;
-    
-    let avgRating = Number(adminStats.average_rating) || 0;
-    if (avgRating === 0 && totalReviews > 0) {
-        const totalRating = reviewsForModeration.reduce((sum: number, review: any) => sum + (Number(review.rating) || 0), 0);
-        avgRating = totalRating / totalReviews;
-    }
 
     const displayTeachers = adminSearchTerm ? adminSearchResults : teachers;
 
@@ -123,7 +106,6 @@ const handleUpdate = async (id: number) => {
                 <div className="admin-stats">
                     <span>📚 {totalTeachersCount || teachers.length} Teachers</span>
                     <span>💬 {totalReviews} Reviews</span>
-                    <span>⭐ {avgRating.toFixed(1)} Avg</span>
                 </div>
                 <button onClick={onLogout} className="logout-btn">Logout</button>
             </div>
@@ -242,7 +224,6 @@ const handleUpdate = async (id: number) => {
                             <div key={review.id} className="admin-item">
                                 <div className="review-info">
                                     <strong>{review.teacher_name}</strong>
-                                    <span style={{marginLeft: '10px'}}>{renderStars(review.rating)}</span>
                                     <p style={{marginTop: '8px', marginBottom: '5px'}}>"{review.comment}"</p>
                                     <small>👤 {review.user_name || 'Anonymous'} | 📅 {new Date(review.created_at).toLocaleDateString()}</small>
                                 </div>
@@ -315,7 +296,6 @@ const App: React.FC = () => {
     
     const [selectedTeacher, setSelectedTeacher] = useState<TeacherDetail | null>(null);
     const [showReviewForm, setShowReviewForm] = useState(false);
-    const [reviewRating, setReviewRating] = useState(5);
     const [reviewComment, setReviewComment] = useState('');
     const [reviewUserName, setReviewUserName] = useState('');
     const [submitting, setSubmitting] = useState(false);
@@ -331,7 +311,6 @@ const App: React.FC = () => {
     const [newTeacherDepartment, setNewTeacherDepartment] = useState('');
     const [newTeacherImage, setNewTeacherImage] = useState('');
     const [reviewsForModeration, setReviewsForModeration] = useState<any[]>([]);
-    const [adminStats, setAdminStats] = useState<any>({});
 
     const loadMoreRef = useRef<HTMLDivElement>(null);
     const mainContentRef = useRef<HTMLDivElement>(null);
@@ -445,18 +424,9 @@ const logoutTimerRef = useRef<NodeJS.Timeout | null>(null);
                 else if (reviewsRes.data.data) reviewsData = reviewsRes.data.data;
             }
             setReviewsForModeration(reviewsData);
-            
-            const statsRes = await getAdminStats();
-            const stats = statsRes.data || {};
-            setAdminStats({
-                total_teachers: stats.total_teachers || 0,
-                total_reviews: reviewsData.length,
-                average_rating: stats.average_rating || 0
-            });
         } catch (error) {
             console.error('Error loading admin data:', error);
             setReviewsForModeration([]);
-            setAdminStats({ total_teachers: 0, total_reviews: 0, average_rating: 0 });
         }
     }, []);
 
@@ -503,13 +473,11 @@ const logoutTimerRef = useRef<NodeJS.Timeout | null>(null);
                     const data = response.data;
                     const teacherInfo = data.teacher;
                     const reviewsList = data.reviews || [];
-                    const avgRating = Number(data.avg_rating) || 0;
                     const totalReviews = data.total_reviews || 0;
                     const teacherData: TeacherDetail = {
                         id: teacherInfo.id,
                         name: teacherInfo.name,
                         department: teacherInfo.department,
-                        avg_rating: avgRating,
                         review_count: totalReviews,
                         total_reviews: totalReviews,
                         image_url: teacherInfo.image_url || null,
@@ -670,7 +638,6 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                         id: data.id || selectedTeacher.id,
                         name: data.name || data.teacher?.name || selectedTeacher.name,
                         department: data.department || data.teacher?.department || selectedTeacher.department,
-                        avg_rating: data.avg_rating || 0,
                         review_count: data.review_count || data.total_reviews || 0,
                         total_reviews: data.total_reviews || 0,
                         image_url: data.image_url || data.teacher?.image_url || null,
@@ -698,7 +665,6 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
         try {
             await submitReview({
                 teacher_id: selectedTeacher.id,
-                rating: reviewRating,
                 comment: reviewComment.trim(),
                 user_name: reviewUserName.trim() || 'Anonymous'
             });
@@ -714,7 +680,6 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
             }
             setShowReviewForm(false);
             setReviewComment('');
-            setReviewRating(5);
             setReviewUserName('');
             setReviewError('');
             
@@ -724,7 +689,6 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                 id: data.id || selectedTeacher.id,
                 name: data.name || data.teacher?.name || selectedTeacher.name,
                 department: data.department || data.teacher?.department || selectedTeacher.department,
-                avg_rating: data.avg_rating || 0,
                 review_count: data.review_count || data.total_reviews || 0,
                 total_reviews: data.total_reviews || 0,
                 image_url: data.image_url || data.teacher?.image_url || null,
@@ -738,7 +702,7 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
         } finally {
             setSubmitting(false);
         }
-    }, [selectedTeacher, reviewRating, reviewComment, reviewUserName, loadTeachers, loadAdminData]);
+    }, [selectedTeacher, reviewComment, reviewUserName, loadTeachers, loadAdminData]);
 
     const handleTeacherClick = useCallback(async (teacher: Teacher) => {
         try {
@@ -746,14 +710,12 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
             const data = response.data;
             const teacherInfo = data.teacher;
             const reviewsList = data.reviews || [];
-            const avgRating = Number(data.avg_rating) || 0;
             const totalReviews = data.total_reviews || 0;
 
             const teacherData: TeacherDetail = {
                 id: teacherInfo.id,
                 name: teacherInfo.name,
                 department: teacherInfo.department,
-                avg_rating: avgRating,
                 review_count: totalReviews,
                 total_reviews: totalReviews,
                 image_url: teacherInfo.image_url || null,
@@ -762,7 +724,6 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
             setSelectedTeacher(teacherData);
             setShowReviewForm(false);
             setReviewComment('');
-            setReviewRating(5);
             setReviewUserName('');
             setReviewError('');
             
@@ -779,13 +740,6 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
             alert('Failed to load teacher details');
         }
     }, [setSearchParams]);
-
-    const renderStars = (rating: number) => {
-        const numRating = Number(rating) || 0;
-        const fullStars = Math.floor(numRating);
-        const emptyStars = 5 - fullStars;
-        return '⭐'.repeat(fullStars) + '☆'.repeat(emptyStars);
-    };
 
     const clearSelectedTeacher = () => {
         setSelectedTeacher(null);
@@ -836,7 +790,6 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                     <AdminPanel
                         teachers={teachers}
                         reviewsForModeration={reviewsForModeration}
-                        adminStats={adminStats}
                         onAddTeacher={handleAddTeacher}
                         onUpdateTeacher={handleUpdateTeacher} 
                         onDeleteTeacher={handleDeleteTeacher}
@@ -879,7 +832,7 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                     />
                     <h1 style={{ margin: 0 }}>UMT Teacher Reviews</h1>
                 </div>
-                <p>Rate and review your professors anonymously</p>
+                <p>Read and write reviews about your professors anonymously</p>
                 <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', flexWrap: 'wrap' }}>
                     <button onClick={() => {
                         setShowAdminPanel(true);
@@ -938,7 +891,6 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                         ) : (
                             <>
                                 {displayTeachers.map((teacher: Teacher, index: number) => {
-    const avgRatingNum = Number(teacher.avg_rating); // convert to number
     return (
         <div
             key={teacher.id}
@@ -951,25 +903,13 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
             >
                 {teacher.image_url && (
                     <div className="teacher-card-image">
-                        <img src={teacher.image_url} alt={teacher.name} />
+                        <img src={teacher.image_url} alt={teacher.name} loading="lazy" />
                     </div>
                 )}
                 <div className="teacher-card-info">
-                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
-                        <h3>{teacher.name}</h3>
-                        <span className={`rating-badge ${
-                            avgRatingNum >= 4.5 ? 'excellent' :
-                            avgRatingNum >= 4 ? 'good' :
-                            avgRatingNum >= 3 ? 'average' : 'poor'
-                        }`}>
-                            {avgRatingNum.toFixed(1)} ★
-                        </span>
-                    </div>
+                    <h3>{teacher.name}</h3>
                     <p className="department">{teacher.department}</p>
-                    <div className="rating">
-                        <span className="stars">{renderStars(avgRatingNum)}</span>
-                        <span className="reviews-count">({teacher.review_count} reviews)</span>
-                    </div>
+                    <span className="reviews-count">({teacher.review_count} reviews)</span>
                 </div>
             </TiltCard>
         </div>
@@ -999,19 +939,11 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                             </button>
                             
                             {selectedTeacher.image_url && (
-                                <img src={selectedTeacher.image_url} alt={selectedTeacher.name} className="teacher-detail-image" />
+                                <img src={selectedTeacher.image_url} alt={selectedTeacher.name} className="teacher-detail-image" loading="lazy" />
                             )}
                             
                             <h1 className="teacher-name-heading gradient-text">{selectedTeacher.name || 'Teacher'}</h1>
                             <p className="teacher-department">{selectedTeacher.department || ''}</p>
-                            
-                            <div className="rating-summary">
-                                <div className="average-rating">
-                                    <span className="stars">{renderStars(selectedTeacher.avg_rating)}</span>
-                                    <span className="rating-number">{Number(selectedTeacher.avg_rating).toFixed(1)}/5</span>
-                                </div>
-                                <p>Based on {selectedTeacher.total_reviews || selectedTeacher.reviews?.length || 0} reviews</p>
-                            </div>
                             
                             {!showReviewForm ? (
                                 <button onClick={() => { if (selectedTeacher && selectedTeacher.id) setShowReviewForm(true); else setReviewError('Please select a teacher first'); }} className="btn-write-review">
@@ -1022,16 +954,6 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                                     <h3 className="review-form-title">✏️ Write a Review for {selectedTeacher.name}</h3>
                                     {reviewError && <div className="error-message">{reviewError}</div>}
                                     <form onSubmit={handleSubmitReview}>
-                                        <div className="form-group">
-                                            <label>⭐ Rating (1-5)</label>
-                                            <select value={reviewRating} onChange={(e) => setReviewRating(Number(e.target.value))} required>
-                                                <option value="5">5 Stars - Excellent ⭐⭐⭐⭐⭐</option>
-                                                <option value="4">4 Stars - Very Good ⭐⭐⭐⭐</option>
-                                                <option value="3">3 Stars - Average ⭐⭐⭐</option>
-                                                <option value="2">2 Stars - Poor ⭐⭐</option>
-                                                <option value="1">1 Star - Very Poor ⭐</option>
-                                            </select>
-                                        </div>
                                         <div className="form-group">
                                             <label>👤 Your Name (optional)</label>
                                             <input type="text" value={reviewUserName} onChange={(e) => setReviewUserName(e.target.value)} placeholder="Leave blank to post anonymously" />
@@ -1059,7 +981,6 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                                         <div key={review.id} className="review-card">
                                             <div className="review-header">
                                                 <span className="reviewer-name">👤 {review.user_name || 'Anonymous'}</span>
-                                                <span className="review-rating">{renderStars(review.rating)}</span>
                                                 <span className="review-date">📅 {new Date(review.created_at).toLocaleDateString()}</span>
                                             </div>
                                             <p className="review-comment">"{review.comment}"</p>
@@ -1081,7 +1002,7 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                 <div className="modal-overlay" onClick={() => setShowAboutModal(false)}>
                     <div className="modal-content" onClick={(e) => e.stopPropagation()}>
                         <h3 className="gradient-text">📖 About UMT Teacher Reviews</h3>
-                        <p>This platform allows students to rate and review their teachers anonymously.</p>
+                        <p>This platform allows students to write and read reviews about their teachers anonymously.</p>
                         <hr />
                         <p><strong>👨‍💻 Developer:</strong> Munawar Hussain</p>
                         <p><strong>🙏 Supporters & Contributors:</strong></p>

@@ -54,7 +54,6 @@ export const getTeacherDetail = (id: number) => {
 
 export const submitReview = (data: { 
     teacher_id: number; 
-    rating: number; 
     comment: string; 
     user_name?: string;
 }) => {
@@ -64,7 +63,6 @@ export const submitReview = (data: {
     }
     const reviewData = {
         teacher_id: teacherId,
-        rating: Number(data.rating),
         comment: data.comment,
         user_name: data.user_name || 'Anonymous'
     };
