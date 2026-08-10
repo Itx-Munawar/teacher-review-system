@@ -15,6 +15,8 @@ import {
 } from './services/api';
 import ForgotPassword from './components/ForgotPassword';
 import ResetPassword from './components/ResetPassword';
+import ParticleBackground from './components/ParticleBackground';
+import TiltCard from './components/TiltCard';
 import './App.css';
 
 // ========== INTERFACES ==========
@@ -117,7 +119,7 @@ const handleUpdate = async (id: number) => {
     return (
         <div className="admin-panel">
             <div className="admin-header">
-                <h2>Admin Dashboard</h2>
+                <h2 className="gradient-text">Admin Dashboard</h2>
                 <div className="admin-stats">
                     <span>📚 {totalTeachersCount || teachers.length} Teachers</span>
                     <span>💬 {totalReviews} Reviews</span>
@@ -265,7 +267,7 @@ const LoginForm = memo(({
 }: any) => (
     <div className="login-form-container">
         <div className="login-form">
-            <h2>Admin Login</h2>
+            <h2 className="gradient-text">Admin Login</h2>
             <form onSubmit={onLogin}>
                 <input
                     type="text"
@@ -805,6 +807,7 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
         if (!isAdminLoggedIn) {
             return (
                 <div className="app">
+                    <ParticleBackground />
                     <header className="header">
                         <h1>📚 Teacher Review System - Admin</h1>
                         <button onClick={() => setShowAdminPanel(false)} className="back-to-site-btn">← Back to Site</button>
@@ -824,6 +827,7 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
         }
         return (
             <div className="app">
+                <ParticleBackground />
                 <header className="header">
                     <h1>📚 Teacher Review System - Admin Panel</h1>
                     <button onClick={() => setShowAdminPanel(false)} className="back-to-site-btn">← Back to Site</button>
@@ -865,6 +869,7 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
 
     return (
         <div className="app">
+            <ParticleBackground />
             <header className="header">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', flexWrap: 'wrap' }}>
                     <img
@@ -932,11 +937,15 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                             <div className="no-results">No teachers found</div>
                         ) : (
                             <>
-                                {displayTeachers.map((teacher: Teacher) => {
+                                {displayTeachers.map((teacher: Teacher, index: number) => {
     const avgRatingNum = Number(teacher.avg_rating); // convert to number
     return (
-            <div
-                key={teacher.id}
+        <div
+            key={teacher.id}
+            className="teacher-card-enter"
+            style={{ animationDelay: `${Math.min(index * 0.06, 0.6)}s` }}
+        >
+            <TiltCard
                 className="teacher-card"
                 onClick={() => handleTeacherClick(teacher)}
             >
@@ -962,7 +971,8 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                         <span className="reviews-count">({teacher.review_count} reviews)</span>
                     </div>
                 </div>
-            </div>
+            </TiltCard>
+        </div>
     );
 })}
                                 {loadingMore && <div className="loading-more">Loading more teachers...</div>}
@@ -992,7 +1002,7 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                                 <img src={selectedTeacher.image_url} alt={selectedTeacher.name} className="teacher-detail-image" />
                             )}
                             
-                            <h1 className="teacher-name-heading">{selectedTeacher.name || 'Teacher'}</h1>
+                            <h1 className="teacher-name-heading gradient-text">{selectedTeacher.name || 'Teacher'}</h1>
                             <p className="teacher-department">{selectedTeacher.department || ''}</p>
                             
                             <div className="rating-summary">
@@ -1060,7 +1070,7 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                         </div>
                     ) : (
                         <div className="welcome-message">
-                            <h2>Welcome to Teacher Reviews</h2>
+                            <h2 className="gradient-text">Welcome to Teacher Reviews</h2>
                             <p>👈 Select a teacher from the left to read reviews or submit your own.</p>
                         </div>
                     )}
@@ -1070,7 +1080,7 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
             {showAboutModal && (
                 <div className="modal-overlay" onClick={() => setShowAboutModal(false)}>
                     <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                        <h3>📖 About UMT Teacher Reviews</h3>
+                        <h3 className="gradient-text">📖 About UMT Teacher Reviews</h3>
                         <p>This platform allows students to rate and review their teachers anonymously.</p>
                         <hr />
                         <p><strong>👨‍💻 Developer:</strong> Munawar Hussain</p>
@@ -1093,7 +1103,7 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
             {showContactModal && (
                 <div className="modal-overlay" onClick={() => setShowContactModal(false)}>
                     <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                        <h3>📧 Contact Us</h3>
+                        <h3 className="gradient-text">📧 Contact Us</h3>
                         <p>If you have any questions, need help, or want to give feedback, please send an email to:</p>
                         <p><strong>umt.teacher.reviews@gmail.com</strong></p>
                         <button onClick={() => setShowContactModal(false)} className="modal-close-btn">Close</button>
