@@ -1,33 +1,21 @@
 import axios from 'axios';
 
-const API_BASE = 'https://teacher-review-system.onrender.com/api';
+const API_BASE = process.env.REACT_APP_API_BASE || 'https://teacher-review-system.onrender.com/api';
 
 const api = axios.create({
     baseURL: API_BASE,
     headers: { 'Content-Type': 'application/json' },
     timeout: 60000, // 60 seconds for cold start
+    withCredentials: true, // send the HttpOnly admin cookie on cross-origin requests
 });
 
 // ========== INTERCEPTORS ==========
-
-// Request interceptor – add admin token to headers
-api.interceptors.request.use(
-    (config) => {
-        const token = localStorage.getItem('admin_token');
-        if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-    },
-    (error) => Promise.reject(error)
-);
 
 // Response interceptor – handle 401/403 (session expired)
 api.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response?.status === 401 || error.response?.status === 403) {
-            localStorage.removeItem('admin_token');
             // Dispatch a custom event that App can listen to
             window.dispatchEvent(new CustomEvent('admin-session-expired'));
         }
@@ -73,6 +61,14 @@ export const submitReview = (data: {
 
 export const adminLogin = (username: string, password: string) => {
     return api.post('/admin/login', { username, password });
+};
+
+export const adminMe = () => {
+    return api.get('/admin/me');
+};
+
+export const adminLogout = () => {
+    return api.post('/admin/logout');
 };
 
 export const addTeacher = (data: { name: string; department: string; image_url?: string }) => {

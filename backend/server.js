@@ -16,10 +16,55 @@ const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET;
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS) || 10;
 
+// ========== ENV VALIDATION ==========
+const missingVars = [];
+if (!JWT_SECRET) missingVars.push('JWT_SECRET');
+if (!process.env.DB_HOST || !process.env.DB_USER || !process.env.DB_PASSWORD || !process.env.DB_NAME) missingVars.push('DB_*');
+if (missingVars.length > 0) {
+    console.error(`❌ Missing required environment variables: ${missingVars.join(', ')}`);
+    console.error('Server will not start. Fix the environment configuration and retry.');
+    process.exit(1);
+}
+if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.warn('⚠️ EMAIL_USER/EMAIL_PASS not set. Password reset emails will fail.');
+}
+
+// ========== COOKIE HELPERS (no extra dependency) ==========
+const parseCookies = (req) => {
+    const cookies = {};
+    const header = req.headers.cookie;
+    if (!header) return cookies;
+    header.split(';').forEach((part) => {
+        const idx = part.indexOf('=');
+        if (idx === -1) return;
+        cookies[part.slice(0, idx).trim()] = decodeURIComponent(part.slice(idx + 1).trim());
+    });
+    return cookies;
+};
+
+const isProduction = process.env.NODE_ENV === 'production';
+const cookieOptions = {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
+    maxAge: 24 * 60 * 60 * 1000,
+    path: '/'
+};
+
 // Security Middleware
+app.set('trust proxy', 1);
 app.use(helmet());
+const allowedOrigins = [
+    'https://teacher-review-system-zeta.vercel.app',
+    'http://localhost:3000'
+];
 app.use(cors({
-    origin: ['https://teacher-review-system-zeta.vercel.app', 'http://localhost:3000'],
+    origin: (origin, cb) => {
+        // Allow non-browser requests (curl, health checks) and known/monkeycode preview origins
+        if (!origin) return cb(null, true);
+        const allowed = allowedOrigins.includes(origin) || /^https:\/\/[\w-]+\.monkeycode-ai\.live$/.test(origin);
+        cb(null, allowed);
+    },
     credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
@@ -35,6 +80,12 @@ const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 10,
     message: { error: 'Too many login attempts. Please try again later.' }
+});
+
+const searchLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 30,
+    message: { error: 'Too many search requests. Please try again later.' }
 });
 
 const resetLimiter = rateLimit({
@@ -70,7 +121,9 @@ const sendEmail = async (to, subject, html) => {
 
 // ========== HELPER FUNCTIONS ==========
 const verifyAdmin = (req, res, next) => {
-    const token = req.headers.authorization?.split(' ')[1];
+    const cookies = parseCookies(req);
+    const headerToken = req.headers.authorization?.split(' ')[1];
+    const token = headerToken || cookies.admin_token;
     if (!token) return res.status(401).json({ error: 'No token provided' });
     try {
         const decoded = jwt.verify(token, JWT_SECRET);
@@ -158,7 +211,7 @@ app.get('/api/teachers', async (req, res) => {
 });
 
 // GET /api/teachers/search - search all teachers (no pagination)
-app.get('/api/teachers/search', async (req, res) => {
+app.get('/api/teachers/search', searchLimiter, async (req, res) => {
     try {
         const searchTerm = req.query.q;
         if (!searchTerm || searchTerm.trim() === '') {
@@ -281,11 +334,23 @@ app.post('/api/admin/login', loginLimiter, async (req, res) => {
         await db.query('UPDATE admins SET failed_attempts = 0, locked_until = NULL WHERE id = ?', [admin.id]);
         const token = jwt.sign({ id: admin.id, username: admin.username }, JWT_SECRET, { expiresIn: '24h' });
         await createAuditLog(admin.id, 'LOGIN', 'Admin logged in', req.ip);
-        res.json({ success: true, token, admin: { id: admin.id, username: admin.username } });
+        res.cookie('admin_token', token, cookieOptions);
+        res.json({ success: true, admin: { id: admin.id, username: admin.username } });
     } catch (error) {
         console.error('Login error:', error);
         res.status(500).json({ error: 'Login error' });
     }
+});
+
+// GET /api/admin/me - validate the current admin session
+app.get('/api/admin/me', verifyAdmin, (req, res) => {
+    res.json({ admin: { id: req.admin.id, username: req.admin.username } });
+});
+
+// POST /api/admin/logout - clear the admin session cookie
+app.post('/api/admin/logout', (req, res) => {
+    res.clearCookie('admin_token', { ...cookieOptions, maxAge: undefined });
+    res.json({ success: true, message: 'Logged out successfully' });
 });
 
 app.post('/api/admin/forgot-password', resetLimiter, async (req, res) => {
@@ -325,13 +390,19 @@ app.post('/api/admin/reset-password', async (req, res) => {
 });
 
 app.post('/api/admin/setup', async (req, res) => {
-    // ... (your existing setup code) ...
+    // Only usable when ADMIN_SETUP_SECRET is configured and provided via x-setup-secret header
+    const setupSecret = process.env.ADMIN_SETUP_SECRET;
+    if (!setupSecret || req.headers['x-setup-secret'] !== setupSecret) {
+        return res.status(403).json({ error: 'Setup is disabled. Configure ADMIN_SETUP_SECRET to enable it.' });
+    }
     try {
         const { username, password, email } = req.body;
         if (!username || !password || !email) return res.status(400).json({ error: 'Username, password, and email required' });
         const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
-        await db.query('DELETE FROM admins WHERE username = ?', [username]);
-        await db.query('INSERT INTO admins (username, password, email) VALUES (?, ?, ?)', [username, hashedPassword, email]);
+        await db.query(
+            'INSERT INTO admins (username, password, email) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE password = ?, email = ?',
+            [username, hashedPassword, email, hashedPassword, email]
+        );
         res.json({ success: true, message: 'Admin created. Use new credentials to login.' });
     } catch (error) {
         console.error('Setup error:', error);

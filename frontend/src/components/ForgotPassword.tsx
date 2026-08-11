@@ -28,7 +28,7 @@ const ForgotPassword: React.FC = () => {
                     {error && <div className="error-message">{error}</div>}
                     <button type="submit">Send Reset Link</button>
                 </form>
-                <p><a href="/admin">Back to Login</a></p>
+                <p><a href="/">Back to Home</a></p>
             </div>
         </div>
     );

@@ -5,6 +5,8 @@ import {
     searchAllTeachers,
     getTeacherDetail,
     adminLogin,
+    adminMe,
+    adminLogout,
     addTeacher,
     updateTeacher,
     deleteTeacher,
@@ -12,8 +14,7 @@ import {
     getAdminReviews,
     submitReview
 } from './services/api';
-import ForgotPassword from './components/ForgotPassword';
-import ResetPassword from './components/ResetPassword';
+import { debounce } from './utils/debounce';
 import ParticleBackground from './components/ParticleBackground';
 import TiltCard from './components/TiltCard';
 import './App.css';
@@ -41,14 +42,65 @@ interface TeacherDetail extends Teacher {
     total_reviews: number;
 }
 
+interface AdminReview {
+    id: number;
+    teacher_id: number;
+    teacher_name: string;
+    comment: string;
+    user_name: string;
+    created_at: string;
+}
+
+interface Toast {
+    id: number;
+    message: string;
+    type: 'success' | 'error' | 'info';
+}
+
+// ========== TOASTS ==========
+const ToastHost = memo(({ toasts }: { toasts: Toast[] }) => (
+    <div className="toast-container" aria-live="polite">
+        {toasts.map((t) => (
+            <div key={t.id} className={`toast toast-${t.type}`} role="status">
+                {t.message}
+            </div>
+        ))}
+    </div>
+));
+
 // ========== ADMIN PANEL ==========
-const AdminPanel = memo(({ 
-    teachers, 
-    reviewsForModeration, 
-    onAddTeacher, 
-    onDeleteTeacher, 
+interface AdminPanelProps {
+    teachers: Teacher[];
+    reviewsForModeration: AdminReview[];
+    onAddTeacher: (e: React.FormEvent) => void;
+    onDeleteTeacher: (id: number) => void;
+    onUpdateTeacher: (id: number, data: { name: string; department: string; image_url?: string }) => void;
+    onDeleteReview: (id: number) => void;
+    onLogout: () => void;
+    showAddTeacherForm: boolean;
+    setShowAddTeacherForm: (v: boolean) => void;
+    newTeacherName: string;
+    setNewTeacherName: (v: string) => void;
+    newTeacherDepartment: string;
+    setNewTeacherDepartment: (v: string) => void;
+    newTeacherImage: string;
+    setNewTeacherImage: (v: string) => void;
+    totalTeachersCount: number;
+    loadingMore: boolean;
+    onLoadMore: () => void;
+    adminSearchTerm: string;
+    onAdminSearchChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    adminSearchResults: Teacher[];
+    adminIsSearching: boolean;
+}
+
+const AdminPanel = memo(({
+    teachers,
+    reviewsForModeration,
+    onAddTeacher,
+    onDeleteTeacher,
     onUpdateTeacher,
-    onDeleteReview, 
+    onDeleteReview,
     onLogout,
     showAddTeacherForm,
     setShowAddTeacherForm,
@@ -65,39 +117,39 @@ const AdminPanel = memo(({
     onAdminSearchChange,
     adminSearchResults,
     adminIsSearching
-}: any) => {
+}: AdminPanelProps) => {
     const totalReviews = reviewsForModeration?.length || 0;
 
     const displayTeachers = adminSearchTerm ? adminSearchResults : teachers;
 
-        // Edit state
+    // Edit state
     const [editingTeacherId, setEditingTeacherId] = useState<number | null>(null);
     const [editName, setEditName] = useState('');
     const [editDepartment, setEditDepartment] = useState('');
     const [editImageUrl, setEditImageUrl] = useState('');
     // Edit handlers
-const startEdit = (teacher: Teacher) => {
-    setEditingTeacherId(teacher.id);
-    setEditName(teacher.name);
-    setEditDepartment(teacher.department);
-    setEditImageUrl(teacher.image_url || '');
-};
+    const startEdit = (teacher: Teacher) => {
+        setEditingTeacherId(teacher.id);
+        setEditName(teacher.name);
+        setEditDepartment(teacher.department);
+        setEditImageUrl(teacher.image_url || '');
+    };
 
-const cancelEdit = () => {
-    setEditingTeacherId(null);
-    setEditName('');
-    setEditDepartment('');
-    setEditImageUrl('');
-};
+    const cancelEdit = () => {
+        setEditingTeacherId(null);
+        setEditName('');
+        setEditDepartment('');
+        setEditImageUrl('');
+    };
 
-const handleUpdate = async (id: number) => {
-    await onUpdateTeacher(id, {
-        name: editName,
-        department: editDepartment,
-        image_url: editImageUrl || undefined
-    });
-    cancelEdit();
-};
+    const handleUpdate = async (id: number) => {
+        await onUpdateTeacher(id, {
+            name: editName,
+            department: editDepartment,
+            image_url: editImageUrl || undefined
+        });
+        cancelEdit();
+    };
 
     return (
         <div className="admin-panel">
@@ -109,27 +161,28 @@ const handleUpdate = async (id: number) => {
                 </div>
                 <button onClick={onLogout} className="logout-btn">Logout</button>
             </div>
-            
+
             <div className="admin-section">
                 <button onClick={() => setShowAddTeacherForm(!showAddTeacherForm)} className="add-teacher-btn">
                     {showAddTeacherForm ? 'Cancel' : '+ Add New Teacher'}
                 </button>
                 {showAddTeacherForm && (
                     <form onSubmit={onAddTeacher} className="add-teacher-form">
-                        <input type="text" placeholder="Teacher Name" value={newTeacherName} onChange={(e) => setNewTeacherName(e.target.value)} required />
-                        <input type="text" placeholder="Department" value={newTeacherDepartment} onChange={(e) => setNewTeacherDepartment(e.target.value)} required />
-                        <input type="url" placeholder="Image URL (optional)" value={newTeacherImage} onChange={(e) => setNewTeacherImage(e.target.value)} />
+                        <input type="text" placeholder="Teacher Name" aria-label="New teacher name" value={newTeacherName} onChange={(e) => setNewTeacherName(e.target.value)} required />
+                        <input type="text" placeholder="Department" aria-label="New teacher department" value={newTeacherDepartment} onChange={(e) => setNewTeacherDepartment(e.target.value)} required />
+                        <input type="url" placeholder="Image URL (optional)" aria-label="New teacher image URL" value={newTeacherImage} onChange={(e) => setNewTeacherImage(e.target.value)} />
                         <button type="submit">Save Teacher</button>
                     </form>
                 )}
             </div>
-            
+
             <div className="admin-section">
                 <h3>Manage Teachers</h3>
                 <div className="search-box" style={{ marginBottom: '1rem' }}>
                     <input
                         type="text"
                         placeholder="🔍 Search teachers by name or department..."
+                        aria-label="Search teachers by name or department"
                         value={adminSearchTerm}
                         onChange={onAdminSearchChange}
                         className="search-input"
@@ -141,63 +194,66 @@ const handleUpdate = async (id: number) => {
                     )}
                 </div>
 
-               <div className="admin-list">
-    {adminIsSearching ? (
-        <div className="loading">Searching...</div>
-    ) : displayTeachers.length === 0 ? (
-        <p style={{textAlign: 'center', padding: '20px', color: '#999'}}>
-            {adminSearchTerm ? 'No teachers found' : 'No teachers added yet'}
-        </p>
-    ) : (
-        displayTeachers.map((teacher: Teacher) => {
-            const isEditing = editingTeacherId === teacher.id;
-            return (
-                <div key={teacher.id} className="admin-item">
-                    {isEditing ? (
-                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <input
-                                type="text"
-                                value={editName}
-                                onChange={(e) => setEditName(e.target.value)}
-                                placeholder="Name"
-                                className="search-input"
-                                style={{ margin: 0 }}
-                            />
-                            <input
-                                type="text"
-                                value={editDepartment}
-                                onChange={(e) => setEditDepartment(e.target.value)}
-                                placeholder="Department"
-                                className="search-input"
-                                style={{ margin: 0 }}
-                            />
-                            <input
-                                type="url"
-                                value={editImageUrl}
-                                onChange={(e) => setEditImageUrl(e.target.value)}
-                                placeholder="Image URL (optional)"
-                                className="search-input"
-                                style={{ margin: 0 }}
-                            />
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                                <button onClick={() => handleUpdate(teacher.id)} className="btn-submit" style={{ padding: '4px 12px' }}>Save</button>
-                                <button onClick={cancelEdit} className="btn-cancel" style={{ padding: '4px 12px' }}>Cancel</button>
-                            </div>
-                        </div>
+                <div className="admin-list">
+                    {adminIsSearching ? (
+                        <div className="loading">Searching...</div>
+                    ) : displayTeachers.length === 0 ? (
+                        <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
+                            {adminSearchTerm ? 'No teachers found' : 'No teachers added yet'}
+                        </p>
                     ) : (
-                        <>
-                            <span><strong>{teacher.name}</strong> - {teacher.department}</span>
-                            <div>
-                                <button onClick={() => startEdit(teacher)} className="edit-btn" style={{ marginRight: '8px' }}>✏️</button>
-                                <button onClick={() => onDeleteTeacher(teacher.id)} className="delete-btn">Delete</button>
-                            </div>
-                        </>
+                        displayTeachers.map((teacher: Teacher) => {
+                            const isEditing = editingTeacherId === teacher.id;
+                            return (
+                                <div key={teacher.id} className="admin-item">
+                                    {isEditing ? (
+                                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            <input
+                                                type="text"
+                                                value={editName}
+                                                onChange={(e) => setEditName(e.target.value)}
+                                                placeholder="Name"
+                                                aria-label="Edit teacher name"
+                                                className="search-input"
+                                                style={{ margin: 0 }}
+                                            />
+                                            <input
+                                                type="text"
+                                                value={editDepartment}
+                                                onChange={(e) => setEditDepartment(e.target.value)}
+                                                placeholder="Department"
+                                                aria-label="Edit teacher department"
+                                                className="search-input"
+                                                style={{ margin: 0 }}
+                                            />
+                                            <input
+                                                type="url"
+                                                value={editImageUrl}
+                                                onChange={(e) => setEditImageUrl(e.target.value)}
+                                                placeholder="Image URL (optional)"
+                                                aria-label="Edit teacher image URL"
+                                                className="search-input"
+                                                style={{ margin: 0 }}
+                                            />
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <button onClick={() => handleUpdate(teacher.id)} className="btn-submit" style={{ padding: '4px 12px' }}>Save</button>
+                                                <button onClick={cancelEdit} className="btn-cancel" style={{ padding: '4px 12px' }}>Cancel</button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <span><strong>{teacher.name}</strong> - {teacher.department}</span>
+                                            <div>
+                                                <button onClick={() => startEdit(teacher)} className="edit-btn" style={{ marginRight: '8px' }} aria-label={`Edit ${teacher.name}`}>✏️</button>
+                                                <button onClick={() => onDeleteTeacher(teacher.id)} className="delete-btn">Delete</button>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            );
+                        })
                     )}
                 </div>
-            );
-        })
-    )}
-</div>
 
                 {!adminSearchTerm && (
                     <>
@@ -213,18 +269,18 @@ const handleUpdate = async (id: number) => {
                     </>
                 )}
             </div>
-            
+
             <div className="admin-section">
                 <h3>Manage Reviews ({totalReviews})</h3>
                 <div className="admin-list">
                     {totalReviews === 0 ? (
-                        <p style={{textAlign: 'center', padding: '20px', color: '#999'}}>📭 No reviews yet.</p>
+                        <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>📭 No reviews yet.</p>
                     ) : (
-                        reviewsForModeration.map((review: any) => (
+                        reviewsForModeration.map((review: AdminReview) => (
                             <div key={review.id} className="admin-item">
                                 <div className="review-info">
                                     <strong>{review.teacher_name}</strong>
-                                    <p style={{marginTop: '8px', marginBottom: '5px'}}>"{review.comment}"</p>
+                                    <p style={{ marginTop: '8px', marginBottom: '5px' }}>"{review.comment}"</p>
                                     <small>👤 {review.user_name || 'Anonymous'} | 📅 {new Date(review.created_at).toLocaleDateString()}</small>
                                 </div>
                                 <button onClick={() => onDeleteReview(review.id)} className="delete-btn">Delete</button>
@@ -238,14 +294,23 @@ const handleUpdate = async (id: number) => {
 });
 
 // ========== LOGIN FORM ==========
-const LoginForm = memo(({ 
-    adminUsername, 
-    setAdminUsername, 
-    adminPassword, 
-    setAdminPassword, 
-    adminError, 
-    onLogin 
-}: any) => (
+interface LoginFormProps {
+    adminUsername: string;
+    setAdminUsername: (v: string) => void;
+    adminPassword: string;
+    setAdminPassword: (v: string) => void;
+    adminError: string;
+    onLogin: (e: React.FormEvent) => void;
+}
+
+const LoginForm = memo(({
+    adminUsername,
+    setAdminUsername,
+    adminPassword,
+    setAdminPassword,
+    adminError,
+    onLogin
+}: LoginFormProps) => (
     <div className="login-form-container">
         <div className="login-form">
             <h2 className="gradient-text">Admin Login</h2>
@@ -253,6 +318,7 @@ const LoginForm = memo(({
                 <input
                     type="text"
                     placeholder="Username"
+                    aria-label="Username"
                     value={adminUsername}
                     onChange={(e) => setAdminUsername(e.target.value)}
                     required
@@ -261,6 +327,7 @@ const LoginForm = memo(({
                 <input
                     type="password"
                     placeholder="Password"
+                    aria-label="Password"
                     value={adminPassword}
                     onChange={(e) => setAdminPassword(e.target.value)}
                     required
@@ -268,11 +335,8 @@ const LoginForm = memo(({
                 {adminError && <div className="error-message">{adminError}</div>}
                 <button type="submit">Login</button>
             </form>
-            <p style={{textAlign: 'center', marginTop: '15px', fontSize: '12px', color: '#999'}}>
-                Default: admin / Admin@123
-            </p>
-            <p style={{textAlign: 'center', marginTop: '15px'}}>
-                <a href="/forgot-password" style={{color: '#667eea'}}>Forgot Password?</a>
+            <p style={{ textAlign: 'center', marginTop: '15px' }}>
+                <a href="/forgot-password" style={{ color: '#667eea' }}>Forgot Password?</a>
             </p>
         </div>
     </div>
@@ -281,7 +345,7 @@ const LoginForm = memo(({
 // ========== MAIN APP ==========
 const App: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
-    
+
     // State
     const [teachers, setTeachers] = useState<Teacher[]>([]);
     const [loading, setLoading] = useState(true);
@@ -293,14 +357,15 @@ const App: React.FC = () => {
     const [searchResults, setSearchResults] = useState<Teacher[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [error, setError] = useState<string | null>(null);
-    
+
     const [selectedTeacher, setSelectedTeacher] = useState<TeacherDetail | null>(null);
     const [showReviewForm, setShowReviewForm] = useState(false);
     const [reviewComment, setReviewComment] = useState('');
     const [reviewUserName, setReviewUserName] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [reviewError, setReviewError] = useState('');
-    
+    const [reviewSuccess, setReviewSuccess] = useState('');
+
     const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
     const [showAdminPanel, setShowAdminPanel] = useState(false);
     const [adminUsername, setAdminUsername] = useState('');
@@ -310,20 +375,30 @@ const App: React.FC = () => {
     const [newTeacherName, setNewTeacherName] = useState('');
     const [newTeacherDepartment, setNewTeacherDepartment] = useState('');
     const [newTeacherImage, setNewTeacherImage] = useState('');
-    const [reviewsForModeration, setReviewsForModeration] = useState<any[]>([]);
+    const [reviewsForModeration, setReviewsForModeration] = useState<AdminReview[]>([]);
+
+    const [toasts, setToasts] = useState<Toast[]>([]);
+    const toastIdRef = useRef(0);
 
     const loadMoreRef = useRef<HTMLDivElement>(null);
     const mainContentRef = useRef<HTMLDivElement>(null);
-const logoutTimerRef = useRef<NodeJS.Timeout | null>(null);
-    
+    const logoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     const [showAboutModal, setShowAboutModal] = useState(false);
     const [showContactModal, setShowContactModal] = useState(false);
-    
+
     const [adminSearchTerm, setAdminSearchTerm] = useState('');
     const [adminSearchResults, setAdminSearchResults] = useState<Teacher[]>([]);
     const [adminIsSearching, setAdminIsSearching] = useState(false);
 
-    
+    // ========== TOASTS ==========
+    const showToast = useCallback((message: string, type: Toast['type'] = 'info') => {
+        const id = ++toastIdRef.current;
+        setToasts(prev => [...prev, { id, message, type }]);
+        setTimeout(() => {
+            setToasts(prev => prev.filter(t => t.id !== id));
+        }, 4000);
+    }, []);
 
     // ========== TEACHER LOADING (PAGINATED) ==========
     const loadTeachers = useCallback(async (page: number = 1, retryCount: number = 0) => {
@@ -360,42 +435,51 @@ const logoutTimerRef = useRef<NodeJS.Timeout | null>(null);
         }
     }, []);
 
-    // ========== SEARCH (ALL TEACHERS) ==========
-    const handleSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    // ========== SEARCH (ALL TEACHERS, DEBOUNCED) ==========
+    const performSearch = useCallback(async (value: string) => {
+        setIsSearching(true);
+        setLoading(true);
+        try {
+            const res = await searchAllTeachers(value);
+            setSearchResults(res.data || []);
+        } catch (searchErr) {
+            console.error('Search error:', searchErr);
+            setSearchResults([]);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    const debouncedSearch = useRef(debounce((value: string) => { performSearch(value); }, 350));
+
+    const handleSearch = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
         setSearchTerm(value);
 
         if (value) {
             setSearchParams({ search: value });
         } else {
-            searchParams.delete('search');
-            setSearchParams(searchParams);
+            setSearchParams((prev) => {
+                const next = new URLSearchParams(prev);
+                next.delete('search');
+                return next;
+            });
         }
 
         if (value.trim()) {
-            setIsSearching(true);
-            setLoading(true);
-            try {
-                const res = await searchAllTeachers(value);
-                setSearchResults(res.data || []);
-            } catch (error) {
-                console.error('Search error:', error);
-                setSearchResults([]);
-            } finally {
-                setLoading(false);
-            }
+            debouncedSearch.current(value.trim());
         } else {
             setIsSearching(false);
             setSearchResults([]);
             setCurrentPage(1);
             loadTeachers(1);
         }
-    };
+    }, [setSearchParams, loadTeachers]);
 
-    const handleAdminSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleAdminSearch = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
         setAdminSearchTerm(value);
-        
+
         if (value.trim()) {
             setAdminIsSearching(true);
             try {
@@ -411,13 +495,13 @@ const logoutTimerRef = useRef<NodeJS.Timeout | null>(null);
             setAdminIsSearching(false);
             setAdminSearchResults([]);
         }
-    };
+    }, []);
 
     // ========== ADMIN DATA ==========
     const loadAdminData = useCallback(async () => {
         try {
             const reviewsRes = await getAdminReviews();
-            let reviewsData = [];
+            let reviewsData: AdminReview[] = [];
             if (reviewsRes.data) {
                 if (Array.isArray(reviewsRes.data)) reviewsData = reviewsRes.data;
                 else if (reviewsRes.data.reviews) reviewsData = reviewsRes.data.reviews;
@@ -450,22 +534,16 @@ const logoutTimerRef = useRef<NodeJS.Timeout | null>(null);
         }
     }, [isAdminLoggedIn, loadAdminData, loadTeachers]);
 
-
-    
     // Restore state from URL on mount
     useEffect(() => {
         const teacherId = searchParams.get('teacher');
         const searchQuery = searchParams.get('search');
-        
+
         if (searchQuery) {
             setSearchTerm(searchQuery);
-            (async () => {
-                const res = await searchAllTeachers(searchQuery);
-                setSearchResults(res.data || []);
-                setIsSearching(true);
-            })();
+            performSearch(searchQuery);
         }
-        
+
         if (teacherId) {
             (async () => {
                 try {
@@ -484,118 +562,122 @@ const logoutTimerRef = useRef<NodeJS.Timeout | null>(null);
                         reviews: reviewsList,
                     };
                     setSelectedTeacher(teacherData);
-                } catch (error) {
-                    console.error('Failed to restore teacher:', error);
+                } catch (err) {
+                    console.error('Failed to restore teacher:', err);
                 }
             })();
         }
-    }, []); // run once
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
-    
-
-    const checkAdminLogin = () => {
-        const token = localStorage.getItem('admin_token');
-        setIsAdminLoggedIn(!!token);
-    };
+    const checkAdminLogin = useCallback(async () => {
+        try {
+            await adminMe();
+            setIsAdminLoggedIn(true);
+        } catch {
+            setIsAdminLoggedIn(false);
+        }
+    }, []);
 
     const handleAdminLogin = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
         setAdminError('');
         try {
-            const response = await adminLogin(adminUsername, adminPassword);
-            localStorage.setItem('admin_token', response.data.token);
+            await adminLogin(adminUsername, adminPassword);
             setIsAdminLoggedIn(true);
             setAdminUsername('');
             setAdminPassword('');
-            alert('✅ Admin login successful!');
+            showToast('Admin login successful!', 'success');
             await loadAdminData();
             await loadTeachers(1);
         } catch (error: any) {
             setAdminError(error.response?.data?.error || 'Login failed');
         }
-    }, [adminUsername, adminPassword, loadAdminData, loadTeachers]);
+    }, [adminUsername, adminPassword, loadAdminData, loadTeachers, showToast]);
 
-   const handleAdminLogout = useCallback(() => {
-    localStorage.removeItem('admin_token');
-    setIsAdminLoggedIn(false);
-    setShowAdminPanel(false);
-    setShowAddTeacherForm(false);
-    if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
-    alert('Logged out successfully');
-}, []);
+    const handleAdminLogout = useCallback(async () => {
+        try {
+            await adminLogout();
+        } catch (error) {
+            console.error('Logout error:', error);
+        }
+        setIsAdminLoggedIn(false);
+        setShowAdminPanel(false);
+        setShowAddTeacherForm(false);
+        if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
+        showToast('Logged out successfully', 'info');
+    }, [showToast]);
 
+    // ---------- Auto-logout timer (admin only) ----------
+    const startLogoutTimer = useCallback(() => {
+        if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
+        logoutTimerRef.current = setTimeout(() => {
+            if (isAdminLoggedIn && showAdminPanel) {
+                console.log('Auto-logging out due to inactivity');
+                handleAdminLogout();
+                setShowAdminPanel(false);
+                showToast('You have been logged out due to inactivity.', 'info');
+            }
+        }, 30 * 60 * 1000);
+    }, [isAdminLoggedIn, showAdminPanel, handleAdminLogout, showToast]);
 
-
-// ---------- Auto‑logout timer (admin only) ----------
-const startLogoutTimer = useCallback(() => {
-    if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
-    logoutTimerRef.current = setTimeout(() => {
+    const resetLogoutTimer = useCallback(() => {
         if (isAdminLoggedIn && showAdminPanel) {
-            console.log('Auto-logging out due to inactivity');
-            handleAdminLogout();
-            setShowAdminPanel(false);
-            alert('You have been logged out due to inactivity.');
+            startLogoutTimer();
         }
-    }, 30 * 60 * 1000);
-}, [isAdminLoggedIn, showAdminPanel, handleAdminLogout]);
+    }, [isAdminLoggedIn, showAdminPanel, startLogoutTimer]);
 
-const resetLogoutTimer = useCallback(() => {
-    if (isAdminLoggedIn && showAdminPanel) {
-        startLogoutTimer();
-    }
-}, [isAdminLoggedIn, showAdminPanel, startLogoutTimer]);
+    useEffect(() => {
+        if (isAdminLoggedIn && showAdminPanel) {
+            startLogoutTimer();
+            const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+            events.forEach(event => window.addEventListener(event, resetLogoutTimer));
+            return () => {
+                events.forEach(event => window.removeEventListener(event, resetLogoutTimer));
+                if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
+            };
+        }
+    }, [isAdminLoggedIn, showAdminPanel, startLogoutTimer, resetLogoutTimer]);
 
-useEffect(() => {
-    if (isAdminLoggedIn && showAdminPanel) {
-        startLogoutTimer();
-        const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
-        events.forEach(event => window.addEventListener(event, resetLogoutTimer));
-        return () => {
-            events.forEach(event => window.removeEventListener(event, resetLogoutTimer));
-            if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
+    useEffect(() => {
+        const handleSessionExpired = () => {
+            if (isAdminLoggedIn) {
+                showToast('Your admin session has expired. Please log in again.', 'error');
+                handleAdminLogout();
+                setShowAdminPanel(false);
+            }
         };
-    }
-}, [isAdminLoggedIn, showAdminPanel, startLogoutTimer, resetLogoutTimer]);
+        window.addEventListener('admin-session-expired', handleSessionExpired);
+        return () => window.removeEventListener('admin-session-expired', handleSessionExpired);
+    }, [isAdminLoggedIn, handleAdminLogout, showToast]);
 
-useEffect(() => {
-    const handleSessionExpired = () => {
-        if (isAdminLoggedIn) {
-            alert('Your admin session has expired. Please log in again.');
-            handleAdminLogout();
-            setShowAdminPanel(false);
+    // ---------- End of auto-logout code ----------
+
+    const handleUpdateTeacher = useCallback(async (id: number, data: { name: string; department: string; image_url?: string }) => {
+        try {
+            await updateTeacher(id, data);
+            showToast('Teacher updated successfully!', 'success');
+            loadTeachers(1);
+            await loadAdminData();
+        } catch (error) {
+            console.error('Update error:', error);
+            showToast('Failed to update teacher', 'error');
         }
-    };
-    window.addEventListener('admin-session-expired', handleSessionExpired);
-    return () => window.removeEventListener('admin-session-expired', handleSessionExpired);
-}, [isAdminLoggedIn, handleAdminLogout]);
-
-// ---------- End of auto‑logout code ----------
-
-const handleUpdateTeacher = useCallback(async (id: number, data: { name: string; department: string; image_url?: string }) => {
-    try {
-        await updateTeacher(id, data);
-        alert('✅ Teacher updated successfully!');
-        loadTeachers(1);
-        await loadAdminData();
-    } catch (error) {
-        console.error('Update error:', error);
-        alert('Failed to update teacher');
-    }
-}, [loadTeachers, loadAdminData]);
+    }, [loadTeachers, loadAdminData, showToast]);
 
     const handleAddTeacher = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newTeacherName || !newTeacherDepartment) {
-            alert('Please fill in all fields');
+            showToast('Please fill in all fields', 'error');
             return;
         }
         try {
-            await addTeacher({ 
-                name: newTeacherName, 
+            await addTeacher({
+                name: newTeacherName,
                 department: newTeacherDepartment,
                 image_url: newTeacherImage || undefined
             });
-            alert('✅ Teacher added successfully!');
+            showToast('Teacher added successfully!', 'success');
             setNewTeacherName('');
             setNewTeacherDepartment('');
             setNewTeacherImage('');
@@ -603,16 +685,15 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
             loadTeachers(1);
             await loadAdminData();
         } catch (error) {
-            alert('Failed to add teacher');
+            showToast('Failed to add teacher', 'error');
         }
-    }, [newTeacherName, newTeacherDepartment, newTeacherImage, loadTeachers, loadAdminData]);
-
+    }, [newTeacherName, newTeacherDepartment, newTeacherImage, loadTeachers, loadAdminData, showToast]);
 
     const handleDeleteTeacher = useCallback(async (id: number) => {
         if (window.confirm('Are you sure you want to delete this teacher? All reviews will also be deleted.')) {
             try {
                 await deleteTeacher(id);
-                alert('✅ Teacher deleted successfully!');
+                showToast('Teacher deleted successfully!', 'success');
                 loadTeachers(1);
                 if (selectedTeacher?.id === id) {
                     setSelectedTeacher(null);
@@ -620,16 +701,16 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                 }
                 await loadAdminData();
             } catch (error) {
-                alert('Failed to delete teacher');
+                showToast('Failed to delete teacher', 'error');
             }
         }
-    }, [selectedTeacher, loadTeachers, loadAdminData]);
+    }, [selectedTeacher, loadTeachers, loadAdminData, showToast]);
 
     const handleDeleteReview = useCallback(async (id: number) => {
         if (window.confirm('Are you sure you want to delete this review?')) {
             try {
                 await deleteReview(id);
-                alert('✅ Review deleted successfully!');
+                showToast('Review deleted successfully!', 'success');
                 await loadAdminData();
                 if (selectedTeacher) {
                     const response = await getTeacherDetail(selectedTeacher.id);
@@ -645,10 +726,10 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                     });
                 }
             } catch (error) {
-                alert('Failed to delete review');
+                showToast('Failed to delete review', 'error');
             }
         }
-    }, [selectedTeacher, loadAdminData]);
+    }, [selectedTeacher, loadAdminData, showToast]);
 
     const handleSubmitReview = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
@@ -668,7 +749,7 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                 comment: reviewComment.trim(),
                 user_name: reviewUserName.trim() || 'Anonymous'
             });
-            alert('✅ Review submitted successfully!');
+            showToast('Review submitted successfully!', 'success');
             // Confetti
             if ((window as any).canvasConfetti) {
                 (window as any).canvasConfetti({
@@ -682,7 +763,8 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
             setReviewComment('');
             setReviewUserName('');
             setReviewError('');
-            
+            setReviewSuccess(`Your review for ${selectedTeacher.name} has been submitted. Thank you!`);
+
             const response = await getTeacherDetail(selectedTeacher.id);
             const data = response.data;
             setSelectedTeacher({
@@ -702,7 +784,7 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
         } finally {
             setSubmitting(false);
         }
-    }, [selectedTeacher, reviewComment, reviewUserName, loadTeachers, loadAdminData]);
+    }, [selectedTeacher, reviewComment, reviewUserName, loadTeachers, loadAdminData, showToast]);
 
     const handleTeacherClick = useCallback(async (teacher: Teacher) => {
         try {
@@ -726,35 +808,54 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
             setReviewComment('');
             setReviewUserName('');
             setReviewError('');
-            
+            setReviewSuccess('');
+
             // Auto-scroll on mobile
             if (window.innerWidth <= 768 && mainContentRef.current) {
                 setTimeout(() => {
                     mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }, 100);
             }
-            
+
             setSearchParams({ teacher: teacher.id.toString() });
         } catch (error) {
             console.error('Error loading teacher details:', error);
-            alert('Failed to load teacher details');
+            showToast('Failed to load teacher details', 'error');
         }
-    }, [setSearchParams]);
+    }, [setSearchParams, showToast]);
 
     const clearSelectedTeacher = () => {
         setSelectedTeacher(null);
         setShowReviewForm(false);
-        searchParams.delete('teacher');
-        setSearchParams(searchParams);
+        setReviewSuccess('');
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete('teacher');
+            return next;
+        });
     };
 
     const displayTeachers = isSearching ? searchResults : teachers;
 
-    const loadMore = () => {
+    const loadMore = useCallback(() => {
         if (!isSearching && hasMore && !loadingMore) {
             setCurrentPage(prev => prev + 1);
         }
-    };
+    }, [isSearching, hasMore, loadingMore]);
+
+    // Infinite scroll: auto-load the next page when the sentinel enters the viewport
+    useEffect(() => {
+        if (isSearching || !hasMore || loadingMore) return;
+        const el = loadMoreRef.current;
+        if (!el) return;
+        const observer = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting) {
+                loadMore();
+            }
+        }, { rootMargin: '300px' });
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [isSearching, hasMore, loadingMore, loadMore]);
 
     // ========== RENDER ==========
     if (showAdminPanel) {
@@ -762,6 +863,7 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
             return (
                 <div className="app">
                     <ParticleBackground />
+                    <ToastHost toasts={toasts} />
                     <header className="header">
                         <h1>📚 Teacher Review System - Admin</h1>
                         <button onClick={() => setShowAdminPanel(false)} className="back-to-site-btn">← Back to Site</button>
@@ -782,6 +884,7 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
         return (
             <div className="app">
                 <ParticleBackground />
+                <ToastHost toasts={toasts} />
                 <header className="header">
                     <h1>📚 Teacher Review System - Admin Panel</h1>
                     <button onClick={() => setShowAdminPanel(false)} className="back-to-site-btn">← Back to Site</button>
@@ -791,7 +894,7 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                         teachers={teachers}
                         reviewsForModeration={reviewsForModeration}
                         onAddTeacher={handleAddTeacher}
-                        onUpdateTeacher={handleUpdateTeacher} 
+                        onUpdateTeacher={handleUpdateTeacher}
                         onDeleteTeacher={handleDeleteTeacher}
                         onDeleteReview={handleDeleteReview}
                         onLogout={handleAdminLogout}
@@ -816,13 +919,10 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
         );
     }
 
-    const pathname = window.location.pathname;
-    if (pathname === '/forgot-password') return <ForgotPassword />;
-    if (pathname === '/reset-password') return <ResetPassword />;
-
     return (
         <div className="app">
             <ParticleBackground />
+            <ToastHost toasts={toasts} />
             <header className="header">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', flexWrap: 'wrap' }}>
                     <img
@@ -858,6 +958,7 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                         <input
                             type="text"
                             placeholder="🔍 Search by teacher name or department..."
+                            aria-label="Search by teacher name or department"
                             value={searchTerm}
                             onChange={handleSearch}
                             className="search-input"
@@ -868,7 +969,7 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                             </div>
                         )}
                     </div>
-                    
+
                     <div className="teacher-list">
                         {loading ? (
                             <>
@@ -890,31 +991,29 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                             <div className="no-results">No teachers found</div>
                         ) : (
                             <>
-                                {displayTeachers.map((teacher: Teacher, index: number) => {
-    return (
-        <div
-            key={teacher.id}
-            className="teacher-card-enter"
-            style={{ animationDelay: `${Math.min(index * 0.06, 0.6)}s` }}
-        >
-            <TiltCard
-                className="teacher-card"
-                onClick={() => handleTeacherClick(teacher)}
-            >
-                {teacher.image_url && (
-                    <div className="teacher-card-image">
-                        <img src={teacher.image_url} alt={teacher.name} loading="lazy" />
-                    </div>
-                )}
-                <div className="teacher-card-info">
-                    <h3>{teacher.name}</h3>
-                    <p className="department">{teacher.department}</p>
-                    <span className="reviews-count">({teacher.review_count} reviews)</span>
-                </div>
-            </TiltCard>
-        </div>
-    );
-})}
+                                {displayTeachers.map((teacher: Teacher, index: number) => (
+                                    <div
+                                        key={teacher.id}
+                                        className="teacher-card-enter"
+                                        style={{ animationDelay: `${Math.min(index * 0.06, 0.6)}s` }}
+                                    >
+                                        <TiltCard
+                                            className="teacher-card"
+                                            onClick={() => handleTeacherClick(teacher)}
+                                        >
+                                            {teacher.image_url && (
+                                                <div className="teacher-card-image">
+                                                    <img src={teacher.image_url} alt={teacher.name} loading="lazy" />
+                                                </div>
+                                            )}
+                                            <div className="teacher-card-info">
+                                                <h3>{teacher.name}</h3>
+                                                <p className="department">{teacher.department}</p>
+                                                <span className="reviews-count">({teacher.review_count} reviews)</span>
+                                            </div>
+                                        </TiltCard>
+                                    </div>
+                                ))}
                                 {loadingMore && <div className="loading-more">Loading more teachers...</div>}
                                 {!isSearching && hasMore && !loadingMore && (
                                     <div ref={loadMoreRef} className="load-more-container">
@@ -937,14 +1036,20 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                             <button onClick={clearSelectedTeacher} className="back-button">
                                 ← Back to list
                             </button>
-                            
+
                             {selectedTeacher.image_url && (
                                 <img src={selectedTeacher.image_url} alt={selectedTeacher.name} className="teacher-detail-image" loading="lazy" />
                             )}
-                            
+
                             <h1 className="teacher-name-heading gradient-text">{selectedTeacher.name || 'Teacher'}</h1>
                             <p className="teacher-department">{selectedTeacher.department || ''}</p>
-                            
+
+                            {reviewSuccess && (
+                                <div className="success-message" role="status">
+                                    {reviewSuccess}
+                                </div>
+                            )}
+
                             {!showReviewForm ? (
                                 <button onClick={() => { if (selectedTeacher && selectedTeacher.id) setShowReviewForm(true); else setReviewError('Please select a teacher first'); }} className="btn-write-review">
                                     ✏️ Write a Review for {selectedTeacher.name}
@@ -956,11 +1061,11 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                                     <form onSubmit={handleSubmitReview}>
                                         <div className="form-group">
                                             <label>👤 Your Name (optional)</label>
-                                            <input type="text" value={reviewUserName} onChange={(e) => setReviewUserName(e.target.value)} placeholder="Leave blank to post anonymously" />
+                                            <input type="text" value={reviewUserName} onChange={(e) => setReviewUserName(e.target.value)} placeholder="Leave blank to post anonymously" aria-label="Your name (optional)" />
                                         </div>
                                         <div className="form-group">
                                             <label>💬 Your Review *</label>
-                                            <textarea rows={4} value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} placeholder="Share your experience with this teacher..." required />
+                                            <textarea rows={4} value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} placeholder="Share your experience with this teacher..." required aria-label="Your review" />
                                         </div>
                                         <div className="form-buttons">
                                             <button type="button" onClick={() => setShowReviewForm(false)} className="btn-cancel">Cancel</button>
@@ -971,7 +1076,7 @@ const handleUpdateTeacher = useCallback(async (id: number, data: { name: string;
                                     </form>
                                 </div>
                             )}
-                            
+
                             <div className="reviews-section">
                                 <h3>📝 Student Reviews</h3>
                                 {!selectedTeacher.reviews || selectedTeacher.reviews.length === 0 ? (
