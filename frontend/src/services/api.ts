@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE = process.env.REACT_APP_API_BASE || 'https://teacher-review-system.onrender.com/api';
+const API_BASE = process.env.REACT_APP_API_BASE || '/api';
 
 const api = axios.create({
     baseURL: API_BASE,
