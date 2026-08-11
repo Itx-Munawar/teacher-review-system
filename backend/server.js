@@ -42,13 +42,17 @@ const parseCookies = (req) => {
     return cookies;
 };
 
-const isProduction = process.env.NODE_ENV === 'production';
-const cookieOptions = {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? 'none' : 'lax',
-    maxAge: 24 * 60 * 60 * 1000,
-    path: '/'
+const buildCookieOptions = (req) => {
+    // Derive from the actual request protocol (trust proxy is enabled),
+    // not from NODE_ENV, so cross-site HTTPS deployments get SameSite=None.
+    const secure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+    return {
+        httpOnly: true,
+        secure,
+        sameSite: secure ? 'none' : 'lax',
+        maxAge: 24 * 60 * 60 * 1000,
+        path: '/'
+    };
 };
 
 // Security Middleware
@@ -334,7 +338,7 @@ app.post('/api/admin/login', loginLimiter, async (req, res) => {
         await db.query('UPDATE admins SET failed_attempts = 0, locked_until = NULL WHERE id = ?', [admin.id]);
         const token = jwt.sign({ id: admin.id, username: admin.username }, JWT_SECRET, { expiresIn: '24h' });
         await createAuditLog(admin.id, 'LOGIN', 'Admin logged in', req.ip);
-        res.cookie('admin_token', token, cookieOptions);
+        res.cookie('admin_token', token, buildCookieOptions(req));
         res.json({ success: true, admin: { id: admin.id, username: admin.username } });
     } catch (error) {
         console.error('Login error:', error);
@@ -349,7 +353,7 @@ app.get('/api/admin/me', verifyAdmin, (req, res) => {
 
 // POST /api/admin/logout - clear the admin session cookie
 app.post('/api/admin/logout', (req, res) => {
-    res.clearCookie('admin_token', { ...cookieOptions, maxAge: undefined });
+    res.clearCookie('admin_token', { ...buildCookieOptions(req), maxAge: undefined });
     res.json({ success: true, message: 'Logged out successfully' });
 });
 
