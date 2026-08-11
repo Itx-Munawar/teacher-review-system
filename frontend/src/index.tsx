@@ -13,6 +13,7 @@ root.render(
             <Routes>
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/teacher/:id" element={<App />} />
                 <Route path="*" element={<App />} />
             </Routes>
         </BrowserRouter>

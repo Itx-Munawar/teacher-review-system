@@ -1,5 +1,8 @@
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://teacher-review-system.onrender.com/api/:path*" }
+    { "source": "/api/:path*", "destination": "https://teacher-review-system.onrender.com/api/:path*" },
+    { "source": "/teacher/:id", "destination": "/index.html" },
+    { "source": "/forgot-password", "destination": "/index.html" },
+    { "source": "/reset-password", "destination": "/index.html" }
   ]
 }

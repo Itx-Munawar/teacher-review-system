@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, memo, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
 import {
     getTeachers,
     searchAllTeachers,
@@ -345,6 +345,8 @@ const LoginForm = memo(({
 // ========== MAIN APP ==========
 const App: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
+    const { id: teacherIdParam } = useParams();
+    const navigate = useNavigate();
 
     // State
     const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -535,7 +537,7 @@ const App: React.FC = () => {
 
     // Restore state from URL on mount
     useEffect(() => {
-        const teacherId = searchParams.get('teacher');
+        const teacherId = teacherIdParam || searchParams.get('teacher');
         const searchQuery = searchParams.get('search');
 
         if (searchQuery) {
@@ -569,8 +571,65 @@ const App: React.FC = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const checkAdminLogin = useCallback(async () => {
-        try {
+    // Sync teacher detail when navigating between /teacher/:id pages (back/forward)
+    useEffect(() => {
+        if (!teacherIdParam) return;
+        if (selectedTeacher && selectedTeacher.id === parseInt(teacherIdParam)) return;
+        (async () => {
+            try {
+                const response = await getTeacherDetail(parseInt(teacherIdParam));
+                const data = response.data;
+                const teacherInfo = data.teacher;
+                const reviewsList = data.reviews || [];
+                const totalReviews = data.total_reviews || 0;
+                const teacherData: TeacherDetail = {
+                    id: teacherInfo.id,
+                    name: teacherInfo.name,
+                    department: teacherInfo.department,
+                    review_count: totalReviews,
+                    total_reviews: totalReviews,
+                    image_url: teacherInfo.image_url || null,
+                    reviews: reviewsList,
+                };
+                setSelectedTeacher(teacherData);
+            } catch (err) {
+                console.error('Failed to restore teacher:', err);
+            }
+        })();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [teacherIdParam]);
+
+    // Dynamic page title for SEO (teacher detail / search / default)
+    useEffect(() => {
+        const metaDescription = document.querySelector('meta[name="description"]');
+        if (selectedTeacher) {
+            document.title = `${selectedTeacher.name} - ${selectedTeacher.department} | UMT Teacher Reviews`;
+            if (metaDescription) {
+                metaDescription.setAttribute(
+                    'content',
+                    `Read anonymous student reviews for ${selectedTeacher.name} (${selectedTeacher.department}) at UMT Lahore. See how ${selectedTeacher.review_count || 0} students rated their teaching experience.`
+                );
+            }
+        } else if (searchTerm) {
+            document.title = `Search "${searchTerm}" | UMT Teacher Reviews`;
+            if (metaDescription) {
+                metaDescription.setAttribute(
+                    'content',
+                    `Search results for "${searchTerm}" among UMT teachers. Read anonymous student reviews at UMT Teacher Reviews.`
+                );
+            }
+        } else {
+            document.title = 'UMT Teacher Reviews – Anonymous Reviews for UMT Professors';
+            if (metaDescription) {
+                metaDescription.setAttribute(
+                    'content',
+                    'Read and write anonymous reviews for UMT teachers. Find the best professors at University of Management and Technology, Lahore.'
+                );
+            }
+        }
+    }, [selectedTeacher, searchTerm]);
+
+    const checkAdminLogin = useCallback(async () => {        try {
             await adminMe();
             setIsAdminLoggedIn(true);
         } catch {
@@ -816,22 +875,18 @@ const App: React.FC = () => {
                 }, 100);
             }
 
-            setSearchParams({ teacher: teacher.id.toString() });
+            navigate(`/teacher/${teacher.id}`);
         } catch (error) {
             console.error('Error loading teacher details:', error);
             showToast('Failed to load teacher details', 'error');
         }
-    }, [setSearchParams, showToast]);
+    }, [navigate, showToast]);
 
     const clearSelectedTeacher = () => {
         setSelectedTeacher(null);
         setShowReviewForm(false);
         setReviewSuccess('');
-        setSearchParams((prev) => {
-            const next = new URLSearchParams(prev);
-            next.delete('teacher');
-            return next;
-        });
+        navigate('/');
     };
 
     const displayTeachers = isSearching ? searchResults : teachers;
