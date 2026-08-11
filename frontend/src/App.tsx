@@ -380,7 +380,6 @@ const App: React.FC = () => {
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastIdRef = useRef(0);
 
-    const loadMoreRef = useRef<HTMLDivElement>(null);
     const mainContentRef = useRef<HTMLDivElement>(null);
     const logoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -843,20 +842,6 @@ const App: React.FC = () => {
         }
     }, [isSearching, hasMore, loadingMore]);
 
-    // Infinite scroll: auto-load the next page when the sentinel enters the viewport
-    useEffect(() => {
-        if (isSearching || !hasMore || loadingMore) return;
-        const el = loadMoreRef.current;
-        if (!el) return;
-        const observer = new IntersectionObserver((entries) => {
-            if (entries[0].isIntersecting) {
-                loadMore();
-            }
-        }, { rootMargin: '300px' });
-        observer.observe(el);
-        return () => observer.disconnect();
-    }, [isSearching, hasMore, loadingMore, loadMore]);
-
     // ========== RENDER ==========
     if (showAdminPanel) {
         if (!isAdminLoggedIn) {
@@ -1016,7 +1001,7 @@ const App: React.FC = () => {
                                 ))}
                                 {loadingMore && <div className="loading-more">Loading more teachers...</div>}
                                 {!isSearching && hasMore && !loadingMore && (
-                                    <div ref={loadMoreRef} className="load-more-container">
+                                    <div className="load-more-container">
                                         <button onClick={loadMore} className="load-more-btn">
                                             Load More ({teachers.length} / {totalTeachersCount})
                                         </button>
