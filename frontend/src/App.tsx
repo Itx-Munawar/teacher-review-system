@@ -468,7 +468,10 @@ const App: React.FC = () => {
         }).catch(() => { /* ignore */ });
     }, []);
 
-    // ========== SEARCH (ALL TEACHERS, DEBOUNCED) ==========
+    // ========== SEARCH (AUTOCOMPLETE ONLY) ==========
+    // The old behavior replaced the sidebar list while typing; that duplicated
+    // the autocomplete dropdown. Now typing only drives the dropdown, and the
+    // sidebar list stays unchanged until a teacher is selected.
     const performSearch = useCallback(async (value: string) => {
         setIsSearching(true);
         setLoading(true);
@@ -499,9 +502,9 @@ const App: React.FC = () => {
             });
         }
 
-        if (value.trim()) {
-            debouncedSearch.current(value.trim());
-        } else {
+        // Do NOT replace the sidebar list while typing – the autocomplete
+        // dropdown handles suggestions. Only reload the full list on clear.
+        if (!value.trim()) {
             setIsSearching(false);
             setSearchResults([]);
             setCurrentPage(1);
@@ -1076,7 +1079,17 @@ const App: React.FC = () => {
                         <TeacherAutocomplete
                             value={searchTerm}
                             onInputChange={handleSearch}
-                            onSelect={(teacher) => handleTeacherClick(teacher)}
+                            onSelect={(teacher) => {
+                                setSearchTerm('');
+                                setIsSearching(false);
+                                setSearchResults([]);
+                                setSearchParams((prev) => {
+                                    const next = new URLSearchParams(prev);
+                                    next.delete('search');
+                                    return next;
+                                });
+                                handleTeacherClick(teacher);
+                            }}
                             onClear={() => handleSearch({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
                         />
                         {isSearching && searchTerm && (

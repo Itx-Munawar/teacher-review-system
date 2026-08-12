@@ -179,7 +179,10 @@ const invalidateCache = (pattern) => {
 // ========== SCHEMA BOOTSTRAP ==========
 // Creates tables that may be added after the initial deployment, so the
 // server can auto-migrate on Render without manual SQL.
-const ensureTables = async () => {
+let schemaBootstrapError = null;
+let schemaBootstrapDone = false;
+
+const runSchemaBootstrap = async () => {
     try {
         await db.query(`
             CREATE TABLE IF NOT EXISTS questions (
@@ -205,10 +208,22 @@ const ensureTables = async () => {
                 CONSTRAINT fk_answers_question FOREIGN KEY (question_id) REFERENCES questions (id) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         `);
+        schemaBootstrapError = null;
+        schemaBootstrapDone = true;
         console.log('✅ Schema bootstrap complete (questions, question_answers)');
     } catch (error) {
+        schemaBootstrapError = error.message;
         console.error('❌ Schema bootstrap failed:', error.message);
+        // Retry a few times: the DB connection may still be warming up on cold start
+        setTimeout(runSchemaBootstrap, 5000);
     }
+};
+
+// Retry wrapper: also allow manual re-trigger via /api/admin/retry-schema
+let schemaRetryTimer = null;
+const ensureTables = () => {
+    if (schemaRetryTimer) clearTimeout(schemaRetryTimer);
+    runSchemaBootstrap();
 };
 
 ensureTables();
@@ -786,6 +801,22 @@ app.get('/api/admin/stats', verifyAdmin, async (req, res) => {
 // Health check
 app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// Schema status – diagnostic for the Q&A tables
+app.get('/api/schema-status', async (req, res) => {
+    try {
+        const [questions] = await db.query("SHOW TABLES LIKE 'questions'");
+        const [answers] = await db.query("SHOW TABLES LIKE 'question_answers'");
+        res.json({
+            questions_table: questions.length > 0,
+            question_answers_table: answers.length > 0,
+            bootstrap_error: schemaBootstrapError,
+            bootstrap_done: schemaBootstrapDone
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message, bootstrap_error: schemaBootstrapError });
+    }
 });
 
 app.get('/api/db-test', async (req, res) => {
