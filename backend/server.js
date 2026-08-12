@@ -457,7 +457,10 @@ app.get('/api/teachers/:id/questions', async (req, res) => {
             }
         });
 
-        res.set('Cache-Control', 'public, max-age=60');
+        // Q&A is dynamic user content – never cache it publicly or the
+        // Cloudflare layer in front of Render will serve stale (empty)
+        // responses after a new question/answer is posted.
+        res.set('Cache-Control', 'no-store');
         res.json(grouped);
     } catch (error) {
         console.error('Error fetching questions:', error);

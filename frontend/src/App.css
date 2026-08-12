@@ -1800,6 +1800,37 @@ body::after {
     margin-bottom: 1rem;
 }
 
+.qa-input-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+}
+
+.qa-landscape-input {
+    flex: 1;
+    min-width: 0;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #fff;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    resize: vertical;
+}
+
+.qa-submit {
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+    .qa-input-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+
 .qa-label {
     display: block;
     font-weight: 600;

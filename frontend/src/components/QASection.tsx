@@ -89,17 +89,20 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
             {showAskForm && (
                 <form onSubmit={handleAsk} className="review-form-container qa-form">
                     <label className="qa-label">💬 Your Question</label>
-                    <textarea
-                        rows={3}
-                        value={questionText}
-                        onChange={(e) => setQuestionText(e.target.value)}
-                        placeholder={`e.g. Is attendance strict in ${teacherName}'s class?`}
-                        required
-                        aria-label="Your question"
-                    />
-                    <button type="submit" disabled={submitting} className="btn-submit">
-                        {submitting ? 'Posting...' : 'Post Question'}
-                    </button>
+                    <div className="qa-input-row">
+                        <textarea
+                            rows={2}
+                            value={questionText}
+                            onChange={(e) => setQuestionText(e.target.value)}
+                            placeholder={`e.g. Is attendance strict in ${teacherName}'s class?`}
+                            required
+                            aria-label="Your question"
+                            className="qa-landscape-input"
+                        />
+                        <button type="submit" disabled={submitting} className="btn-submit qa-submit">
+                            {submitting ? 'Posting...' : 'Post Question'}
+                        </button>
+                    </div>
                 </form>
             )}
 
