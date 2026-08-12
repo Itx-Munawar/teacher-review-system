@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback, memo, useRef } from 'react';
-import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useParams, useNavigate, Link } from 'react-router-dom';
 import {
     getTeachers,
+    getDepartments,
+    getRelatedTeachers,
     searchAllTeachers,
     getTeacherDetail,
     adminLogin,
@@ -17,6 +19,7 @@ import {
 import { debounce } from './utils/debounce';
 import ParticleBackground from './components/ParticleBackground';
 import TiltCard from './components/TiltCard';
+import LazySection from './components/LazySection';
 import './App.css';
 
 // ========== INTERFACES ==========
@@ -92,6 +95,10 @@ interface AdminPanelProps {
     onAdminSearchChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     adminSearchResults: Teacher[];
     adminIsSearching: boolean;
+    onLoadMoreReviews: () => void;
+    adminLoadingMoreReviews: boolean;
+    adminReviewsTotalPages: number;
+    adminReviewsPage: number;
 }
 
 const AdminPanel = memo(({
@@ -116,7 +123,11 @@ const AdminPanel = memo(({
     adminSearchTerm,
     onAdminSearchChange,
     adminSearchResults,
-    adminIsSearching
+    adminIsSearching,
+    onLoadMoreReviews,
+    adminLoadingMoreReviews,
+    adminReviewsTotalPages,
+    adminReviewsPage
 }: AdminPanelProps) => {
     const totalReviews = reviewsForModeration?.length || 0;
 
@@ -288,6 +299,12 @@ const AdminPanel = memo(({
                         ))
                     )}
                 </div>
+                {!adminLoadingMoreReviews && adminReviewsPage < adminReviewsTotalPages && (
+                    <button onClick={onLoadMoreReviews} className="load-more-btn" style={{ marginTop: '1rem', width: '100%' }}>
+                        Load More Reviews
+                    </button>
+                )}
+                {adminLoadingMoreReviews && <div className="loading-more">Loading more reviews...</div>}
             </div>
         </div>
     );
@@ -361,6 +378,7 @@ const App: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
 
     const [selectedTeacher, setSelectedTeacher] = useState<TeacherDetail | null>(null);
+    const [relatedTeachers, setRelatedTeachers] = useState<Teacher[]>([]);
     const [showReviewForm, setShowReviewForm] = useState(false);
     const [reviewComment, setReviewComment] = useState('');
     const [reviewUserName, setReviewUserName] = useState('');
@@ -392,6 +410,10 @@ const App: React.FC = () => {
     const [adminSearchResults, setAdminSearchResults] = useState<Teacher[]>([]);
     const [adminIsSearching, setAdminIsSearching] = useState(false);
 
+    const [sortBy, setSortBy] = useState('name');
+    const [departmentFilter, setDepartmentFilter] = useState('');
+    const [departments, setDepartments] = useState<{ department: string; teacher_count: number }[]>([]);
+
     // ========== TOASTS ==========
     const showToast = useCallback((message: string, type: Toast['type'] = 'info') => {
         const id = ++toastIdRef.current;
@@ -408,7 +430,7 @@ const App: React.FC = () => {
             else setLoadingMore(true);
             setError(null);
 
-            const response = await getTeachers(page);
+            const response = await getTeachers(page, sortBy, departmentFilter || undefined);
             const data = response.data;
             const newTeachers = data.teachers || [];
 
@@ -434,6 +456,13 @@ const App: React.FC = () => {
             if (page === 1) setLoading(false);
             else setLoadingMore(false);
         }
+    }, [sortBy, departmentFilter]);
+
+    // Load departments once for the filter dropdown
+    useEffect(() => {
+        getDepartments().then((res) => {
+            if (res.data && Array.isArray(res.data)) setDepartments(res.data);
+        }).catch(() => { /* ignore */ });
     }, []);
 
     // ========== SEARCH (ALL TEACHERS, DEBOUNCED) ==========
@@ -499,21 +528,42 @@ const App: React.FC = () => {
     }, []);
 
     // ========== ADMIN DATA ==========
-    const loadAdminData = useCallback(async () => {
+    const [adminReviewsPage, setAdminReviewsPage] = useState(1);
+    const [adminReviewsTotalPages, setAdminReviewsTotalPages] = useState(1);
+    const [adminLoadingMoreReviews, setAdminLoadingMoreReviews] = useState(false);
+
+    const loadAdminData = useCallback(async (page: number = 1, append: boolean = false) => {
         try {
-            const reviewsRes = await getAdminReviews();
+            if (page > 1) setAdminLoadingMoreReviews(true);
+            const reviewsRes = await getAdminReviews(page, 50);
             let reviewsData: AdminReview[] = [];
+            let totalPages = 1;
             if (reviewsRes.data) {
-                if (Array.isArray(reviewsRes.data)) reviewsData = reviewsRes.data;
-                else if (reviewsRes.data.reviews) reviewsData = reviewsRes.data.reviews;
-                else if (reviewsRes.data.data) reviewsData = reviewsRes.data.data;
+                if (Array.isArray(reviewsRes.data)) {
+                    reviewsData = reviewsRes.data;
+                } else if (reviewsRes.data.reviews) {
+                    reviewsData = reviewsRes.data.reviews;
+                    totalPages = reviewsRes.data.pagination?.totalPages || 1;
+                } else if (reviewsRes.data.data) {
+                    reviewsData = reviewsRes.data.data;
+                }
             }
-            setReviewsForModeration(reviewsData);
+            setAdminReviewsTotalPages(totalPages);
+            setReviewsForModeration(prev => (append ? [...prev, ...reviewsData] : reviewsData));
+            setAdminReviewsPage(page);
         } catch (error) {
             console.error('Error loading admin data:', error);
-            setReviewsForModeration([]);
+            if (!append) setReviewsForModeration([]);
+        } finally {
+            setAdminLoadingMoreReviews(false);
         }
     }, []);
+
+    const handleLoadMoreReviews = useCallback(() => {
+        if (adminReviewsPage < adminReviewsTotalPages && !adminLoadingMoreReviews) {
+            loadAdminData(adminReviewsPage + 1, true);
+        }
+    }, [adminReviewsPage, adminReviewsTotalPages, adminLoadingMoreReviews, loadAdminData]);
 
     // Effects
     useEffect(() => {
@@ -521,6 +571,15 @@ const App: React.FC = () => {
             loadTeachers(currentPage);
         }
     }, [currentPage, isSearching, loadTeachers]);
+
+    // Reload page 1 when sort or department filter changes
+    useEffect(() => {
+        if (!isSearching) {
+            setCurrentPage(1);
+            loadTeachers(1);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sortBy, departmentFilter]);
 
     useEffect(() => {
         loadTeachers(1);
@@ -598,6 +657,17 @@ const App: React.FC = () => {
         })();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [teacherIdParam]);
+
+    // Load related teachers in the same department
+    useEffect(() => {
+        if (!selectedTeacher) {
+            setRelatedTeachers([]);
+            return;
+        }
+        getRelatedTeachers(selectedTeacher.id).then((res) => {
+            if (res.data && Array.isArray(res.data)) setRelatedTeachers(res.data);
+        }).catch(() => setRelatedTeachers([]));
+    }, [selectedTeacher?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Dynamic page title for SEO (teacher detail / search / default)
     useEffect(() => {
@@ -953,6 +1023,10 @@ const App: React.FC = () => {
                         onAdminSearchChange={handleAdminSearch}
                         adminSearchResults={adminSearchResults}
                         adminIsSearching={adminIsSearching}
+                        onLoadMoreReviews={handleLoadMoreReviews}
+                        adminLoadingMoreReviews={adminLoadingMoreReviews}
+                        adminReviewsTotalPages={adminReviewsTotalPages}
+                        adminReviewsPage={adminReviewsPage}
                     />
                 </div>
             </div>
@@ -1009,6 +1083,34 @@ const App: React.FC = () => {
                             </div>
                         )}
                     </div>
+
+                    {!isSearching && (
+                        <div className="filter-bar">
+                            <select
+                                className="filter-select"
+                                aria-label="Sort teachers"
+                                value={sortBy}
+                                onChange={(e) => { setSortBy(e.target.value); }}
+                            >
+                                <option value="name">Sort: Name</option>
+                                <option value="reviews">Sort: Most Reviews</option>
+                                <option value="newest">Sort: Newest</option>
+                            </select>
+                            <select
+                                className="filter-select"
+                                aria-label="Filter by department"
+                                value={departmentFilter}
+                                onChange={(e) => { setDepartmentFilter(e.target.value); }}
+                            >
+                                <option value="">All Departments</option>
+                                {departments.map((d) => (
+                                    <option key={d.department} value={d.department}>
+                                        {d.department} ({d.teacher_count})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
 
                     <div className="teacher-list">
                         {loading ? (
@@ -1082,7 +1184,26 @@ const App: React.FC = () => {
                             )}
 
                             <h1 className="teacher-name-heading gradient-text">{selectedTeacher.name || 'Teacher'}</h1>
-                            <p className="teacher-department">{selectedTeacher.department || ''}</p>
+                            <p className="teacher-department">
+                                <Link to={`/department/${encodeURIComponent(selectedTeacher.department || '')}`} className="department-link">
+                                    {selectedTeacher.department || ''}
+                                </Link>
+                            </p>
+
+                            <button
+                                onClick={() => {
+                                    const url = window.location.href;
+                                    if (navigator.share) {
+                                        navigator.share({ title: `${selectedTeacher.name} - UMT Teacher Reviews`, url }).catch(() => {});
+                                    } else {
+                                        navigator.clipboard.writeText(url).then(() => showToast('Link copied to clipboard!', 'success')).catch(() => {});
+                                    }
+                                }}
+                                className="share-btn"
+                                aria-label={`Share ${selectedTeacher.name}`}
+                            >
+                                🔗 Share
+                            </button>
 
                             {reviewSuccess && (
                                 <div className="success-message" role="status">
@@ -1117,7 +1238,10 @@ const App: React.FC = () => {
                                 </div>
                             )}
 
-                            <div className="reviews-section">
+                            <LazySection
+                                className="reviews-section"
+                                placeholder={<div className="reviews-section" style={{ minHeight: '80px' }} />}
+                            >
                                 <h3>📝 Student Reviews</h3>
                                 {!selectedTeacher.reviews || selectedTeacher.reviews.length === 0 ? (
                                     <p>No reviews yet. Be the first to review!</p>
@@ -1132,12 +1256,38 @@ const App: React.FC = () => {
                                         </div>
                                     ))
                                 )}
-                            </div>
+                            </LazySection>
+
+                            {relatedTeachers.length > 0 && (
+                                <div className="related-teachers">
+                                    <h3>🧑‍🏫 More teachers in {selectedTeacher.department}</h3>
+                                    <div className="related-teachers-list">
+                                        {relatedTeachers.map((t) => (
+                                            <button key={t.id} onClick={() => handleTeacherClick(t)} className="related-teacher-card">
+                                                <span className="related-teacher-name">{t.name}</span>
+                                                <span className="related-teacher-count">({t.review_count} reviews)</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <div className="welcome-message">
                             <h2 className="gradient-text">Welcome to Teacher Reviews</h2>
                             <p>👈 Select a teacher from the left to read reviews or submit your own.</p>
+                            {departments.length > 0 && (
+                                <div className="department-links">
+                                    <h3>Browse by Department</h3>
+                                    <div className="department-links-list">
+                                        {departments.map((d) => (
+                                            <Link key={d.department} to={`/department/${encodeURIComponent(d.department)}`} className="department-link-chip">
+                                                {d.department}
+                                            </Link>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -1180,6 +1330,9 @@ const App: React.FC = () => {
                 <div className="footer-content">
                     <p>© {new Date().getFullYear()} UMT Teacher Reviews. All rights reserved.</p>
                     <p>Developed by Munawar Hussain</p>
+                    <p className="footer-links">
+                        <a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Use</a> · <a href="/dmca">DMCA &amp; Content Removal</a>
+                    </p>
                     <p className="footer-disclaimer">All reviews are student opinions and not official university statements.</p>
                 </div>
             </footer>

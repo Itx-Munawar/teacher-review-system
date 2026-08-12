@@ -173,27 +173,43 @@ const invalidateCache = (pattern) => {
 // ========== PUBLIC API ENDPOINTS ==========
 
 // GET /api/teachers - paginated list (20 per page)
+// Supports: ?page=N&sort=name|reviews|newest&department=<name>
 app.get('/api/teachers', async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = 20;
         const offset = (page - 1) * limit;
+        const sort = req.query.sort || 'name';
+        const department = req.query.department || '';
 
-        const cacheKey = `teachers:${page}`;
+        const cacheKey = `teachers:${page}:${sort}:${department}`;
         const cached = getCached(cacheKey);
-        if (cached) return res.json(cached);
+        if (cached) {
+            res.set('Cache-Control', 'public, max-age=60');
+            return res.json(cached);
+        }
+
+        let orderBy = 't.name';
+        if (sort === 'reviews') orderBy = 'review_count DESC, t.name';
+        else if (sort === 'newest') orderBy = 't.created_at DESC';
+
+        const whereClause = department ? 'WHERE t.department = ?' : '';
+        const params = [];
+        if (department) params.push(department);
 
         const query = `
             SELECT t.*,
                    (SELECT COUNT(*) FROM reviews r WHERE r.teacher_id = t.id AND r.is_approved = 1) as review_count
             FROM teachers t
-            ORDER BY t.name
+            ${whereClause}
+            ORDER BY ${orderBy}
             LIMIT ${limit} OFFSET ${offset}
         `;
         
-        const [teachers] = await db.query(query);
+        const [teachers] = await db.query(query, params);
 
-        const [countResult] = await db.query('SELECT COUNT(*) as total FROM teachers');
+        const countQuery = department ? 'SELECT COUNT(*) as total FROM teachers WHERE department = ?' : 'SELECT COUNT(*) as total FROM teachers';
+        const [countResult] = await db.query(countQuery, params);
         const total = countResult[0].total;
 
         const result = {
@@ -207,9 +223,27 @@ app.get('/api/teachers', async (req, res) => {
         };
 
         setCache(cacheKey, result);
+        res.set('Cache-Control', 'public, max-age=60');
         res.json(result);
     } catch (error) {
         console.error('Error fetching teachers:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// GET /api/departments - distinct departments with teacher counts
+app.get('/api/departments', async (req, res) => {
+    try {
+        const [rows] = await db.query(`
+            SELECT department, COUNT(*) as teacher_count
+            FROM teachers
+            GROUP BY department
+            ORDER BY department
+        `);
+        res.set('Cache-Control', 'public, max-age=3600');
+        res.json(rows);
+    } catch (error) {
+        console.error('Error fetching departments:', error);
         res.status(500).json({ error: 'Database error' });
     }
 });
@@ -230,6 +264,7 @@ app.get('/api/teachers/search', searchLimiter, async (req, res) => {
             ORDER BY t.name
         `, [`%${searchTerm}%`, `%${searchTerm}%`]);
         
+        res.set('Cache-Control', 'public, max-age=120');
         res.json(teachers);
     } catch (error) {
         console.error('Error searching teachers:', error);
@@ -265,6 +300,7 @@ app.get('/api/teachers/:id', async (req, res) => {
             [teacherId]
         );
 
+        res.set('Cache-Control', 'public, max-age=300');
         res.json({
             teacher: teachers[0],
             reviews: reviews,
@@ -272,6 +308,30 @@ app.get('/api/teachers/:id', async (req, res) => {
         });
     } catch (error) {
         console.error('Error fetching teacher details:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// GET /api/teachers/:id/related - other teachers in the same department
+app.get('/api/teachers/:id/related', async (req, res) => {
+    try {
+        const teacherId = parseInt(req.params.id);
+        const [teachers] = await db.query('SELECT department FROM teachers WHERE id = ?', [teacherId]);
+        if (teachers.length === 0) return res.status(404).json({ error: 'Teacher not found' });
+
+        const [related] = await db.query(`
+            SELECT t.id, t.name, t.department, t.image_url,
+                   (SELECT COUNT(*) FROM reviews r WHERE r.teacher_id = t.id AND r.is_approved = 1) as review_count
+            FROM teachers t
+            WHERE t.department = ? AND t.id != ?
+            ORDER BY t.name
+            LIMIT 6
+        `, [teachers[0].department, teacherId]);
+
+        res.set('Cache-Control', 'public, max-age=300');
+        res.json(related);
+    } catch (error) {
+        console.error('Error fetching related teachers:', error);
         res.status(500).json({ error: 'Database error' });
     }
 });
@@ -498,13 +558,30 @@ app.put('/api/admin/teachers/:id', verifyAdmin, [
 app.get('/api/admin/reviews', verifyAdmin, async (req, res) => {
     // ... (your existing get admin reviews code) ...
     try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+        const offset = (page - 1) * limit;
+
         const [reviews] = await db.query(`
             SELECT r.*, t.name as teacher_name 
             FROM reviews r
             JOIN teachers t ON r.teacher_id = t.id
             ORDER BY r.created_at DESC
+            LIMIT ${limit} OFFSET ${offset}
         `);
-        res.json(reviews);
+
+        const [countResult] = await db.query('SELECT COUNT(*) as total FROM reviews');
+        const total = countResult[0].total;
+
+        res.json({
+            reviews: reviews,
+            pagination: {
+                page: page,
+                limit: limit,
+                total: total,
+                totalPages: Math.ceil(total / limit)
+            }
+        });
     } catch (error) {
         console.error('Error fetching reviews:', error);
         res.status(500).json({ error: 'Database error' });

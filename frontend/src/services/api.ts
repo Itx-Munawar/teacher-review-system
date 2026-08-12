@@ -25,8 +25,18 @@ api.interceptors.response.use(
 
 // ========== PUBLIC APIs ==========
 
-export const getTeachers = (page: number = 1) => {
-    return api.get(`/teachers?page=${page}&limit=20`);
+export const getTeachers = (page: number = 1, sort: string = 'name', department?: string) => {
+    const params = new URLSearchParams({ page: String(page), limit: '20', sort });
+    if (department) params.set('department', department);
+    return api.get(`/teachers?${params.toString()}`);
+};
+
+export const getDepartments = () => {
+    return api.get('/departments');
+};
+
+export const getRelatedTeachers = (id: number) => {
+    return api.get(`/teachers/${id}/related`);
 };
 
 export const searchAllTeachers = (query: string) => {
@@ -87,8 +97,8 @@ export const updateTeacher = (id: number, data: { name: string; department: stri
     return api.put(`/admin/teachers/${id}`, data);
 };
 
-export const getAdminReviews = () => {
-    return api.get('/admin/reviews');
+export const getAdminReviews = (page: number = 1, limit: number = 50) => {
+    return api.get(`/admin/reviews?page=${page}&limit=${limit}`);
 };
 
 export const deleteReview = (id: number) => {
