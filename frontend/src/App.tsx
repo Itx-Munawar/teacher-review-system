@@ -20,6 +20,9 @@ import { debounce } from './utils/debounce';
 import ParticleBackground from './components/ParticleBackground';
 import TiltCard from './components/TiltCard';
 import LazySection from './components/LazySection';
+import TeacherAutocomplete from './components/TeacherAutocomplete';
+import QASection from './components/QASection';
+import InstallPrompt from './components/InstallPrompt';
 import './App.css';
 
 // ========== INTERFACES ==========
@@ -1037,6 +1040,7 @@ const App: React.FC = () => {
         <div className="app">
             <ParticleBackground />
             <ToastHost toasts={toasts} />
+            <InstallPrompt />
             <header className="header">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', flexWrap: 'wrap' }}>
                     <img
@@ -1069,13 +1073,11 @@ const App: React.FC = () => {
             <div className="container">
                 <div className="sidebar">
                     <div className="search-box">
-                        <input
-                            type="text"
-                            placeholder="🔍 Search by teacher name or department..."
-                            aria-label="Search by teacher name or department"
+                        <TeacherAutocomplete
                             value={searchTerm}
-                            onChange={handleSearch}
-                            className="search-input"
+                            onInputChange={handleSearch}
+                            onSelect={(teacher) => handleTeacherClick(teacher)}
+                            onClear={() => handleSearch({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
                         />
                         {isSearching && searchTerm && (
                             <div className="search-info">
@@ -1256,6 +1258,13 @@ const App: React.FC = () => {
                                         </div>
                                     ))
                                 )}
+                            </LazySection>
+
+                            <LazySection
+                                className="qa-section-lazy"
+                                placeholder={<div className="qa-section" style={{ minHeight: '60px' }} />}
+                            >
+                                <QASection teacherId={selectedTeacher.id} teacherName={selectedTeacher.name || 'this teacher'} />
                             </LazySection>
 
                             {relatedTeachers.length > 0 && (

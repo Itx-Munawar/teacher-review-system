@@ -39,15 +39,38 @@ export const getRelatedTeachers = (id: number) => {
     return api.get(`/teachers/${id}/related`);
 };
 
-export const searchAllTeachers = (query: string) => {
+export const searchAllTeachers = (query: string, limit?: number) => {
     if (!query || query.trim() === '') {
         return Promise.resolve({ data: [] });
     }
-    return api.get(`/teachers/search?q=${encodeURIComponent(query)}`);
+    const params = new URLSearchParams({ q: query });
+    if (limit) params.set('limit', String(limit));
+    return api.get(`/teachers/search?${params.toString()}`);
 };
 
 export const getTeacherDetail = (id: number) => {
     return api.get(`/teachers/${id}`);
+};
+
+// ========== Q&A APIs ==========
+
+export interface Question {
+    id: number;
+    question: string;
+    created_at: string;
+    answers: { id: number; answer: string; created_at: string }[];
+}
+
+export const getTeacherQuestions = (id: number) => {
+    return api.get(`/teachers/${id}/questions`);
+};
+
+export const submitQuestion = (data: { teacher_id: number; question: string }) => {
+    return api.post('/questions', data);
+};
+
+export const submitAnswer = (questionId: number, answer: string) => {
+    return api.post(`/questions/${questionId}/answers`, { answer });
 };
 
 export const submitReview = (data: { 

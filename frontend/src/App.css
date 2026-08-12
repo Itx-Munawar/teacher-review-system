@@ -1690,3 +1690,310 @@ body::after {
         max-width: none;
     }
 }
+
+/* ========== AUTOCOMPLETE SEARCH ========== */
+.autocomplete {
+    position: relative;
+    width: 100%;
+}
+
+.autocomplete-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: #1e1b4b;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    max-height: 320px;
+    overflow-y: auto;
+    z-index: 100;
+    list-style: none;
+    margin: 0;
+    padding: 6px;
+    animation: fadeInUp 0.18s ease-out both;
+}
+
+.autocomplete-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item-active {
+    background: rgba(102, 126, 234, 0.18);
+}
+
+.autocomplete-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.autocomplete-avatar-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+}
+
+.autocomplete-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.autocomplete-name {
+    font-weight: 600;
+    color: #fff;
+    font-size: 0.92rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.autocomplete-dept {
+    font-size: 0.75rem;
+    color: #a5b4fc;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ========== Q&A SECTION ========== */
+.qa-section {
+    margin-top: 1.5rem;
+}
+
+.qa-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+}
+
+.qa-header h3 {
+    margin: 0;
+}
+
+.qa-ask-btn {
+    padding: 8px 14px;
+    font-size: 0.85rem;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.qa-form {
+    margin-bottom: 1rem;
+}
+
+.qa-label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #c7d2fe;
+}
+
+.qa-empty {
+    color: #94a3b8;
+    font-size: 0.9rem;
+    padding: 8px 0;
+}
+
+.qa-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.qa-item {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 14px;
+}
+
+.qa-question {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.qa-q-badge,
+.qa-a-badge {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+.qa-q-badge {
+    background: rgba(102, 126, 234, 0.25);
+    color: #a5b4fc;
+}
+
+.qa-a-badge {
+    background: rgba(16, 185, 129, 0.22);
+    color: #34d399;
+}
+
+.qa-question-text {
+    flex: 1;
+    margin: 0;
+    font-weight: 600;
+    color: #e0e7ff;
+    min-width: 0;
+}
+
+.qa-answers {
+    margin: 10px 0 0 34px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.qa-answer {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 8px;
+    padding: 8px 10px;
+}
+
+.qa-answer-text {
+    flex: 1;
+    margin: 0;
+    color: #cbd5e1;
+    font-size: 0.9rem;
+    min-width: 0;
+}
+
+.qa-reply-btn {
+    margin: 10px 0 0 34px;
+    background: transparent;
+    border: 1px solid rgba(102, 126, 234, 0.4);
+    color: #a5b4fc;
+    padding: 6px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+    transition: background 0.15s ease;
+}
+
+.qa-reply-btn:hover {
+    background: rgba(102, 126, 234, 0.15);
+}
+
+.qa-answer-form {
+    margin: 10px 0 0 34px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.qa-answer-form textarea {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: #fff;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    resize: vertical;
+}
+
+.qa-answer-form-actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* ========== INSTALL PROMPT ========== */
+.install-prompt {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 200;
+    width: min(94vw, 420px);
+    animation: fadeInUp 0.3s ease-out both;
+}
+
+.install-prompt-content {
+    background: linear-gradient(120deg, #312e81, #4c1d95);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 14px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.install-prompt-text {
+    margin: 0;
+    flex: 1;
+    min-width: 180px;
+    color: #e0e7ff;
+    font-size: 0.9rem;
+}
+
+.install-prompt-btn {
+    background: linear-gradient(120deg, #667eea, #764ba2);
+    color: #fff;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 0.85rem;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.install-prompt-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(102, 126, 234, 0.4);
+}
+
+.install-prompt-close {
+    background: transparent;
+    border: none;
+    color: #a5b4fc;
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 4px;
+    line-height: 1;
+}
+
+.install-prompt-close:hover {
+    color: #fff;
+}
+
+@media (max-width: 600px) {
+    .install-prompt {
+        bottom: 8px;
+        width: 96vw;
+    }
+}

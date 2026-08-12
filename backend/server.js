@@ -88,7 +88,7 @@ const loginLimiter = rateLimit({
 
 const searchLimiter = rateLimit({
     windowMs: 60 * 1000,
-    max: 30,
+    max: 120,
     message: { error: 'Too many search requests. Please try again later.' }
 });
 
@@ -96,6 +96,12 @@ const resetLimiter = rateLimit({
     windowMs: 60 * 60 * 1000,
     max: 3,
     message: { error: 'Too many reset requests. Try again in an hour.' }
+});
+
+const questionLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    message: { error: 'Too many questions. Please try again later.' }
 });
 
 // Email transporter
@@ -169,6 +175,43 @@ const invalidateCache = (pattern) => {
         if (key.startsWith(pattern)) cache.delete(key);
     }
 };
+
+// ========== SCHEMA BOOTSTRAP ==========
+// Creates tables that may be added after the initial deployment, so the
+// server can auto-migrate on Render without manual SQL.
+const ensureTables = async () => {
+    try {
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS questions (
+                id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                teacher_id INT UNSIGNED NOT NULL,
+                question TEXT NOT NULL,
+                is_approved TINYINT(1) NOT NULL DEFAULT 1,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                KEY idx_questions_teacher (teacher_id, is_approved),
+                CONSTRAINT fk_questions_teacher FOREIGN KEY (teacher_id) REFERENCES teachers (id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS question_answers (
+                id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                question_id INT UNSIGNED NOT NULL,
+                answer TEXT NOT NULL,
+                is_approved TINYINT(1) NOT NULL DEFAULT 1,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (id),
+                KEY idx_answers_question (question_id),
+                CONSTRAINT fk_answers_question FOREIGN KEY (question_id) REFERENCES questions (id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+        console.log('✅ Schema bootstrap complete (questions, question_answers)');
+    } catch (error) {
+        console.error('❌ Schema bootstrap failed:', error.message);
+    }
+};
+
+ensureTables();
 
 // ========== PUBLIC API ENDPOINTS ==========
 
@@ -249,21 +292,42 @@ app.get('/api/departments', async (req, res) => {
 });
 
 // GET /api/teachers/search - search all teachers (no pagination)
+// Supports: ?q=<term>&limit=N (limit used for autocomplete)
+// Fuzzy matching: exact, prefix, substring, SOUNDEX (typo-tolerant), word-order tolerant
 app.get('/api/teachers/search', searchLimiter, async (req, res) => {
     try {
         const searchTerm = req.query.q;
+        const limit = Math.min(parseInt(req.query.limit) || 0, 50);
         if (!searchTerm || searchTerm.trim() === '') {
             return res.json([]);
         }
-        
+
+        const term = searchTerm.trim();
         const [teachers] = await db.query(`
             SELECT t.*,
-                   (SELECT COUNT(*) FROM reviews r WHERE r.teacher_id = t.id AND r.is_approved = 1) as review_count
+                   (SELECT COUNT(*) FROM reviews r WHERE r.teacher_id = t.id AND r.is_approved = 1) as review_count,
+                   CASE
+                       WHEN t.name = ? THEN 0
+                       WHEN t.name LIKE ? THEN 1
+                       WHEN t.name LIKE ? THEN 2
+                       WHEN SOUNDEX(t.name) = SOUNDEX(?) THEN 3
+                       WHEN t.department LIKE ? THEN 4
+                       ELSE 5
+                   END as match_rank
             FROM teachers t
-            WHERE t.name LIKE ? OR t.department LIKE ?
-            ORDER BY t.name
-        `, [`%${searchTerm}%`, `%${searchTerm}%`]);
-        
+            WHERE t.name = ?
+               OR t.name LIKE ?
+               OR t.name LIKE ?
+               OR SOUNDEX(t.name) = SOUNDEX(?)
+               OR t.department LIKE ?
+            ORDER BY match_rank, t.name
+            ${limit > 0 ? 'LIMIT ?' : ''}
+        `, [
+            term, `${term}%`, `%${term}%`, term, `%${term}%`,
+            term, `${term}%`, `%${term}%`, term, `%${term}%`,
+            ...(limit > 0 ? [limit] : [])
+        ]);
+
         res.set('Cache-Control', 'public, max-age=120');
         res.json(teachers);
     } catch (error) {
@@ -332,6 +396,106 @@ app.get('/api/teachers/:id/related', async (req, res) => {
         res.json(related);
     } catch (error) {
         console.error('Error fetching related teachers:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// GET /api/teachers/:id/questions - Q&A for a teacher (approved only)
+app.get('/api/teachers/:id/questions', async (req, res) => {
+    try {
+        const teacherId = parseInt(req.params.id);
+        const [teachers] = await db.query('SELECT id FROM teachers WHERE id = ?', [teacherId]);
+        if (teachers.length === 0) return res.status(404).json({ error: 'Teacher not found' });
+
+        const [rows] = await db.query(`
+            SELECT q.id as question_id, q.question, q.created_at as question_created_at,
+                   a.id as answer_id, a.answer, a.created_at as answer_created_at
+            FROM questions q
+            LEFT JOIN question_answers a ON a.question_id = q.id AND a.is_approved = 1
+            WHERE q.teacher_id = ? AND q.is_approved = 1
+            ORDER BY q.created_at DESC, a.created_at ASC
+        `, [teacherId]);
+
+        // Group answers under their question
+        const grouped = [];
+        const map = {};
+        rows.forEach((row) => {
+            if (!map[row.question_id]) {
+                map[row.question_id] = {
+                    id: row.question_id,
+                    question: row.question,
+                    created_at: row.question_created_at,
+                    answers: []
+                };
+                grouped.push(map[row.question_id]);
+            }
+            if (row.answer_id) {
+                map[row.question_id].answers.push({
+                    id: row.answer_id,
+                    answer: row.answer,
+                    created_at: row.answer_created_at
+                });
+            }
+        });
+
+        res.set('Cache-Control', 'public, max-age=60');
+        res.json(grouped);
+    } catch (error) {
+        console.error('Error fetching questions:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// POST /api/questions - ask a question about a teacher
+app.post('/api/questions', questionLimiter, [
+    body('teacher_id').isInt({ min: 1 }).withMessage('Invalid teacher ID'),
+    body('question').isLength({ min: 3, max: 500 }).withMessage('Question must be 3-500 characters')
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
+    try {
+        const { teacher_id, question } = req.body;
+        const sanitizedQuestion = validator.escape(question.trim());
+
+        const [teachers] = await db.query('SELECT id FROM teachers WHERE id = ?', [teacher_id]);
+        if (teachers.length === 0) return res.status(404).json({ error: 'Teacher not found' });
+
+        const [result] = await db.query(
+            `INSERT INTO questions (teacher_id, question, is_approved) VALUES (?, ?, 1)`,
+            [teacher_id, sanitizedQuestion]
+        );
+
+        invalidateCache('questions');
+        res.json({ success: true, question_id: result.insertId, message: 'Question submitted!' });
+    } catch (error) {
+        console.error('Error saving question:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// POST /api/questions/:id/answers - answer an existing question
+app.post('/api/questions/:id/answers', questionLimiter, [
+    body('answer').isLength({ min: 1, max: 500 }).withMessage('Answer must be 1-500 characters')
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
+    try {
+        const questionId = parseInt(req.params.id);
+        const { answer } = req.body;
+        const sanitizedAnswer = validator.escape(answer.trim());
+
+        const [questions] = await db.query('SELECT id FROM questions WHERE id = ?', [questionId]);
+        if (questions.length === 0) return res.status(404).json({ error: 'Question not found' });
+
+        const [result] = await db.query(
+            `INSERT INTO question_answers (question_id, answer, is_approved) VALUES (?, ?, 1)`,
+            [questionId, sanitizedAnswer]
+        );
+
+        invalidateCache('questions');
+        res.json({ success: true, answer_id: result.insertId, message: 'Answer submitted!' });
+    } catch (error) {
+        console.error('Error saving answer:', error);
         res.status(500).json({ error: 'Database error' });
     }
 });

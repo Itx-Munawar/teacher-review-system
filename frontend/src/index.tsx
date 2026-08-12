@@ -9,6 +9,7 @@ import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsOfUse from './components/TermsOfUse';
 import DmcaPolicy from './components/DmcaPolicy';
 import DepartmentPage from './components/DepartmentPage';
+import { registerServiceWorker } from './services/registerServiceWorker';
 
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
 root.render(
@@ -27,3 +28,5 @@ root.render(
         </BrowserRouter>
     </React.StrictMode>
 );
+
+registerServiceWorker();
