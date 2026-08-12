@@ -1887,11 +1887,19 @@ body::after {
     color: #34d399;
 }
 
+.qa-question .review-date,
+.qa-answer .review-date {
+    color: #94a3b8;
+    font-size: 0.75rem;
+}
+
 .qa-question-text {
     flex: 1;
     margin: 0;
     font-weight: 600;
-    color: #e0e7ff;
+    color: #ffffff;
+    font-size: 1rem;
+    line-height: 1.5;
     min-width: 0;
 }
 
@@ -1914,8 +1922,9 @@ body::after {
 .qa-answer-text {
     flex: 1;
     margin: 0;
-    color: #cbd5e1;
-    font-size: 0.9rem;
+    color: #f1f5f9;
+    font-size: 0.95rem;
+    line-height: 1.5;
     min-width: 0;
 }
 
