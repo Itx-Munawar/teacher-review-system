@@ -1809,14 +1809,24 @@ body::after {
 .qa-landscape-input {
     flex: 1;
     min-width: 0;
-    background: rgba(0, 0, 0, 0.25);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    color: #fff;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    color: #0f172a;
     border-radius: 8px;
     padding: 8px 10px;
     font-size: 0.9rem;
     font-family: inherit;
     resize: vertical;
+}
+
+.qa-landscape-input::placeholder {
+    color: #94a3b8;
+}
+
+.qa-landscape-input:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
 }
 
 .qa-submit {
@@ -1835,11 +1845,11 @@ body::after {
     display: block;
     font-weight: 600;
     margin-bottom: 6px;
-    color: #c7d2fe;
+    color: #475569;
 }
 
 .qa-empty {
-    color: #94a3b8;
+    color: #64748b;
     font-size: 0.9rem;
     padding: 8px 0;
 }
@@ -1851,10 +1861,11 @@ body::after {
 }
 
 .qa-item {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
     border-radius: 12px;
     padding: 14px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 .qa-question {
@@ -1878,18 +1889,18 @@ body::after {
 }
 
 .qa-q-badge {
-    background: rgba(102, 126, 234, 0.25);
-    color: #a5b4fc;
+    background: #eef2ff;
+    color: #4f46e5;
 }
 
 .qa-a-badge {
-    background: rgba(16, 185, 129, 0.22);
-    color: #34d399;
+    background: #ecfdf5;
+    color: #059669;
 }
 
 .qa-question .review-date,
 .qa-answer .review-date {
-    color: #94a3b8;
+    color: #64748b;
     font-size: 0.75rem;
 }
 
@@ -1897,7 +1908,7 @@ body::after {
     flex: 1;
     margin: 0;
     font-weight: 600;
-    color: #ffffff;
+    color: #0f172a;
     font-size: 1rem;
     line-height: 1.5;
     min-width: 0;
@@ -1914,7 +1925,8 @@ body::after {
     display: flex;
     align-items: flex-start;
     gap: 10px;
-    background: rgba(255, 255, 255, 0.04);
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
     border-radius: 8px;
     padding: 8px 10px;
 }
@@ -1922,7 +1934,7 @@ body::after {
 .qa-answer-text {
     flex: 1;
     margin: 0;
-    color: #f1f5f9;
+    color: #1e293b;
     font-size: 0.95rem;
     line-height: 1.5;
     min-width: 0;
@@ -1931,8 +1943,8 @@ body::after {
 .qa-reply-btn {
     margin: 10px 0 0 34px;
     background: transparent;
-    border: 1px solid rgba(102, 126, 234, 0.4);
-    color: #a5b4fc;
+    border: 1px solid #c7d2fe;
+    color: #4f46e5;
     padding: 6px 12px;
     border-radius: 8px;
     cursor: pointer;
@@ -1942,7 +1954,7 @@ body::after {
 }
 
 .qa-reply-btn:hover {
-    background: rgba(102, 126, 234, 0.15);
+    background: #eef2ff;
 }
 
 .qa-answer-form {
@@ -1954,14 +1966,24 @@ body::after {
 
 .qa-answer-form textarea {
     width: 100%;
-    background: rgba(0, 0, 0, 0.25);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    color: #fff;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    color: #0f172a;
     border-radius: 8px;
     padding: 8px 10px;
     font-size: 0.9rem;
     font-family: inherit;
     resize: vertical;
+}
+
+.qa-answer-form textarea::placeholder {
+    color: #94a3b8;
+}
+
+.qa-answer-form textarea:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
 }
 
 .qa-answer-form-actions {
