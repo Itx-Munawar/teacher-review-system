@@ -61,15 +61,17 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Questions asked about a teacher (anonymous Q&A)
+-- NOTE: no FOREIGN KEY on teacher_id so the bootstrap works with any
+-- production teachers.id type (INT vs INT UNSIGNED); the app validates
+-- teacher existence before insert.
 CREATE TABLE IF NOT EXISTS questions (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    teacher_id INT UNSIGNED NOT NULL,
+    teacher_id INT NOT NULL,
     question TEXT NOT NULL,
     is_approved TINYINT(1) NOT NULL DEFAULT 1,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    KEY idx_questions_teacher (teacher_id, is_approved),
-    CONSTRAINT fk_questions_teacher FOREIGN KEY (teacher_id) REFERENCES teachers (id) ON DELETE CASCADE
+    KEY idx_questions_teacher (teacher_id, is_approved)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Answers submitted to a question (one question can have many answers)
@@ -80,6 +82,5 @@ CREATE TABLE IF NOT EXISTS question_answers (
     is_approved TINYINT(1) NOT NULL DEFAULT 1,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    KEY idx_answers_question (question_id),
-    CONSTRAINT fk_answers_question FOREIGN KEY (question_id) REFERENCES questions (id) ON DELETE CASCADE
+    KEY idx_answers_question (question_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

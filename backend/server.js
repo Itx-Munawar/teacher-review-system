@@ -187,13 +187,12 @@ const runSchemaBootstrap = async () => {
         await db.query(`
             CREATE TABLE IF NOT EXISTS questions (
                 id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-                teacher_id INT UNSIGNED NOT NULL,
+                teacher_id INT NOT NULL,
                 question TEXT NOT NULL,
                 is_approved TINYINT(1) NOT NULL DEFAULT 1,
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (id),
-                KEY idx_questions_teacher (teacher_id, is_approved),
-                CONSTRAINT fk_questions_teacher FOREIGN KEY (teacher_id) REFERENCES teachers (id) ON DELETE CASCADE
+                KEY idx_questions_teacher (teacher_id, is_approved)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         `);
         await db.query(`
@@ -204,8 +203,7 @@ const runSchemaBootstrap = async () => {
                 is_approved TINYINT(1) NOT NULL DEFAULT 1,
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (id),
-                KEY idx_answers_question (question_id),
-                CONSTRAINT fk_answers_question FOREIGN KEY (question_id) REFERENCES questions (id) ON DELETE CASCADE
+                KEY idx_answers_question (question_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         `);
         schemaBootstrapError = null;
@@ -318,6 +316,10 @@ app.get('/api/teachers/search', searchLimiter, async (req, res) => {
         }
 
         const term = searchTerm.trim();
+        // Per-word SOUNDEX: MySQL's SOUNDEX truncates to 4 chars over the whole
+        // string, so a multi-word name shifts the code. Compare first/last word
+        // of the name against first/last word of the query so "Muhamad" matches
+        // "Muhammad Ali".
         const [teachers] = await db.query(`
             SELECT t.*,
                    (SELECT COUNT(*) FROM reviews r WHERE r.teacher_id = t.id AND r.is_approved = 1) as review_count,
@@ -325,7 +327,8 @@ app.get('/api/teachers/search', searchLimiter, async (req, res) => {
                        WHEN t.name = ? THEN 0
                        WHEN t.name LIKE ? THEN 1
                        WHEN t.name LIKE ? THEN 2
-                       WHEN SOUNDEX(t.name) = SOUNDEX(?) THEN 3
+                       WHEN SOUNDEX(SUBSTRING_INDEX(t.name, ' ', 1)) = SOUNDEX(SUBSTRING_INDEX(?, ' ', 1)) THEN 3
+                       WHEN SOUNDEX(SUBSTRING_INDEX(t.name, ' ', -1)) = SOUNDEX(SUBSTRING_INDEX(?, ' ', -1)) THEN 3
                        WHEN t.department LIKE ? THEN 4
                        ELSE 5
                    END as match_rank
@@ -333,13 +336,14 @@ app.get('/api/teachers/search', searchLimiter, async (req, res) => {
             WHERE t.name = ?
                OR t.name LIKE ?
                OR t.name LIKE ?
-               OR SOUNDEX(t.name) = SOUNDEX(?)
+               OR SOUNDEX(SUBSTRING_INDEX(t.name, ' ', 1)) = SOUNDEX(SUBSTRING_INDEX(?, ' ', 1))
+               OR SOUNDEX(SUBSTRING_INDEX(t.name, ' ', -1)) = SOUNDEX(SUBSTRING_INDEX(?, ' ', -1))
                OR t.department LIKE ?
             ORDER BY match_rank, t.name
             ${limit > 0 ? 'LIMIT ?' : ''}
         `, [
-            term, `${term}%`, `%${term}%`, term, `%${term}%`,
-            term, `${term}%`, `%${term}%`, term, `%${term}%`,
+            term, `${term}%`, `%${term}%`, term, term, `%${term}%`,
+            term, `${term}%`, `%${term}%`, term, term, `%${term}%`,
             ...(limit > 0 ? [limit] : [])
         ]);
 
