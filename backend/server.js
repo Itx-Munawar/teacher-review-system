@@ -788,6 +788,56 @@ app.delete('/api/admin/reviews/:id', verifyAdmin, async (req, res) => {
     }
 });
 
+// GET /api/admin/questions - list questions (admin only)
+app.get('/api/admin/questions', verifyAdmin, async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+        const offset = (page - 1) * limit;
+
+        const [questions] = await db.query(`
+            SELECT q.*, t.name as teacher_name,
+                   (SELECT COUNT(*) FROM question_answers a WHERE a.question_id = q.id) as answer_count
+            FROM questions q
+            JOIN teachers t ON q.teacher_id = t.id
+            ORDER BY q.created_at DESC
+            LIMIT ${limit} OFFSET ${offset}
+        `);
+
+        const [countResult] = await db.query('SELECT COUNT(*) as total FROM questions');
+        const total = countResult[0].total;
+
+        res.json({
+            questions: questions,
+            pagination: {
+                page: page,
+                limit: limit,
+                total: total,
+                totalPages: Math.ceil(total / limit)
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching questions:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// DELETE /api/admin/questions/:id - delete a question and its answers (admin only)
+app.delete('/api/admin/questions/:id', verifyAdmin, async (req, res) => {
+    try {
+        const questionId = req.params.id;
+        await db.query('DELETE FROM question_answers WHERE question_id = ?', [questionId]);
+        const [result] = await db.query('DELETE FROM questions WHERE id = ?', [questionId]);
+        if (result.affectedRows === 0) return res.status(404).json({ error: 'Question not found' });
+        await createAuditLog(req.admin.id, 'DELETE_QUESTION', `Deleted question ID: ${questionId}`, req.ip);
+        invalidateCache('questions');
+        res.json({ success: true, message: 'Question deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting question:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
 app.get('/api/admin/stats', verifyAdmin, async (req, res) => {
     // ... (your existing stats code) ...
     try {

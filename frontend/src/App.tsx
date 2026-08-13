@@ -14,7 +14,10 @@ import {
     deleteTeacher,
     deleteReview,
     getAdminReviews,
-    submitReview
+    getAdminQuestions,
+    deleteQuestion,
+    submitReview,
+    type AdminQuestion
 } from './services/api';
 import { debounce } from './utils/debounce';
 import ParticleBackground from './components/ParticleBackground';
@@ -102,6 +105,12 @@ interface AdminPanelProps {
     adminLoadingMoreReviews: boolean;
     adminReviewsTotalPages: number;
     adminReviewsPage: number;
+    adminQuestions: AdminQuestion[];
+    onDeleteQuestion: (id: number) => void;
+    adminLoadingMoreQuestions: boolean;
+    adminQuestionsPage: number;
+    adminQuestionsTotalPages: number;
+    onLoadMoreQuestions: () => void;
 }
 
 const AdminPanel = memo(({
@@ -130,7 +139,13 @@ const AdminPanel = memo(({
     onLoadMoreReviews,
     adminLoadingMoreReviews,
     adminReviewsTotalPages,
-    adminReviewsPage
+    adminReviewsPage,
+    adminQuestions,
+    onDeleteQuestion,
+    adminLoadingMoreQuestions,
+    adminQuestionsPage,
+    adminQuestionsTotalPages,
+    onLoadMoreQuestions
 }: AdminPanelProps) => {
     const totalReviews = reviewsForModeration?.length || 0;
 
@@ -308,6 +323,40 @@ const AdminPanel = memo(({
                     </button>
                 )}
                 {adminLoadingMoreReviews && <div className="loading-more">Loading more reviews...</div>}
+            </div>
+
+            <div className="admin-section">
+                <h3>Manage Questions ({adminQuestions.length})</h3>
+                <div className="admin-list">
+                    {adminQuestions.length === 0 ? (
+                        <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>📭 No questions yet.</p>
+                    ) : (
+                        adminQuestions.map((question: AdminQuestion) => (
+                            <div key={question.id} className="admin-item">
+                                <div className="review-info">
+                                    <strong>{question.teacher_name}</strong>
+                                    <p style={{ marginTop: '8px', marginBottom: '5px' }}>"{question.question}"</p>
+                                    <small>
+                                        💬 {question.answer_count} answer{question.answer_count !== 1 ? 's' : ''} | 📅 {new Date(question.created_at).toLocaleDateString()}
+                                    </small>
+                                </div>
+                                <button
+                                    onClick={() => onDeleteQuestion(question.id)}
+                                    className="delete-btn"
+                                    disabled={adminLoadingMoreQuestions}
+                                >
+                                    Delete
+                                </button>
+                            </div>
+                        ))
+                    )}
+                </div>
+                {!adminLoadingMoreQuestions && adminQuestionsPage < adminQuestionsTotalPages && (
+                    <button onClick={onLoadMoreQuestions} className="load-more-btn" style={{ marginTop: '1rem', width: '100%' }}>
+                        Load More Questions
+                    </button>
+                )}
+                {adminLoadingMoreQuestions && <div className="loading-more">Loading more questions...</div>}
             </div>
         </div>
     );
@@ -537,11 +586,17 @@ const App: React.FC = () => {
     const [adminReviewsPage, setAdminReviewsPage] = useState(1);
     const [adminReviewsTotalPages, setAdminReviewsTotalPages] = useState(1);
     const [adminLoadingMoreReviews, setAdminLoadingMoreReviews] = useState(false);
+    const [adminQuestions, setAdminQuestions] = useState<AdminQuestion[]>([]);
+    const [adminQuestionsPage, setAdminQuestionsPage] = useState(1);
+    const [adminQuestionsTotalPages, setAdminQuestionsTotalPages] = useState(1);
+    const [adminLoadingMoreQuestions, setAdminLoadingMoreQuestions] = useState(false);
 
-    const loadAdminData = useCallback(async (page: number = 1, append: boolean = false) => {
+    const loadAdminData = useCallback(async () => {
         try {
-            if (page > 1) setAdminLoadingMoreReviews(true);
-            const reviewsRes = await getAdminReviews(page, 50);
+            const [reviewsRes, questionsRes] = await Promise.all([
+                getAdminReviews(1, 50),
+                getAdminQuestions(1, 50)
+            ]);
             let reviewsData: AdminReview[] = [];
             let totalPages = 1;
             if (reviewsRes.data) {
@@ -554,22 +609,58 @@ const App: React.FC = () => {
                     reviewsData = reviewsRes.data.data;
                 }
             }
+            let questionsData: AdminQuestion[] = [];
+            let questionsTotalPages = 1;
+            if (questionsRes.data?.questions) {
+                questionsData = questionsRes.data.questions;
+                questionsTotalPages = questionsRes.data.pagination?.totalPages || 1;
+            }
             setAdminReviewsTotalPages(totalPages);
-            setReviewsForModeration(prev => (append ? [...prev, ...reviewsData] : reviewsData));
-            setAdminReviewsPage(page);
+            setAdminQuestionsTotalPages(questionsTotalPages);
+            setReviewsForModeration(reviewsData);
+            setAdminQuestions(questionsData);
+            setAdminReviewsPage(1);
+            setAdminQuestionsPage(1);
         } catch (error) {
             console.error('Error loading admin data:', error);
-            if (!append) setReviewsForModeration([]);
-        } finally {
-            setAdminLoadingMoreReviews(false);
+            setReviewsForModeration([]);
+            setAdminQuestions([]);
         }
     }, []);
 
-    const handleLoadMoreReviews = useCallback(() => {
-        if (adminReviewsPage < adminReviewsTotalPages && !adminLoadingMoreReviews) {
-            loadAdminData(adminReviewsPage + 1, true);
+    const handleLoadMoreReviews = useCallback(async () => {
+        const nextPage = adminReviewsPage + 1;
+        if (nextPage > adminReviewsTotalPages || adminLoadingMoreReviews) return;
+        setAdminLoadingMoreReviews(true);
+        try {
+            const reviewsRes = await getAdminReviews(nextPage, 50);
+            const reviewsData = reviewsRes.data?.reviews || [];
+            setReviewsForModeration(prev => [...prev, ...reviewsData]);
+            setAdminReviewsPage(nextPage);
+        } catch (error) {
+            console.error('Error loading more reviews:', error);
+            showToast('Failed to load more reviews', 'error');
+        } finally {
+            setAdminLoadingMoreReviews(false);
         }
-    }, [adminReviewsPage, adminReviewsTotalPages, adminLoadingMoreReviews, loadAdminData]);
+    }, [adminReviewsPage, adminReviewsTotalPages, adminLoadingMoreReviews, showToast]);
+
+    const handleLoadMoreQuestions = useCallback(async () => {
+        const nextPage = adminQuestionsPage + 1;
+        if (nextPage > adminQuestionsTotalPages || adminLoadingMoreQuestions) return;
+        setAdminLoadingMoreQuestions(true);
+        try {
+            const questionsRes = await getAdminQuestions(nextPage, 50);
+            const questionsData = questionsRes.data?.questions || [];
+            setAdminQuestions(prev => [...prev, ...questionsData]);
+            setAdminQuestionsPage(nextPage);
+        } catch (error) {
+            console.error('Error loading more questions:', error);
+            showToast('Failed to load more questions', 'error');
+        } finally {
+            setAdminLoadingMoreQuestions(false);
+        }
+    }, [adminQuestionsPage, adminQuestionsTotalPages, adminLoadingMoreQuestions, showToast]);
 
     // Effects
     useEffect(() => {
@@ -865,6 +956,31 @@ const App: React.FC = () => {
         }
     }, [selectedTeacher, loadAdminData, showToast]);
 
+    const handleDeleteQuestion = useCallback(async (id: number) => {
+        if (window.confirm('Are you sure you want to delete this question and all its answers?')) {
+            try {
+                await deleteQuestion(id);
+                showToast('Question deleted successfully!', 'success');
+                await loadAdminData();
+                if (selectedTeacher) {
+                    const response = await getTeacherDetail(selectedTeacher.id);
+                    const data = response.data;
+                    setSelectedTeacher({
+                        id: data.id || selectedTeacher.id,
+                        name: data.name || data.teacher?.name || selectedTeacher.name,
+                        department: data.department || data.teacher?.department || selectedTeacher.department,
+                        review_count: data.review_count || data.total_reviews || 0,
+                        total_reviews: data.total_reviews || 0,
+                        image_url: data.image_url || data.teacher?.image_url || null,
+                        reviews: data.reviews || [],
+                    });
+                }
+            } catch (error) {
+                showToast('Failed to delete question', 'error');
+            }
+        }
+    }, [selectedTeacher, loadAdminData, showToast]);
+
     const handleSubmitReview = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedTeacher) {
@@ -1033,6 +1149,12 @@ const App: React.FC = () => {
                         adminLoadingMoreReviews={adminLoadingMoreReviews}
                         adminReviewsTotalPages={adminReviewsTotalPages}
                         adminReviewsPage={adminReviewsPage}
+                        adminQuestions={adminQuestions}
+                        onDeleteQuestion={handleDeleteQuestion}
+                        adminLoadingMoreQuestions={adminLoadingMoreQuestions}
+                        adminQuestionsPage={adminQuestionsPage}
+                        adminQuestionsTotalPages={adminQuestionsTotalPages}
+                        onLoadMoreQuestions={handleLoadMoreQuestions}
                     />
                 </div>
             </div>

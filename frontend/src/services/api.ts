@@ -128,6 +128,23 @@ export const deleteReview = (id: number) => {
     return api.delete(`/admin/reviews/${id}`);
 };
 
+export interface AdminQuestion {
+    id: number;
+    teacher_id: number;
+    teacher_name: string;
+    question: string;
+    answer_count: number;
+    created_at: string;
+}
+
+export const getAdminQuestions = (page: number = 1, limit: number = 50) => {
+    return api.get(`/admin/questions?page=${page}&limit=${limit}`);
+};
+
+export const deleteQuestion = (id: number) => {
+    return api.delete(`/admin/questions/${id}`);
+};
+
 export const getAdminStats = () => {
     return api.get('/admin/stats');
 };
