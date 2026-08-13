@@ -27,7 +27,13 @@ body {
     background-size: 400% 400%;
     animation: gradientShift 20s ease infinite;
     min-height: 100vh;
+    min-height: 100dvh;
     overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    overscroll-behavior-y: contain;
+    touch-action: manipulation;
 }
 
 /* Colorful floating blobs */
@@ -1376,7 +1382,7 @@ body::after {
 
     .header .admin-login-btn,
     .header .back-to-site-btn {
-        padding: 6px 16px;
+        padding: 8px 16px;
         font-size: 0.85rem;
     }
 
@@ -1423,8 +1429,8 @@ body::after {
     }
 
     .search-input {
-        padding: 10px 14px;
-        font-size: 0.9rem;
+        padding: 12px 14px;
+        font-size: 16px;
     }
 
     .main-content {
@@ -1441,7 +1447,7 @@ body::after {
 
     .btn-write-review {
         width: 100%;
-        padding: 10px 16px;
+        padding: 12px 16px;
         font-size: 0.9rem;
     }
 
@@ -1475,7 +1481,7 @@ body::after {
 
     .load-more-btn {
         width: 100%;
-        padding: 10px;
+        padding: 12px;
         font-size: 0.9rem;
     }
 
@@ -1503,6 +1509,7 @@ body::after {
 
     .admin-item .delete-btn {
         margin-left: 0;
+        width: 100%;
     }
 
     .add-teacher-form {
@@ -1530,6 +1537,20 @@ body::after {
     .login-form {
         padding: 1.5rem;
         margin: 1rem;
+    }
+
+    .login-form h2 {
+        font-size: 1.35rem;
+    }
+
+    .login-form input {
+        padding: 14px 16px;
+        font-size: 16px;
+    }
+
+    .login-form button {
+        padding: 14px;
+        min-height: 48px;
     }
 
     .back-button {
@@ -1581,6 +1602,343 @@ body::after {
 
     .header h1 {
         font-size: 1.2rem;
+    }
+}
+
+/* ========== MOBILE UX ENHANCEMENTS ========== */
+/* Larger touch targets + compact spacing tuned for phones */
+
+@media (max-width: 600px) {
+    /* Header: keep logo small, tighten the hero row */
+    .header {
+        padding: 0.75rem 0.75rem 0.9rem;
+    }
+
+    .header img {
+        height: 44px !important;
+    }
+
+    .header h1 {
+        font-size: 1.3rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .header p {
+        font-size: 0.85rem;
+        margin-bottom: 0.6rem;
+        padding: 0 0.5rem;
+    }
+
+    .header .admin-login-btn,
+    .header .back-to-site-btn {
+        padding: 10px 16px;
+        font-size: 0.85rem;
+        min-height: 42px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Container */
+    .container {
+        padding: 0.5rem;
+        gap: 0.75rem;
+    }
+
+    /* Sidebar */
+    .sidebar {
+        padding: 0.75rem;
+    }
+
+    /* Sticky search so it stays reachable while scrolling the list */
+    .sidebar .search-box {
+        position: sticky;
+        top: 0;
+        z-index: 30;
+        background: var(--glass);
+        border-radius: var(--radius-md);
+        padding: 0.5rem;
+        margin: -0.5rem -0.5rem 0.5rem;
+    }
+
+    /* Filter selects: full-width, comfortable tap area */
+    .filter-bar {
+        gap: 0.5rem;
+    }
+
+    .filter-select {
+        padding: 0.7rem 0.75rem;
+        font-size: 0.95rem;
+        min-height: 46px;
+    }
+
+    /* Teacher cards */
+    .teacher-card {
+        border-radius: 14px;
+    }
+
+    /* Main content */
+    .main-content {
+        padding: 0.9rem;
+        border-radius: 18px;
+    }
+
+    /* Teacher detail */
+    .teacher-detail {
+        padding-top: 0;
+    }
+
+    .teacher-name-heading {
+        font-size: 1.6rem;
+    }
+
+    .teacher-department {
+        font-size: 0.95rem;
+    }
+
+    .back-button {
+        width: 100%;
+        justify-content: center;
+        padding: 12px;
+        font-size: 0.9rem;
+    }
+
+    .teacher-detail-image {
+        width: 96px;
+        height: 96px;
+    }
+
+    /* Reviews */
+    .review-card {
+        padding: 0.85rem 0.9rem 0.85rem 1.1rem;
+    }
+
+    .reviews-section h3 {
+        font-size: 1.25rem;
+    }
+
+    /* Forms */
+    .form-group select,
+    .form-group input,
+    .form-group textarea {
+        padding: 12px 14px;
+        font-size: 16px;
+    }
+
+    /* Q&A */
+    .qa-item {
+        padding: 0.9rem;
+    }
+
+    .qa-answers {
+        margin-left: 0;
+    }
+
+    .qa-answer {
+        padding: 0.7rem;
+    }
+
+    .qa-reply-btn,
+    .qa-answer-form {
+        margin-left: 0;
+    }
+
+    .qa-ask-btn {
+        padding: 10px 14px;
+        min-height: 42px;
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .qa-landscape-input,
+    .qa-answer-form textarea {
+        font-size: 16px;
+        padding: 12px 14px;
+    }
+
+    .qa-header h3 {
+        font-size: 1.15rem;
+    }
+
+    /* Autocomplete dropdown: fill the viewport width nicely */
+    .autocomplete-dropdown {
+        max-height: 45vh;
+        font-size: 0.95rem;
+    }
+
+    .autocomplete-item {
+        padding: 11px 10px;
+        min-height: 48px;
+    }
+
+    /* Related teachers + department chips: scroll horizontally instead of wrapping */
+    .related-teachers-list {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-bottom: 0.5rem;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .related-teacher-card {
+        flex-shrink: 0;
+    }
+
+    /* Modal: bottom sheet on phones */
+    .modal-overlay {
+        align-items: flex-end;
+    }
+
+    .modal-content {
+        width: 100%;
+        max-width: none;
+        border-radius: 22px 22px 0 0;
+        padding: 1.5rem 1.25rem calc(1.5rem + env(safe-area-inset-bottom, 0px));
+        max-height: 82vh;
+        overflow-y: auto;
+        animation: fadeInUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    .modal-content h3 {
+        font-size: 1.4rem;
+    }
+
+    .modal-close-btn {
+        width: 100%;
+        min-height: 48px;
+    }
+
+    /* Toast: top banner, full width */
+    .toast-container {
+        top: calc(12px + env(safe-area-inset-top, 0px));
+        right: 12px;
+        left: 12px;
+        max-width: none;
+    }
+
+    .toast {
+        padding: 14px 18px;
+        font-size: 0.9rem;
+        border-radius: 14px;
+    }
+
+    /* Install prompt: bottom full-width sheet with safe area */
+    .install-prompt {
+        left: 8px;
+        right: 8px;
+        width: auto;
+        bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+        transform: none;
+    }
+
+    .install-prompt-content {
+        padding: 12px 14px;
+        gap: 10px;
+    }
+
+    .install-prompt-btn {
+        flex: 1;
+        min-height: 44px;
+    }
+
+    /* Admin panel */
+    .admin-panel {
+        padding: 0.75rem;
+        border-radius: 18px;
+    }
+
+    .admin-header h2 {
+        font-size: 1.35rem;
+    }
+
+    .admin-stats span {
+        font-size: 0.8rem;
+        padding: 8px 12px;
+    }
+
+    .logout-btn,
+    .add-teacher-btn {
+        width: 100%;
+        min-height: 46px;
+    }
+
+    .admin-item {
+        padding: 0.85rem;
+        border-radius: 12px;
+    }
+
+    .admin-item .delete-btn,
+    .admin-item .edit-btn {
+        width: 100%;
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0.25rem 0 0;
+    }
+
+    /* Welcome message */
+    .welcome-message {
+        padding: 1.2rem 0.75rem;
+    }
+
+    .welcome-message h2 {
+        font-size: 1.25rem;
+    }
+
+    .welcome-message p {
+        font-size: 0.85rem;
+    }
+
+    /* Department chips */
+    .department-links-list {
+        max-height: 180px;
+    }
+
+    .department-link-chip {
+        padding: 8px 14px;
+        font-size: 0.85rem;
+    }
+
+    /* Footer */
+    .app-footer {
+        padding: 1rem 0.75rem calc(1rem + env(safe-area-inset-bottom, 0px));
+        font-size: 0.8rem;
+    }
+
+    .footer-links a {
+        display: inline-block;
+        padding: 0.3rem;
+    }
+
+    /* Legal pages */
+    .legal-page {
+        padding: 1rem 0.75rem calc(1.5rem + env(safe-area-inset-bottom, 0px));
+    }
+
+    .legal-container {
+        padding: 1.2rem;
+    }
+
+    /* Contact / about modal lists */
+    .modal-content li {
+        font-size: 0.9rem;
+    }
+}
+
+/* Tablet portrait refinements */
+@media (min-width: 601px) and (max-width: 900px) {
+    .container {
+        gap: 1.25rem;
+        padding: 1.25rem;
+    }
+
+    .sidebar {
+        min-width: 260px;
+        max-width: 320px;
+    }
+
+    .main-content {
+        padding: 1.5rem;
     }
 }
 
