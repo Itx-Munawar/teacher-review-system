@@ -592,13 +592,15 @@ const App: React.FC = () => {
     const [adminLoadingMoreQuestions, setAdminLoadingMoreQuestions] = useState(false);
 
     const loadAdminData = useCallback(async () => {
-        try {
-            const [reviewsRes, questionsRes] = await Promise.all([
-                getAdminReviews(1, 50),
-                getAdminQuestions(1, 50)
-            ]);
-            let reviewsData: AdminReview[] = [];
-            let totalPages = 1;
+        const [reviewsResult, questionsResult] = await Promise.allSettled([
+            getAdminReviews(1, 50),
+            getAdminQuestions(1, 50)
+        ]);
+
+        let reviewsData: AdminReview[] = [];
+        let totalPages = 1;
+        if (reviewsResult.status === 'fulfilled') {
+            const reviewsRes = reviewsResult.value;
             if (reviewsRes.data) {
                 if (Array.isArray(reviewsRes.data)) {
                     reviewsData = reviewsRes.data;
@@ -609,23 +611,28 @@ const App: React.FC = () => {
                     reviewsData = reviewsRes.data.data;
                 }
             }
-            let questionsData: AdminQuestion[] = [];
-            let questionsTotalPages = 1;
+        } else {
+            console.error('Error loading admin reviews:', reviewsResult.reason);
+        }
+
+        let questionsData: AdminQuestion[] = [];
+        let questionsTotalPages = 1;
+        if (questionsResult.status === 'fulfilled') {
+            const questionsRes = questionsResult.value;
             if (questionsRes.data?.questions) {
                 questionsData = questionsRes.data.questions;
                 questionsTotalPages = questionsRes.data.pagination?.totalPages || 1;
             }
-            setAdminReviewsTotalPages(totalPages);
-            setAdminQuestionsTotalPages(questionsTotalPages);
-            setReviewsForModeration(reviewsData);
-            setAdminQuestions(questionsData);
-            setAdminReviewsPage(1);
-            setAdminQuestionsPage(1);
-        } catch (error) {
-            console.error('Error loading admin data:', error);
-            setReviewsForModeration([]);
-            setAdminQuestions([]);
+        } else {
+            console.error('Error loading admin questions:', questionsResult.reason);
         }
+
+        setAdminReviewsTotalPages(totalPages);
+        setAdminQuestionsTotalPages(questionsTotalPages);
+        setReviewsForModeration(reviewsData);
+        setAdminQuestions(questionsData);
+        setAdminReviewsPage(1);
+        setAdminQuestionsPage(1);
     }, []);
 
     const handleLoadMoreReviews = useCallback(async () => {
