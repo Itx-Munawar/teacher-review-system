@@ -274,6 +274,7 @@ body::after {
 }
 
 .teacher-card {
+    position: relative;
     background: var(--glass-strong);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
@@ -1222,6 +1223,318 @@ body::after {
 .related-teacher-card:hover {
     border-color: #667eea;
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.25);
+}
+
+/* ========== TEACHER COMPARISON ========== */
+.compare-toggle-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid rgba(102, 126, 234, 0.4);
+    background: rgba(255, 255, 255, 0.9);
+    color: #667eea;
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(49, 46, 129, 0.15);
+    z-index: 3;
+}
+
+.compare-check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+}
+
+.compare-toggle-btn:hover {
+    transform: scale(1.12);
+    border-color: #667eea;
+}
+
+.compare-toggle-btn-active {
+    background: linear-gradient(120deg, #667eea, #764ba2);
+    border-color: transparent;
+    color: #fff;
+}
+
+/* Floating compare bar */
+.compare-bar {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 150;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+    background: linear-gradient(120deg, #312e81, #4c1d95);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 16px;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.4);
+    padding: 10px 16px;
+    max-width: min(94vw, 560px);
+}
+
+.compare-bar-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.compare-bar-count {
+    color: #e0e7ff;
+    font-size: 0.75rem;
+    font-weight: 600;
+    opacity: 0.85;
+}
+
+.compare-bar-names {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.compare-bar-name {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.compare-bar-name:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.compare-bar-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.compare-clear-btn {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    color: #e0e7ff;
+    padding: 8px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: all 0.15s ease;
+}
+
+.compare-clear-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.compare-go-btn {
+    background: linear-gradient(120deg, #667eea, #764ba2);
+    color: #fff;
+    border: none;
+    padding: 8px 18px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 700;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    box-shadow: 0 4px 14px rgba(102, 126, 234, 0.4);
+}
+
+.compare-go-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 22px rgba(102, 126, 234, 0.55);
+}
+
+.compare-go-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Compare view */
+.compare-view {
+    text-align: center;
+}
+
+.compare-view-header {
+    position: relative;
+    padding-top: 10px;
+    margin-bottom: 1.5rem;
+}
+
+.compare-view-header .back-button {
+    top: 0;
+}
+
+.compare-title {
+    font-size: 1.9rem;
+    margin: 0;
+}
+
+.compare-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.2rem;
+    margin-top: 0.5rem;
+}
+
+.compare-card {
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    border-radius: var(--radius-md);
+    padding: 1.2rem;
+    text-align: center;
+    box-shadow: 0 8px 25px rgba(120, 70, 200, 0.12);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.compare-card-image {
+    width: 84px;
+    height: 84px;
+    border-radius: 50%;
+    object-fit: cover;
+    padding: 3px;
+    background: linear-gradient(135deg, #ff5e9c, #a855f7, #00c9ff);
+    box-shadow: 0 6px 18px rgba(168, 85, 247, 0.35);
+}
+
+.compare-card-name {
+    font-size: 1.15rem;
+    color: #1e1b4b;
+    font-weight: 800;
+    margin: 0.25rem 0 0;
+}
+
+.compare-card-dept {
+    color: #7c3aed;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.compare-card-count {
+    font-size: 0.78rem;
+    color: #6b7280;
+}
+
+.compare-card-reviews {
+    width: 100%;
+    margin-top: 0.75rem;
+    text-align: left;
+    flex: 1;
+}
+
+.compare-card-reviews h3 {
+    font-size: 0.95rem;
+    color: #1e1b4b;
+    margin-bottom: 0.5rem;
+    text-align: center;
+}
+
+.compare-no-reviews {
+    color: #9ca3af;
+    font-size: 0.85rem;
+    text-align: center;
+}
+
+.compare-review {
+    background: rgba(102, 126, 234, 0.07);
+    border-left: 3px solid #667eea;
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+}
+
+.compare-review-text {
+    color: #374151;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    font-style: italic;
+    margin: 0;
+}
+
+.compare-review-author {
+    color: #6b7280;
+    font-size: 0.75rem;
+}
+
+.compare-more-reviews {
+    color: #667eea;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-align: center;
+}
+
+.compare-view-btn {
+    margin-top: auto;
+    width: 100%;
+    background: linear-gradient(120deg, #ff5e9c, #a855f7);
+    color: #fff;
+    border: none;
+    padding: 10px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 700;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    box-shadow: 0 4px 14px rgba(255, 94, 156, 0.35);
+}
+
+.compare-view-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 22px rgba(255, 94, 156, 0.5);
+}
+
+.compare-hint {
+    color: #6b7280;
+    font-size: 0.85rem;
+    margin-top: 1.5rem;
+}
+
+@media (max-width: 600px) {
+    .compare-bar {
+        left: 8px;
+        right: 8px;
+        transform: none;
+        width: auto;
+        bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .compare-title {
+        font-size: 1.5rem;
+    }
+
+    .compare-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .compare-card {
+        padding: 1rem;
+    }
+
+    .compare-view-header .back-button {
+        position: static;
+        width: 100%;
+        margin-bottom: 0.75rem;
+        justify-content: center;
+    }
 }
 
 .related-teacher-name {

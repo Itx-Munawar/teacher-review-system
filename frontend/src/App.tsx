@@ -431,6 +431,10 @@ const App: React.FC = () => {
 
     const [selectedTeacher, setSelectedTeacher] = useState<TeacherDetail | null>(null);
     const [relatedTeachers, setRelatedTeachers] = useState<Teacher[]>([]);
+    const [compareList, setCompareList] = useState<Teacher[]>([]);
+    const [isComparing, setIsComparing] = useState(false);
+    const [compareDetails, setCompareDetails] = useState<TeacherDetail[]>([]);
+    const [compareLoading, setCompareLoading] = useState(false);
     const [showReviewForm, setShowReviewForm] = useState(false);
     const [reviewComment, setReviewComment] = useState('');
     const [reviewUserName, setReviewUserName] = useState('');
@@ -1088,6 +1092,66 @@ const App: React.FC = () => {
         navigate('/');
     };
 
+    // ========== TEACHER COMPARISON ==========
+    const toggleCompare = useCallback((teacher: Teacher) => {
+        setCompareList(prev => {
+            const exists = prev.some(t => t.id === teacher.id);
+            if (exists) return prev.filter(t => t.id !== teacher.id);
+            if (prev.length >= 3) {
+                showToast('You can compare up to 3 teachers at once', 'info');
+                return prev;
+            }
+            return [...prev, teacher];
+        });
+    }, [showToast]);
+
+    const clearCompare = useCallback(() => {
+        setCompareList([]);
+        setCompareDetails([]);
+        setIsComparing(false);
+    }, []);
+
+    const runCompare = useCallback(async () => {
+        if (compareList.length < 2) {
+            showToast('Select at least 2 teachers to compare', 'info');
+            return;
+        }
+        setCompareLoading(true);
+        try {
+            const results = await Promise.all(compareList.map(t => getTeacherDetail(t.id)));
+            const details: TeacherDetail[] = results.map((res, i) => {
+                const data = res.data;
+                const teacherInfo = data.teacher || data;
+                const reviewsList = data.reviews || [];
+                const totalReviews = data.total_reviews || 0;
+                return {
+                    id: teacherInfo.id,
+                    name: teacherInfo.name,
+                    department: teacherInfo.department,
+                    review_count: totalReviews,
+                    total_reviews: totalReviews,
+                    image_url: teacherInfo.image_url || null,
+                    reviews: reviewsList,
+                };
+            });
+            setCompareDetails(details);
+            setIsComparing(true);
+            setSelectedTeacher(null);
+            navigate('/');
+            // Auto-scroll to compare view on mobile
+            if (window.innerWidth <= 768 && mainContentRef.current) {
+                setTimeout(() => {
+                    mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 150);
+            }
+        } catch (error) {
+            console.error('Error loading compare data:', error);
+            showToast('Failed to load comparison data', 'error');
+        } finally {
+            setCompareLoading(false);
+        }
+    }, [compareList, navigate, showToast]);
+
     const displayTeachers = isSearching ? searchResults : teachers;
 
     const loadMore = useCallback(() => {
@@ -1297,6 +1361,17 @@ const App: React.FC = () => {
                                                 <p className="department">{teacher.department}</p>
                                                 <span className="reviews-count">({teacher.review_count} reviews)</span>
                                             </div>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    toggleCompare(teacher);
+                                                }}
+                                                className={`compare-toggle-btn ${compareList.some(t => t.id === teacher.id) ? 'compare-toggle-btn-active' : ''}`}
+                                                aria-label={`Compare ${teacher.name}`}
+                                                title="Add to comparison"
+                                            >
+                                                <span className="compare-check">{compareList.some(t => t.id === teacher.id) ? '✓' : '+'}</span>
+                                            </button>
                                         </TiltCard>
                                     </div>
                                 ))}
@@ -1317,7 +1392,60 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="main-content" ref={mainContentRef}>
-                    {selectedTeacher ? (
+                    {isComparing && compareDetails.length > 0 ? (
+                        <div className="compare-view">
+                            <div className="compare-view-header">
+                                <button onClick={() => setIsComparing(false)} className="back-button">
+                                    ← Back to list
+                                </button>
+                                <h1 className="gradient-text compare-title">⚖️ Compare Teachers</h1>
+                            </div>
+
+                            <div className="compare-grid">
+                                {compareDetails.map((t) => (
+                                    <div key={t.id} className="compare-card">
+                                        {t.image_url && (
+                                            <img src={t.image_url} alt={t.name} className="compare-card-image" loading="lazy" />
+                                        )}
+                                        <h2 className="compare-card-name">{t.name}</h2>
+                                        <p className="compare-card-dept">{t.department}</p>
+                                        <span className="compare-card-count">{t.review_count} reviews</span>
+
+                                        <div className="compare-card-reviews">
+                                            <h3>📝 Reviews</h3>
+                                            {!t.reviews || t.reviews.length === 0 ? (
+                                                <p className="compare-no-reviews">No reviews yet.</p>
+                                            ) : (
+                                                t.reviews.slice(0, 2).map((review) => (
+                                                    <div key={review.id} className="compare-review">
+                                                        <p className="compare-review-text">"{review.comment}"</p>
+                                                        <span className="compare-review-author">— {review.user_name || 'Anonymous'}</span>
+                                                    </div>
+                                                ))
+                                            )}
+                                            {t.reviews && t.reviews.length > 2 && (
+                                                <p className="compare-more-reviews">+{t.reviews.length - 2} more review{t.reviews.length - 2 !== 1 ? 's' : ''}</p>
+                                            )}
+                                        </div>
+
+                                        <button
+                                            onClick={() => {
+                                                setIsComparing(false);
+                                                handleTeacherClick({ ...t } as Teacher);
+                                            }}
+                                            className="compare-view-btn"
+                                        >
+                                            View Full Profile →
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {compareDetails.length < 3 && (
+                                <p className="compare-hint">Tip: add up to 3 teachers with the "+" button on any card.</p>
+                            )}
+                        </div>
+                    ) : selectedTeacher ? (
                         <div className="teacher-detail">
                             <button onClick={clearSelectedTeacher} className="back-button">
                                 ← Back to list
@@ -1474,6 +1602,26 @@ const App: React.FC = () => {
                         <p>If you have any questions, need help, or want to give feedback, please send an email to:</p>
                         <p><strong>umt.teacher.reviews@gmail.com</strong></p>
                         <button onClick={() => setShowContactModal(false)} className="modal-close-btn">Close</button>
+                    </div>
+                </div>
+            )}
+            {compareList.length > 0 && !isComparing && (
+                <div className="compare-bar">
+                    <div className="compare-bar-info">
+                        <span className="compare-bar-count">{compareList.length}/3 selected</span>
+                        <div className="compare-bar-names">
+                            {compareList.map((t) => (
+                                <span key={t.id} className="compare-bar-name" onClick={() => toggleCompare(t)} title="Remove">
+                                    {t.name} ✕
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="compare-bar-actions">
+                        <button onClick={clearCompare} className="compare-clear-btn">Clear</button>
+                        <button onClick={runCompare} disabled={compareList.length < 2 || compareLoading} className="compare-go-btn">
+                            {compareLoading ? <><span className="spinner-small"></span> Loading...</> : 'Compare'}
+                        </button>
                     </div>
                 </div>
             )}
