@@ -1554,7 +1554,8 @@ const App: React.FC = () => {
                     ) : (
                         <div className="welcome-message">
                             <h2 className="gradient-text">Welcome to Teacher Reviews</h2>
-                            <p>👈 Select a teacher from the left to read reviews or submit your own.</p>
+                            <p className="welcome-hint-desktop">👈 Select a teacher from the left to read reviews or submit your own.</p>
+                            <p className="welcome-hint-mobile">👆 Select a teacher from the list above to read reviews or submit your own.</p>
                             {departments.length > 0 && (
                                 <div className="department-links">
                                     <h3>Browse by Department</h3>

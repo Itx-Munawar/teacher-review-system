@@ -79,6 +79,7 @@ body::after {
 
 .app {
     min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     flex-direction: column;
     position: relative;
@@ -554,6 +555,14 @@ body::after {
     opacity: 0.9;
 }
 
+.welcome-hint-desktop {
+    display: block;
+}
+
+.welcome-hint-mobile {
+    display: none;
+}
+
 /* Login Form */
 .login-form-container {
     display: flex;
@@ -961,6 +970,7 @@ body::after {
 
 .teacher-card-info {
     flex: 1;
+    padding-right: 32px;
 }
 
 .teacher-detail-image {
@@ -1230,8 +1240,8 @@ body::after {
     position: absolute;
     top: 8px;
     right: 8px;
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     border: 2px solid rgba(102, 126, 234, 0.4);
     background: rgba(255, 255, 255, 0.9);
@@ -1968,7 +1978,8 @@ body::after {
         position: sticky;
         top: 0;
         z-index: 30;
-        background: var(--glass);
+        background: rgba(255, 255, 255, 0.97);
+        border: 1px solid var(--glass-border);
         border-radius: var(--radius-md);
         padding: 0.5rem;
         margin: -0.5rem -0.5rem 0.5rem;
@@ -1981,7 +1992,7 @@ body::after {
 
     .filter-select {
         padding: 0.7rem 0.75rem;
-        font-size: 0.95rem;
+        font-size: 16px;
         min-height: 46px;
     }
 
@@ -1990,10 +2001,23 @@ body::after {
         border-radius: 14px;
     }
 
+    .teacher-card .compare-toggle-btn {
+        width: 40px;
+        height: 40px;
+        top: 8px;
+        right: 8px;
+        font-size: 1.15rem;
+    }
+
+    .teacher-card-info {
+        padding-right: 40px;
+    }
+
     /* Main content */
     .main-content {
         padding: 0.9rem;
         border-radius: 18px;
+        min-height: 60vh;
     }
 
     /* Teacher detail */
@@ -2019,6 +2043,16 @@ body::after {
     .teacher-detail-image {
         width: 96px;
         height: 96px;
+    }
+
+    .share-btn {
+        width: 100%;
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.9rem;
+        padding: 0.65rem 1.1rem;
     }
 
     /* Reviews */
@@ -2061,6 +2095,16 @@ body::after {
         min-height: 42px;
         display: inline-flex;
         align-items: center;
+    }
+
+    .qa-reply-btn {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        margin-left: 0;
+        margin-right: 0;
     }
 
     .qa-landscape-input,
@@ -2200,6 +2244,14 @@ body::after {
 
     .welcome-message p {
         font-size: 0.85rem;
+    }
+
+    .welcome-hint-desktop {
+        display: none;
+    }
+
+    .welcome-hint-mobile {
+        display: block;
     }
 
     /* Department chips */
