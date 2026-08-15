@@ -26,6 +26,7 @@ import LazySection from './components/LazySection';
 import TeacherAutocomplete from './components/TeacherAutocomplete';
 import QASection from './components/QASection';
 import InstallPrompt from './components/InstallPrompt';
+import PullToRefresh from './components/PullToRefresh';
 import './App.css';
 
 // ========== INTERFACES ==========
@@ -458,9 +459,11 @@ const App: React.FC = () => {
 
     const mainContentRef = useRef<HTMLDivElement>(null);
     const logoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const listScrollPosRef = useRef(0);
 
     const [showAboutModal, setShowAboutModal] = useState(false);
     const [showContactModal, setShowContactModal] = useState(false);
+    const [showMobileMenu, setShowMobileMenu] = useState(false);
 
     const [adminSearchTerm, setAdminSearchTerm] = useState('');
     const [adminSearchResults, setAdminSearchResults] = useState<Teacher[]>([]);
@@ -520,6 +523,9 @@ const App: React.FC = () => {
             if (res.data && Array.isArray(res.data)) setDepartments(res.data);
         }).catch(() => { /* ignore */ });
     }, []);
+
+    // Pull-to-refresh reloads the teacher list from page 1
+    const handlePullRefresh = useCallback(() => loadTeachers(1), [loadTeachers]);
 
     // ========== SEARCH (AUTOCOMPLETE ONLY) ==========
     // The old behavior replaced the sidebar list while typing; that duplicated
@@ -1073,6 +1079,7 @@ const App: React.FC = () => {
 
             // Auto-scroll on mobile
             if (window.innerWidth <= 768 && mainContentRef.current) {
+                listScrollPosRef.current = window.scrollY;
                 setTimeout(() => {
                     mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }, 100);
@@ -1085,12 +1092,32 @@ const App: React.FC = () => {
         }
     }, [navigate, showToast]);
 
+    const restoreListScroll = useCallback(() => {
+        if (window.innerWidth > 768) return;
+        const pos = listScrollPosRef.current;
+        setTimeout(() => {
+            window.scrollTo({ top: pos, behavior: 'auto' });
+        }, 60);
+    }, []);
+
     const clearSelectedTeacher = () => {
         setSelectedTeacher(null);
         setShowReviewForm(false);
         setReviewSuccess('');
         navigate('/');
+        restoreListScroll();
     };
+
+    // Clear the selected teacher when leaving the /teacher/:id view (e.g. browser back)
+    useEffect(() => {
+        if (!teacherIdParam && selectedTeacher && !isComparing) {
+            setSelectedTeacher(null);
+            setShowReviewForm(false);
+            setReviewSuccess('');
+            restoreListScroll();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [teacherIdParam]);
 
     // ========== TEACHER COMPARISON ==========
     const toggleCompare = useCallback((teacher: Teacher) => {
@@ -1140,6 +1167,7 @@ const App: React.FC = () => {
             navigate('/');
             // Auto-scroll to compare view on mobile
             if (window.innerWidth <= 768 && mainContentRef.current) {
+                listScrollPosRef.current = window.scrollY;
                 setTimeout(() => {
                     mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }, 150);
@@ -1236,37 +1264,49 @@ const App: React.FC = () => {
         <div className="app">
             <ParticleBackground />
             <ToastHost toasts={toasts} />
-            <InstallPrompt />
-            <header className="header">
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', flexWrap: 'wrap' }}>
-                    <img
-                        src="https://www.umt.edu.pk/images/umt-logo.png"
-                        alt="UMT Logo"
-                        style={{ height: '60px', width: 'auto' }}
-                    />
-                    <h1 style={{ margin: 0 }}>UMT Teacher Reviews</h1>
-                </div>
-                <p>Read and write reviews about your professors anonymously</p>
-                <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                    <button onClick={() => {
-                        setShowAdminPanel(true);
-                        if (isAdminLoggedIn) {
-                            loadAdminData();
-                            loadTeachers(1);
-                        }
-                    }} className="admin-login-btn">
-                        🔒 Admin Login
-                    </button>
-                    <button onClick={() => setShowContactModal(true)} className="admin-login-btn">
-                        📧 Contact Us
-                    </button>
-                    <button onClick={() => setShowAboutModal(true)} className="admin-login-btn">
-                        ℹ️ About
-                    </button>
-                </div>
-            </header>
+            {compareList.length === 0 && <InstallPrompt />}
+            <PullToRefresh onRefresh={handlePullRefresh}>
+                <header className="header">
+                    <div className="header-top">
+                        <div className="header-brand">
+                            <img
+                                src="https://www.umt.edu.pk/images/umt-logo.png"
+                                alt="UMT Logo"
+                                className="header-logo"
+                            />
+                            <h1 style={{ margin: 0 }}>UMT Teacher Reviews</h1>
+                        </div>
+                        <button
+                            className={`menu-toggle${showMobileMenu ? ' menu-toggle-open' : ''}`}
+                            onClick={() => setShowMobileMenu(v => !v)}
+                            aria-expanded={showMobileMenu}
+                            aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
+                        >
+                            {showMobileMenu ? '✕' : '☰'}
+                        </button>
+                    </div>
+                    <p className="header-tagline">Read and write reviews about your professors anonymously</p>
+                    <div className={`header-actions${showMobileMenu ? ' header-actions-open' : ''}`}>
+                        <button onClick={() => {
+                            setShowAdminPanel(true);
+                            setShowMobileMenu(false);
+                            if (isAdminLoggedIn) {
+                                loadAdminData();
+                                loadTeachers(1);
+                            }
+                        }} className="admin-login-btn">
+                            🔒 Admin Login
+                        </button>
+                        <button onClick={() => { setShowContactModal(true); setShowMobileMenu(false); }} className="admin-login-btn">
+                            📧 Contact Us
+                        </button>
+                        <button onClick={() => { setShowAboutModal(true); setShowMobileMenu(false); }} className="admin-login-btn">
+                            ℹ️ About
+                        </button>
+                    </div>
+                </header>
 
-            <div className="container">
+                <div className="container">
                 <div className="sidebar">
                     <div className="search-box">
                         <TeacherAutocomplete
@@ -1395,7 +1435,7 @@ const App: React.FC = () => {
                     {isComparing && compareDetails.length > 0 ? (
                         <div className="compare-view">
                             <div className="compare-view-header">
-                                <button onClick={() => setIsComparing(false)} className="back-button">
+                                <button onClick={() => { setIsComparing(false); restoreListScroll(); }} className="back-button">
                                     ← Back to list
                                 </button>
                                 <h1 className="gradient-text compare-title">⚖️ Compare Teachers</h1>
@@ -1444,6 +1484,7 @@ const App: React.FC = () => {
                             {compareDetails.length < 3 && (
                                 <p className="compare-hint">Tip: add up to 3 teachers with the "+" button on any card.</p>
                             )}
+                            <p className="compare-swipe-hint">← Swipe sideways to compare →</p>
                         </div>
                     ) : selectedTeacher ? (
                         <div className="teacher-detail">
@@ -1573,6 +1614,17 @@ const App: React.FC = () => {
                 </div>
             </div>
 
+            <footer className="app-footer">
+                <div className="footer-content">
+                    <p>© {new Date().getFullYear()} UMT Teacher Reviews. All rights reserved.</p>
+                    <p>Developed by Munawar Hussain</p>
+                    <p className="footer-links">
+                        <a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Use</a> · <a href="/dmca">DMCA &amp; Content Removal</a>
+                    </p>
+                    <p className="footer-disclaimer">All reviews are student opinions and not official university statements.</p>
+                </div>
+            </footer>
+            </PullToRefresh>
             {showAboutModal && (
                 <div className="modal-overlay" onClick={() => setShowAboutModal(false)}>
                     <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -1626,16 +1678,6 @@ const App: React.FC = () => {
                     </div>
                 </div>
             )}
-            <footer className="app-footer">
-                <div className="footer-content">
-                    <p>© {new Date().getFullYear()} UMT Teacher Reviews. All rights reserved.</p>
-                    <p>Developed by Munawar Hussain</p>
-                    <p className="footer-links">
-                        <a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Use</a> · <a href="/dmca">DMCA &amp; Content Removal</a>
-                    </p>
-                    <p className="footer-disclaimer">All reviews are student opinions and not official university statements.</p>
-                </div>
-            </footer>
         </div>
     );
 };
