@@ -1080,6 +1080,7 @@ const App: React.FC = () => {
     }, [selectedTeacher, reviewComment, reviewUserName, loadTeachers, loadAdminData, showToast]);
 
     const handleTeacherClick = useCallback(async (teacher: Teacher) => {
+        searchInputRef.current?.blur();
         try {
             const response = await getTeacherDetail(teacher.id);
             const data = response.data;
@@ -1116,8 +1117,7 @@ const App: React.FC = () => {
             console.error('Error loading teacher details:', error);
             showToast('Failed to load teacher details', 'error');
         }
-    }, [navigate, showToast]);
-
+    }, [navigate, showToast, searchInputRef]);
     const restoreListScroll = useCallback(() => {
         if (window.innerWidth > 768) return;
         const pos = listScrollPosRef.current;
