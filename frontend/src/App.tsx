@@ -27,6 +27,11 @@ import TeacherAutocomplete from './components/TeacherAutocomplete';
 import QASection from './components/QASection';
 import InstallPrompt from './components/InstallPrompt';
 import PullToRefresh from './components/PullToRefresh';
+import Icon from './components/Icon';
+import Avatar from './components/Avatar';
+import EmptyState from './components/EmptyState';
+import BottomNav from './components/BottomNav';
+import { haptic } from './utils/haptics';
 import './App.css';
 
 // ========== INTERFACES ==========
@@ -186,15 +191,21 @@ const AdminPanel = memo(({
             <div className="admin-header">
                 <h2 className="gradient-text">Admin Dashboard</h2>
                 <div className="admin-stats">
-                    <span>📚 {totalTeachersCount || teachers.length} Teachers</span>
-                    <span>💬 {totalReviews} Reviews</span>
+                    <span><Icon name="book" size={15} /> {totalTeachersCount || teachers.length} Teachers</span>
+                    <span><Icon name="message-circle" size={15} /> {totalReviews} Reviews</span>
                 </div>
                 <button onClick={onLogout} className="logout-btn">Logout</button>
             </div>
 
             <div className="admin-section">
                 <button onClick={() => setShowAddTeacherForm(!showAddTeacherForm)} className="add-teacher-btn">
-                    {showAddTeacherForm ? 'Cancel' : '+ Add New Teacher'}
+                    {showAddTeacherForm ? (
+                        'Cancel'
+                    ) : (
+                        <>
+                            <Icon name="plus" size={16} /> Add New Teacher
+                        </>
+                    )}
                 </button>
                 {showAddTeacherForm && (
                     <form onSubmit={onAddTeacher} className="add-teacher-form">
@@ -211,7 +222,7 @@ const AdminPanel = memo(({
                 <div className="search-box" style={{ marginBottom: '1rem' }}>
                     <input
                         type="text"
-                        placeholder="🔍 Search teachers by name or department..."
+                        placeholder="Search teachers by name or department..."
                         aria-label="Search teachers by name or department"
                         value={adminSearchTerm}
                         onChange={onAdminSearchChange}
@@ -274,7 +285,9 @@ const AdminPanel = memo(({
                                         <>
                                             <span><strong>{teacher.name}</strong> - {teacher.department}</span>
                                             <div>
-                                                <button onClick={() => startEdit(teacher)} className="edit-btn" style={{ marginRight: '8px' }} aria-label={`Edit ${teacher.name}`}>✏️</button>
+                                                <button onClick={() => startEdit(teacher)} className="edit-btn" style={{ marginRight: '8px' }} aria-label={`Edit ${teacher.name}`}>
+                                                    <Icon name="edit" size={14} />
+                                                </button>
                                                 <button onClick={() => onDeleteTeacher(teacher.id)} className="delete-btn">Delete</button>
                                             </div>
                                         </>
@@ -294,7 +307,7 @@ const AdminPanel = memo(({
                             </button>
                         )}
                         {teachers.length === totalTeachersCount && totalTeachersCount > 0 && (
-                            <div className="end-of-list">✨ You've seen all {totalTeachersCount} teachers</div>
+                            <div className="end-of-list">You've seen all {totalTeachersCount} teachers</div>
                         )}
                     </>
                 )}
@@ -304,14 +317,16 @@ const AdminPanel = memo(({
                 <h3>Manage Reviews ({totalReviews})</h3>
                 <div className="admin-list">
                     {totalReviews === 0 ? (
-                        <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>📭 No reviews yet.</p>
+                        <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>No reviews yet.</p>
                     ) : (
                         reviewsForModeration.map((review: AdminReview) => (
                             <div key={review.id} className="admin-item">
                                 <div className="review-info">
                                     <strong>{review.teacher_name}</strong>
                                     <p style={{ marginTop: '8px', marginBottom: '5px' }}>"{review.comment}"</p>
-                                    <small>👤 {review.user_name || 'Anonymous'} | 📅 {new Date(review.created_at).toLocaleDateString()}</small>
+                                    <small>
+                                        <Icon name="user" size={12} /> {review.user_name || 'Anonymous'} | <Icon name="calendar" size={12} /> {new Date(review.created_at).toLocaleDateString()}
+                                    </small>
                                 </div>
                                 <button onClick={() => onDeleteReview(review.id)} className="delete-btn">Delete</button>
                             </div>
@@ -330,7 +345,7 @@ const AdminPanel = memo(({
                 <h3>Manage Questions ({adminQuestions.length})</h3>
                 <div className="admin-list">
                     {adminQuestions.length === 0 ? (
-                        <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>📭 No questions yet.</p>
+                        <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>No questions yet.</p>
                     ) : (
                         adminQuestions.map((question: AdminQuestion) => (
                             <div key={question.id} className="admin-item">
@@ -338,7 +353,7 @@ const AdminPanel = memo(({
                                     <strong>{question.teacher_name}</strong>
                                     <p style={{ marginTop: '8px', marginBottom: '5px' }}>"{question.question}"</p>
                                     <small>
-                                        💬 {question.answer_count} answer{question.answer_count !== 1 ? 's' : ''} | 📅 {new Date(question.created_at).toLocaleDateString()}
+                                        <Icon name="message-circle" size={12} /> {question.answer_count} answer{question.answer_count !== 1 ? 's' : ''} | <Icon name="calendar" size={12} /> {new Date(question.created_at).toLocaleDateString()}
                                     </small>
                                 </div>
                                 <button
@@ -460,10 +475,20 @@ const App: React.FC = () => {
     const mainContentRef = useRef<HTMLDivElement>(null);
     const logoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const listScrollPosRef = useRef(0);
+    const searchInputRef = useRef<HTMLInputElement>(null);
 
     const [showAboutModal, setShowAboutModal] = useState(false);
     const [showContactModal, setShowContactModal] = useState(false);
     const [showMobileMenu, setShowMobileMenu] = useState(false);
+    const [headerScrolled, setHeaderScrolled] = useState(false);
+
+    // Compact sticky header once the user scrolls past the hero
+    useEffect(() => {
+        const onScroll = () => setHeaderScrolled(window.scrollY > 80);
+        window.addEventListener('scroll', onScroll, { passive: true });
+        onScroll();
+        return () => window.removeEventListener('scroll', onScroll);
+    }, []);
 
     const [adminSearchTerm, setAdminSearchTerm] = useState('');
     const [adminSearchResults, setAdminSearchResults] = useState<Teacher[]>([]);
@@ -1017,6 +1042,7 @@ const App: React.FC = () => {
                 user_name: reviewUserName.trim() || 'Anonymous'
             });
             showToast('Review submitted successfully!', 'success');
+            haptic([12, 40, 12]);
             // Confetti
             if ((window as any).canvasConfetti) {
                 (window as any).canvasConfetti({
@@ -1121,6 +1147,7 @@ const App: React.FC = () => {
 
     // ========== TEACHER COMPARISON ==========
     const toggleCompare = useCallback((teacher: Teacher) => {
+        haptic(8);
         setCompareList(prev => {
             const exists = prev.some(t => t.id === teacher.id);
             if (exists) return prev.filter(t => t.id !== teacher.id);
@@ -1188,6 +1215,66 @@ const App: React.FC = () => {
         }
     }, [isSearching, hasMore, loadingMore]);
 
+    // ========== BOTTOM NAV (mobile) ==========
+    const scrollListIntoView = useCallback(() => {
+        if (window.innerWidth <= 768) {
+            const sidebar = document.querySelector('.sidebar');
+            sidebar?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }, []);
+
+    const handleTabHome = useCallback(() => {
+        haptic(10);
+        setShowMobileMenu(false);
+        setSelectedTeacher(null);
+        setIsComparing(false);
+        setShowReviewForm(false);
+        setReviewSuccess('');
+        navigate('/');
+        setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 80);
+    }, [navigate]);
+
+    const handleTabSearch = useCallback(() => {
+        haptic(10);
+        setShowMobileMenu(false);
+        setSelectedTeacher(null);
+        setIsComparing(false);
+        setShowReviewForm(false);
+        navigate('/');
+        setTimeout(() => {
+            scrollListIntoView();
+            searchInputRef.current?.focus();
+        }, 140);
+    }, [navigate, scrollListIntoView]);
+
+    const handleTabCompare = useCallback(() => {
+        haptic(10);
+        setShowMobileMenu(false);
+        if (isComparing) {
+            setTimeout(() => mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+            return;
+        }
+        if (compareList.length >= 2) {
+            runCompare();
+        } else if (compareList.length === 1) {
+            showToast('Add at least 1 more teacher to compare', 'info');
+            scrollListIntoView();
+        } else {
+            showToast('Tap the + icon on any teacher card to add it', 'info');
+            scrollListIntoView();
+        }
+    }, [isComparing, compareList.length, runCompare, showToast, scrollListIntoView]);
+
+    const handleTabAdmin = useCallback(() => {
+        haptic(10);
+        setShowMobileMenu(false);
+        setShowAdminPanel(true);
+        if (isAdminLoggedIn) {
+            loadAdminData();
+            loadTeachers(1);
+        }
+    }, [isAdminLoggedIn, loadAdminData, loadTeachers]);
+
     // ========== RENDER ==========
     if (showAdminPanel) {
         if (!isAdminLoggedIn) {
@@ -1195,8 +1282,8 @@ const App: React.FC = () => {
                 <div className="app">
                     <ParticleBackground />
                     <ToastHost toasts={toasts} />
-                    <header className="header">
-                        <h1>📚 Teacher Review System - Admin</h1>
+                <header className={`header${headerScrolled ? ' header-scrolled' : ''}`}>
+                        <h1>Teacher Review System - Admin</h1>
                         <button onClick={() => setShowAdminPanel(false)} className="back-to-site-btn">← Back to Site</button>
                     </header>
                     <div className="container">
@@ -1217,7 +1304,7 @@ const App: React.FC = () => {
                 <ParticleBackground />
                 <ToastHost toasts={toasts} />
                 <header className="header">
-                    <h1>📚 Teacher Review System - Admin Panel</h1>
+                    <h1>Teacher Review System - Admin Panel</h1>
                     <button onClick={() => setShowAdminPanel(false)} className="back-to-site-btn">← Back to Site</button>
                 </header>
                 <div className="container">
@@ -1282,7 +1369,7 @@ const App: React.FC = () => {
                             aria-expanded={showMobileMenu}
                             aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
                         >
-                            {showMobileMenu ? '✕' : '☰'}
+                            {showMobileMenu ? <Icon name="x" size={22} /> : <Icon name="menu" size={22} />}
                         </button>
                     </div>
                     <p className="header-tagline">Read and write reviews about your professors anonymously</p>
@@ -1295,13 +1382,13 @@ const App: React.FC = () => {
                                 loadTeachers(1);
                             }
                         }} className="admin-login-btn">
-                            🔒 Admin Login
+                            <Icon name="lock" size={16} /> Admin Login
                         </button>
                         <button onClick={() => { setShowContactModal(true); setShowMobileMenu(false); }} className="admin-login-btn">
-                            📧 Contact Us
+                            <Icon name="mail" size={16} /> Contact Us
                         </button>
                         <button onClick={() => { setShowAboutModal(true); setShowMobileMenu(false); }} className="admin-login-btn">
-                            ℹ️ About
+                            <Icon name="info" size={16} /> About
                         </button>
                     </div>
                 </header>
@@ -1312,6 +1399,7 @@ const App: React.FC = () => {
                         <TeacherAutocomplete
                             value={searchTerm}
                             onInputChange={handleSearch}
+                            inputRef={searchInputRef}
                             onSelect={(teacher) => {
                                 setSearchTerm('');
                                 setIsSearching(false);
@@ -1391,11 +1479,7 @@ const App: React.FC = () => {
                                             className="teacher-card"
                                             onClick={() => handleTeacherClick(teacher)}
                                         >
-                                            {teacher.image_url && (
-                                                <div className="teacher-card-image">
-                                                    <img src={teacher.image_url} alt={teacher.name} loading="lazy" />
-                                                </div>
-                                            )}
+                                            <Avatar name={teacher.name} imageUrl={teacher.image_url} className="teacher-card-image" />
                                             <div className="teacher-card-info">
                                                 <h3>{teacher.name}</h3>
                                                 <p className="department">{teacher.department}</p>
@@ -1424,7 +1508,7 @@ const App: React.FC = () => {
                                     </div>
                                 )}
                                 {!isSearching && !hasMore && teachers.length > 0 && (
-                                    <div className="end-of-list">✨ You've seen all {totalTeachersCount} teachers</div>
+                            <div className="end-of-list">You've seen all {totalTeachersCount} teachers</div>
                                 )}
                             </>
                         )}
@@ -1438,21 +1522,19 @@ const App: React.FC = () => {
                                 <button onClick={() => { setIsComparing(false); restoreListScroll(); }} className="back-button">
                                     ← Back to list
                                 </button>
-                                <h1 className="gradient-text compare-title">⚖️ Compare Teachers</h1>
+                                <h1 className="gradient-text compare-title"><Icon name="compare" size={26} /> Compare Teachers</h1>
                             </div>
 
                             <div className="compare-grid">
                                 {compareDetails.map((t) => (
                                     <div key={t.id} className="compare-card">
-                                        {t.image_url && (
-                                            <img src={t.image_url} alt={t.name} className="compare-card-image" loading="lazy" />
-                                        )}
+                                        <Avatar name={t.name} imageUrl={t.image_url} className="compare-card-image" />
                                         <h2 className="compare-card-name">{t.name}</h2>
                                         <p className="compare-card-dept">{t.department}</p>
                                         <span className="compare-card-count">{t.review_count} reviews</span>
 
                                         <div className="compare-card-reviews">
-                                            <h3>📝 Reviews</h3>
+                                            <h3><Icon name="book-open" size={16} /> Reviews</h3>
                                             {!t.reviews || t.reviews.length === 0 ? (
                                                 <p className="compare-no-reviews">No reviews yet.</p>
                                             ) : (
@@ -1492,9 +1574,7 @@ const App: React.FC = () => {
                                 ← Back to list
                             </button>
 
-                            {selectedTeacher.image_url && (
-                                <img src={selectedTeacher.image_url} alt={selectedTeacher.name} className="teacher-detail-image" loading="lazy" />
-                            )}
+                            <Avatar name={selectedTeacher.name || 'Teacher'} imageUrl={selectedTeacher.image_url} className="teacher-detail-image" />
 
                             <h1 className="teacher-name-heading gradient-text">{selectedTeacher.name || 'Teacher'}</h1>
                             <p className="teacher-department">
@@ -1515,7 +1595,7 @@ const App: React.FC = () => {
                                 className="share-btn"
                                 aria-label={`Share ${selectedTeacher.name}`}
                             >
-                                🔗 Share
+                                <Icon name="share" size={16} /> Share
                             </button>
 
                             {reviewSuccess && (
@@ -1524,46 +1604,32 @@ const App: React.FC = () => {
                                 </div>
                             )}
 
-                            {!showReviewForm ? (
-                                <button onClick={() => { if (selectedTeacher && selectedTeacher.id) setShowReviewForm(true); else setReviewError('Please select a teacher first'); }} className="btn-write-review">
-                                    ✏️ Write a Review for {selectedTeacher.name}
-                                </button>
-                            ) : (
-                                <div className="review-form-container">
-                                    <h3 className="review-form-title">✏️ Write a Review for {selectedTeacher.name}</h3>
-                                    {reviewError && <div className="error-message">{reviewError}</div>}
-                                    <form onSubmit={handleSubmitReview}>
-                                        <div className="form-group">
-                                            <label>👤 Your Name (optional)</label>
-                                            <input type="text" value={reviewUserName} onChange={(e) => setReviewUserName(e.target.value)} placeholder="Leave blank to post anonymously" aria-label="Your name (optional)" />
-                                        </div>
-                                        <div className="form-group">
-                                            <label>💬 Your Review *</label>
-                                            <textarea rows={4} value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} placeholder="Share your experience with this teacher..." required aria-label="Your review" />
-                                        </div>
-                                        <div className="form-buttons">
-                                            <button type="button" onClick={() => setShowReviewForm(false)} className="btn-cancel">Cancel</button>
-                                            <button type="submit" disabled={submitting} className="btn-submit">
-                                                {submitting ? <><span className="spinner-small"></span> Submitting...</> : 'Submit Review'}
-                                            </button>
-                                        </div>
-                                    </form>
-                                </div>
-                            )}
+                            <button onClick={() => { if (selectedTeacher && selectedTeacher.id) setShowReviewForm(true); else setReviewError('Please select a teacher first'); }} className="btn-write-review">
+                                <Icon name="edit" size={18} /> Write a Review for {selectedTeacher.name}
+                            </button>
 
                             <LazySection
                                 className="reviews-section"
                                 placeholder={<div className="reviews-section" style={{ minHeight: '80px' }} />}
                             >
-                                <h3>📝 Student Reviews</h3>
+                                <h3><Icon name="book-open" size={20} /> Student Reviews</h3>
                                 {!selectedTeacher.reviews || selectedTeacher.reviews.length === 0 ? (
-                                    <p>No reviews yet. Be the first to review!</p>
+                                    <EmptyState
+                                        icon="book-open"
+                                        title="No reviews yet"
+                                        message="Be the first to review this teacher!"
+                                        action={
+                                            <button onClick={() => { if (selectedTeacher && selectedTeacher.id) setShowReviewForm(true); }} className="btn-write-review">
+                                                <Icon name="edit" size={16} /> Write a Review
+                                            </button>
+                                        }
+                                    />
                                 ) : (
                                     selectedTeacher.reviews.map((review: Review) => (
                                         <div key={review.id} className="review-card">
                                             <div className="review-header">
-                                                <span className="reviewer-name">👤 {review.user_name || 'Anonymous'}</span>
-                                                <span className="review-date">📅 {new Date(review.created_at).toLocaleDateString()}</span>
+                                                <span className="reviewer-name"><Icon name="user" size={13} /> {review.user_name || 'Anonymous'}</span>
+                                                <span className="review-date"><Icon name="calendar" size={13} /> {new Date(review.created_at).toLocaleDateString()}</span>
                                             </div>
                                             <p className="review-comment">"{review.comment}"</p>
                                         </div>
@@ -1580,7 +1646,7 @@ const App: React.FC = () => {
 
                             {relatedTeachers.length > 0 && (
                                 <div className="related-teachers">
-                                    <h3>🧑‍🏫 More teachers in {selectedTeacher.department}</h3>
+                                    <h3><Icon name="users" size={18} /> More teachers in {selectedTeacher.department}</h3>
                                     <div className="related-teachers-list">
                                         {relatedTeachers.map((t) => (
                                             <button key={t.id} onClick={() => handleTeacherClick(t)} className="related-teacher-card">
@@ -1595,8 +1661,8 @@ const App: React.FC = () => {
                     ) : (
                         <div className="welcome-message">
                             <h2 className="gradient-text">Welcome to Teacher Reviews</h2>
-                            <p className="welcome-hint-desktop">👈 Select a teacher from the left to read reviews or submit your own.</p>
-                            <p className="welcome-hint-mobile">👆 Select a teacher from the list above to read reviews or submit your own.</p>
+                            <p className="welcome-hint-desktop">Select a teacher from the left to read reviews or submit your own.</p>
+                            <p className="welcome-hint-mobile">Select a teacher from the list above to read reviews or submit your own.</p>
                             {departments.length > 0 && (
                                 <div className="department-links">
                                     <h3>Browse by Department</h3>
@@ -1628,11 +1694,11 @@ const App: React.FC = () => {
             {showAboutModal && (
                 <div className="modal-overlay" onClick={() => setShowAboutModal(false)}>
                     <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                        <h3 className="gradient-text">📖 About UMT Teacher Reviews</h3>
+                        <h3 className="gradient-text modal-heading"><Icon name="book-open" size={22} /> About UMT Teacher Reviews</h3>
                         <p>This platform allows students to write and read reviews about their teachers anonymously.</p>
                         <hr />
-                        <p><strong>👨‍💻 Developer:</strong> Munawar Hussain</p>
-                        <p><strong>🙏 Supporters & Contributors:</strong></p>
+                        <p><strong>Developer:</strong> Munawar Hussain</p>
+                        <p><strong>Supporters &amp; Contributors:</strong></p>
                         <ul style={{ textAlign: 'left', display: 'inline-block', margin: '0 auto', paddingLeft: '1.5rem' }}>
                             <li>Ahtasham Bilal</li>
                             <li>Amjad Ali Awan</li>
@@ -1651,10 +1717,36 @@ const App: React.FC = () => {
             {showContactModal && (
                 <div className="modal-overlay" onClick={() => setShowContactModal(false)}>
                     <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                        <h3 className="gradient-text">📧 Contact Us</h3>
+                        <h3 className="gradient-text modal-heading"><Icon name="mail" size={22} /> Contact Us</h3>
                         <p>If you have any questions, need help, or want to give feedback, please send an email to:</p>
                         <p><strong>umt.teacher.reviews@gmail.com</strong></p>
                         <button onClick={() => setShowContactModal(false)} className="modal-close-btn">Close</button>
+                    </div>
+                </div>
+            )}
+            {showReviewForm && selectedTeacher && (
+                <div className="modal-overlay" onClick={() => setShowReviewForm(false)}>
+                    <div className="modal-content review-sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`Write a review for ${selectedTeacher.name}`}>
+                        <h3 className="review-form-title">
+                            <Icon name="edit" size={20} /> Write a Review for {selectedTeacher.name}
+                        </h3>
+                        {reviewError && <div className="error-message">{reviewError}</div>}
+                        <form onSubmit={handleSubmitReview}>
+                            <div className="form-group">
+                                <label>Your Name (optional)</label>
+                                <input type="text" value={reviewUserName} onChange={(e) => setReviewUserName(e.target.value)} placeholder="Leave blank to post anonymously" aria-label="Your name (optional)" />
+                            </div>
+                            <div className="form-group">
+                                <label>Your Review *</label>
+                                <textarea rows={4} value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} placeholder="Share your experience with this teacher..." required aria-label="Your review" />
+                            </div>
+                            <div className="form-buttons">
+                                <button type="button" onClick={() => setShowReviewForm(false)} className="btn-cancel">Cancel</button>
+                                <button type="submit" disabled={submitting} className="btn-submit">
+                                    {submitting ? <><span className="spinner-small"></span> Submitting...</> : 'Submit Review'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}
@@ -1678,6 +1770,14 @@ const App: React.FC = () => {
                     </div>
                 </div>
             )}
+            <BottomNav
+                items={[
+                    { key: 'home', label: 'Home', icon: 'home', active: !isComparing, onClick: handleTabHome },
+                    { key: 'search', label: 'Search', icon: 'search', active: isSearching && !!searchTerm, onClick: handleTabSearch },
+                    { key: 'compare', label: 'Compare', icon: 'compare', active: isComparing, onClick: handleTabCompare },
+                    { key: 'admin', label: 'Admin', icon: 'lock', onClick: handleTabAdmin },
+                ]}
+            />
         </div>
     );
 };

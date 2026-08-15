@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import Icon from './Icon';
 
 interface BeforeInstallPromptEvent extends Event {
     prompt: () => Promise<void>;
@@ -64,12 +65,14 @@ const InstallPrompt: React.FC = () => {
             <div className="install-prompt-content">
                 {isIOS ? (
                     <p className="install-prompt-text">
-                        📲 Install <strong>UMT Teacher Reviews</strong> on your home screen: tap the Share button, then
-                        "Add to Home Screen".
+                        <Icon name="download" size={18} />
+                        <span>Install <strong>UMT Teacher Reviews</strong> on your home screen: tap the Share button, then
+                        "Add to Home Screen".</span>
                     </p>
                 ) : (
                     <p className="install-prompt-text">
-                        📲 Install <strong>UMT Teacher Reviews</strong> for quick access and offline use.
+                        <Icon name="download" size={18} />
+                        <span>Install <strong>UMT Teacher Reviews</strong> for quick access and offline use.</span>
                     </p>
                 )}
                 {!isIOS && (

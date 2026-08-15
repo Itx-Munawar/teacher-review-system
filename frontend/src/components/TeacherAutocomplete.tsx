@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { searchAllTeachers } from '../services/api';
 import { debounce } from '../utils/debounce';
+import Avatar from './Avatar';
 
 interface Teacher {
     id: number;
@@ -16,6 +17,7 @@ interface TeacherAutocompleteProps {
     onSelect: (teacher: Teacher) => void;
     onClear: () => void;
     placeholder?: string;
+    inputRef?: React.RefObject<HTMLInputElement>;
 }
 
 const TeacherAutocomplete: React.FC<TeacherAutocompleteProps> = ({
@@ -23,7 +25,8 @@ const TeacherAutocomplete: React.FC<TeacherAutocompleteProps> = ({
     onInputChange,
     onSelect,
     onClear,
-    placeholder = 'Search by teacher name or department...'
+    placeholder = 'Search by teacher name or department...',
+    inputRef
 }) => {
     const [suggestions, setSuggestions] = useState<Teacher[]>([]);
     const [open, setOpen] = useState(false);
@@ -92,6 +95,7 @@ const TeacherAutocomplete: React.FC<TeacherAutocompleteProps> = ({
                 onKeyDown={handleKeyDown}
                 onFocus={() => { if (suggestions.length > 0) setOpen(true); }}
                 className="search-input"
+                ref={inputRef}
             />
             {open && suggestions.length > 0 && (
                 <ul className="autocomplete-dropdown" role="listbox">
@@ -107,11 +111,7 @@ const TeacherAutocomplete: React.FC<TeacherAutocompleteProps> = ({
                             }}
                             onMouseEnter={() => setActiveIndex(idx)}
                         >
-                            {t.image_url ? (
-                                <img src={t.image_url} alt="" className="autocomplete-avatar" loading="lazy" />
-                            ) : (
-                                <div className="autocomplete-avatar autocomplete-avatar-fallback">👤</div>
-                            )}
+                            <Avatar name={t.name} imageUrl={t.image_url} className="autocomplete-avatar" />
                             <div className="autocomplete-text">
                                 <span className="autocomplete-name">{t.name}</span>
                                 <span className="autocomplete-dept">{t.department}</span>

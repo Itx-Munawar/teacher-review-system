@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getTeacherQuestions, submitQuestion, submitAnswer, Question } from '../services/api';
+import Icon from './Icon';
+import EmptyState from './EmptyState';
 
 interface QASectionProps {
     teacherId: number;
@@ -71,10 +73,14 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
     return (
         <div className="qa-section">
             <div className="qa-header">
-                <h3>❓ Ask about {teacherName}</h3>
+                <h3>
+                    <Icon name="message-square" size={20} className="qa-header-icon" />
+                    <span>Ask about {teacherName}</span>
+                </h3>
                 {!showAskForm ? (
                     <button onClick={() => setShowAskForm(true)} className="btn-write-review qa-ask-btn">
-                        + Ask a Question
+                        <Icon name="plus" size={16} />
+                        <span>Ask a Question</span>
                     </button>
                 ) : (
                     <button onClick={() => setShowAskForm(false)} className="btn-cancel qa-ask-btn">
@@ -88,7 +94,7 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
 
             {showAskForm && (
                 <form onSubmit={handleAsk} className="review-form-container qa-form">
-                    <label className="qa-label">💬 Your Question</label>
+                    <label className="qa-label">Your Question</label>
                     <div className="qa-input-row">
                         <textarea
                             rows={2}
@@ -109,7 +115,19 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
             {loading ? (
                 <p className="qa-empty">Loading questions...</p>
             ) : questions.length === 0 ? (
-                <p className="qa-empty">No questions yet. Ask other students about this teacher!</p>
+                <EmptyState
+                    icon="help"
+                    title="No questions yet"
+                    message="Ask other students about this teacher!"
+                    action={
+                        !showAskForm ? (
+                            <button onClick={() => setShowAskForm(true)} className="btn-write-review qa-ask-btn">
+                                <Icon name="plus" size={16} />
+                                <span>Ask a Question</span>
+                            </button>
+                        ) : undefined
+                    }
+                />
             ) : (
                 <div className="qa-list">
                     {questions.map((q) => (
@@ -117,7 +135,9 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
                             <div className="qa-question">
                                 <span className="qa-q-badge">Q</span>
                                 <p className="qa-question-text">{q.question}</p>
-                                <span className="review-date">📅 {new Date(q.created_at).toLocaleDateString()}</span>
+                                <span className="review-date">
+                                    <Icon name="calendar" size={13} /> {new Date(q.created_at).toLocaleDateString()}
+                                </span>
                             </div>
                             {q.answers.length > 0 && (
                                 <div className="qa-answers">
@@ -125,7 +145,9 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
                                         <div key={a.id} className="qa-answer">
                                             <span className="qa-a-badge">A</span>
                                             <p className="qa-answer-text">{a.answer}</p>
-                                            <span className="review-date">📅 {new Date(a.created_at).toLocaleDateString()}</span>
+                                            <span className="review-date">
+                                                <Icon name="calendar" size={13} /> {new Date(a.created_at).toLocaleDateString()}
+                                            </span>
                                         </div>
                                     ))}
                                 </div>
@@ -156,7 +178,8 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
                                     onClick={() => setOpenAnswerForms(prev => ({ ...prev, [q.id]: true }))}
                                     className="qa-reply-btn"
                                 >
-                                    💬 Answer
+                                    <Icon name="message-circle" size={15} />
+                                    <span>Answer</span>
                                 </button>
                             )}
                         </div>
