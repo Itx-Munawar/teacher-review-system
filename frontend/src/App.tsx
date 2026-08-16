@@ -1463,7 +1463,7 @@ const App: React.FC = () => {
                             </>
                         ) : error ? (
                             <div className="error-message">
-                                {error} <button onClick={() => loadTeachers(1)}>Retry</button>
+                                {error} <button onClick={() => loadTeachers(1)} className="retry-btn">Retry</button>
                             </div>
                         ) : displayTeachers.length === 0 ? (
                             <div className="no-results">No teachers found</div>

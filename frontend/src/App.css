@@ -869,6 +869,37 @@ body::after {
     font-weight: 500;
 }
 
+.retry-btn {
+    background: linear-gradient(120deg, #ef4444, #f97316);
+    color: white;
+    border: none;
+    padding: 8px 18px;
+    margin-left: 8px;
+    border-radius: 50px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 700;
+    min-height: 40px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 3px 10px rgba(239, 68, 68, 0.3);
+}
+
+.retry-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(239, 68, 68, 0.45);
+}
+
+@media (max-width: 600px) {
+    .retry-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0.5rem auto 0;
+        min-height: 44px;
+        width: 100%;
+    }
+}
+
 .no-results {
     text-align: center;
     padding: 2rem;
@@ -2029,8 +2060,8 @@ body::after {
     }
 
     .teacher-card .compare-toggle-btn {
-        width: 40px;
-        height: 40px;
+        width: 44px;
+        height: 44px;
         top: 8px;
         right: 8px;
         font-size: 1.15rem;
@@ -2122,6 +2153,7 @@ body::after {
         min-height: 42px;
         display: inline-flex;
         align-items: center;
+        width: auto;
     }
 
     .qa-reply-btn {
@@ -2540,10 +2572,12 @@ body::after {
 .qa-ask-btn {
     padding: 8px 14px;
     font-size: 0.85rem;
-    border-radius: 10px;
+    border-radius: 50px;
     border: none;
     cursor: pointer;
     font-weight: 600;
+    margin: 0;
+    flex: 0 0 auto;
 }
 
 .qa-form {
@@ -2797,6 +2831,13 @@ body::after {
     cursor: pointer;
     padding: 4px;
     line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: 50%;
 }
 
 .install-prompt-close:hover {
@@ -3015,6 +3056,10 @@ body::after {
 
 .empty-state-action {
     margin-top: 0.5rem;
+}
+
+.empty-state-action .btn-write-review {
+    margin: 0.25rem auto 0;
 }
 
 /* ========== BOTTOM NAV (mobile) ========== */
