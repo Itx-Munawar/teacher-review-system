@@ -1438,10 +1438,101 @@ body::after {
     font-size: 0.8rem;
 }
 
-.compare-card-remove {
+/* ========== COMPARE TABLE ========== */
+.compare-table-wrap {
+    margin-top: 0.5rem;
+}
+
+.compare-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: 0 8px 25px rgba(120, 70, 200, 0.12);
+    text-align: center;
+}
+
+.compare-table th,
+.compare-table td {
+    padding: 0.9rem 1rem;
+    border-bottom: 1px solid rgba(120, 70, 200, 0.12);
+    vertical-align: middle;
+}
+
+.compare-table thead th {
+    border-bottom: 2px solid rgba(168, 85, 247, 0.25);
+}
+
+.compare-table tr:last-child td {
+    border-bottom: none;
+}
+
+.compare-metric-cell {
+    width: 130px;
+    min-width: 120px;
+    color: #4c1d95;
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    text-align: left;
+    background: linear-gradient(135deg, rgba(255, 94, 156, 0.08), rgba(168, 85, 247, 0.1));
+}
+
+.compare-teacher-cell {
+    width: 200px;
+    min-width: 190px;
+}
+
+.compare-table-teacher {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    position: relative;
+}
+
+.compare-table-avatar {
+    width: 68px;
+    height: 68px;
+    border-radius: 50%;
+    object-fit: cover;
+    padding: 3px;
+    background: linear-gradient(135deg, #ff5e9c, #a855f7, #00c9ff);
+    box-shadow: 0 6px 18px rgba(168, 85, 247, 0.35);
+    margin: 0 auto;
+}
+
+.compare-table-teacher-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    padding-right: 20px;
+}
+
+.compare-table-name {
+    font-size: 1.05rem;
+    color: #1e1b4b;
+    font-weight: 800;
+    line-height: 1.25;
+}
+
+.compare-table-dept {
+    color: #7c3aed;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.compare-table-remove {
     position: absolute;
-    top: 8px;
-    right: 8px;
+    top: 0;
+    right: 0;
     z-index: 3;
     width: 34px;
     height: 34px;
@@ -1459,134 +1550,82 @@ body::after {
     transition: background 0.15s ease, transform 0.15s ease;
 }
 
-.compare-card-remove:hover {
+.compare-table-remove:hover {
     background: rgba(239, 68, 68, 0.15);
     color: #dc2626;
     transform: scale(1.1);
 }
 
-.compare-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 1.2rem;
-    margin-top: 0.5rem;
+.compare-value-cell {
+    color: #374151;
+    font-size: 0.9rem;
 }
 
-.compare-card {
-    position: relative;
-    background: rgba(255, 255, 255, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.8);
-    border-radius: var(--radius-md);
-    padding: 1.2rem;
-    text-align: center;
-    box-shadow: 0 8px 25px rgba(120, 70, 200, 0.12);
-    display: flex;
-    flex-direction: column;
+.compare-count-badge {
+    display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
+    justify-content: center;
+    min-width: 42px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: linear-gradient(120deg, #667eea, #764ba2);
+    color: #fff;
+    font-weight: 700;
+    font-size: 1rem;
 }
 
-.compare-card-image {
-    width: 84px;
-    height: 84px;
-    border-radius: 50%;
-    object-fit: cover;
-    padding: 3px;
-    background: linear-gradient(135deg, #ff5e9c, #a855f7, #00c9ff);
-    box-shadow: 0 6px 18px rgba(168, 85, 247, 0.35);
-}
-
-.compare-card-name {
-    font-size: 1.15rem;
-    color: #1e1b4b;
-    font-weight: 800;
-    margin: 0.25rem 0 0;
-}
-
-.compare-card-dept {
-    color: #7c3aed;
-    font-size: 0.85rem;
-    font-weight: 600;
-}
-
-.compare-card-count {
-    font-size: 0.78rem;
+.compare-count-label {
+    display: block;
+    margin-top: 0.3rem;
     color: #6b7280;
+    font-size: 0.75rem;
 }
 
-.compare-card-reviews {
-    width: 100%;
-    margin-top: 0.75rem;
+.compare-snippet {
+    margin: 0;
+    padding: 0.6rem 0.75rem;
+    background: rgba(102, 126, 234, 0.07);
+    border-left: 3px solid #667eea;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    font-style: italic;
+    color: #374151;
+    line-height: 1.5;
     text-align: left;
-    flex: 1;
 }
 
-.compare-card-reviews h3 {
-    font-size: 0.95rem;
-    color: #1e1b4b;
-    margin-bottom: 0.5rem;
-    text-align: center;
+.compare-snippet-author {
+    margin-top: 0.35rem;
+    font-size: 0.72rem;
+    color: #6b7280;
+    font-style: normal;
+    text-align: right;
 }
 
 .compare-no-reviews {
     color: #9ca3af;
     font-size: 0.85rem;
-    text-align: center;
-}
-
-.compare-review {
-    background: rgba(102, 126, 234, 0.07);
-    border-left: 3px solid #667eea;
-    border-radius: 8px;
-    padding: 8px 10px;
-    margin-bottom: 8px;
-}
-
-.compare-review-text {
-    color: #374151;
-    font-size: 0.85rem;
-    line-height: 1.5;
-    font-style: italic;
-    margin: 0;
-}
-
-.compare-review-author {
-    color: #6b7280;
-    font-size: 0.75rem;
-}
-
-.compare-more-reviews {
-    color: #667eea;
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-align: center;
 }
 
 .compare-view-btn {
-    margin-top: auto;
-    width: 100%;
+    display: inline-block;
     background: linear-gradient(120deg, #ff5e9c, #a855f7);
     color: #fff;
     border: none;
-    padding: 10px;
+    padding: 9px 18px;
     border-radius: 999px;
     cursor: pointer;
     font-family: inherit;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     font-weight: 700;
     transition: transform 0.15s ease, box-shadow 0.15s ease;
     box-shadow: 0 4px 14px rgba(255, 94, 156, 0.35);
+    white-space: nowrap;
 }
 
 .compare-view-btn:hover {
     transform: translateY(-2px);
     box-shadow: 0 8px 22px rgba(255, 94, 156, 0.5);
-}
-
-.compare-hint {
-    color: #6b7280;
-    font-size: 0.85rem;
-    margin-top: 1.5rem;
 }
 
 .compare-swipe-hint {
@@ -1610,35 +1649,40 @@ body::after {
         font-size: 1.5rem;
     }
 
-    .compare-grid {
-        grid-template-columns: none;
-        grid-auto-flow: column;
-        grid-auto-columns: 82%;
-        overflow-x: auto;
-        scroll-snap-type: x mandatory;
-        scroll-padding: 0 9%;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
+    .compare-table-wrap {
         margin-left: -0.5rem;
         margin-right: -0.5rem;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
         padding: 0.25rem 0.5rem;
+        border-radius: var(--radius-md);
     }
 
-    .compare-grid::-webkit-scrollbar {
+    .compare-table-wrap::-webkit-scrollbar {
         display: none;
     }
 
-    .compare-card {
-        padding: 1rem;
-        scroll-snap-align: center;
+    .compare-table {
+        min-width: 560px;
     }
 
-    .compare-card-remove {
+    .compare-table-remove {
         width: 44px;
         height: 44px;
         font-size: 1rem;
-        top: 6px;
-        right: 6px;
+    }
+
+    .compare-table-avatar {
+        width: 60px;
+        height: 60px;
+    }
+
+    .compare-metric-cell {
+        position: sticky;
+        left: 0;
+        z-index: 2;
+        background: linear-gradient(135deg, #fdf2f8, #f3e8ff);
     }
 
     .compare-search {

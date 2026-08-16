@@ -32,6 +32,7 @@ import Avatar from './components/Avatar';
 import EmptyState from './components/EmptyState';
 import BottomNav from './components/BottomNav';
 import { haptic } from './utils/haptics';
+import { timeAgo } from './utils/timeAgo';
 import './App.css';
 
 // ========== INTERFACES ==========
@@ -1571,60 +1572,95 @@ const App: React.FC = () => {
                                     message="Search above to add at least 2 teachers, then their reviews appear side by side."
                                 />
                             ) : (
-                                <>
-                                    <div className="compare-grid">
-                                        {compareDetails.map((t) => (
-                                            <div key={t.id} className="compare-card">
-                                                <button
-                                                    onClick={() => {
-                                                        setCompareList(prev => prev.filter(x => x.id !== t.id));
-                                                        setCompareDetails(prev => prev.filter(x => x.id !== t.id));
-                                                    }}
-                                                    className="compare-card-remove"
-                                                    aria-label={`Remove ${t.name} from comparison`}
-                                                >
-                                                    ✕
-                                                </button>
-                                                <Avatar name={t.name} imageUrl={t.image_url} className="compare-card-image" />
-                                                <h2 className="compare-card-name">{t.name}</h2>
-                                                <p className="compare-card-dept">{t.department}</p>
-                                                <span className="compare-card-count">{t.review_count} reviews</span>
-
-                                                <div className="compare-card-reviews">
-                                                    <h3><Icon name="book-open" size={16} /> Reviews</h3>
-                                                    {!t.reviews || t.reviews.length === 0 ? (
-                                                        <p className="compare-no-reviews">No reviews yet.</p>
-                                                    ) : (
-                                                        t.reviews.slice(0, 2).map((review) => (
-                                                            <div key={review.id} className="compare-review">
-                                                                <p className="compare-review-text">"{review.comment}"</p>
-                                                                <span className="compare-review-author">— {review.user_name || 'Anonymous'}</span>
+                                <div className="compare-table-wrap">
+                                    <table className="compare-table">
+                                        <thead>
+                                            <tr>
+                                                <th className="compare-metric-cell">Attribute</th>
+                                                {compareDetails.map((t) => (
+                                                    <th key={t.id} className="compare-teacher-cell">
+                                                        <div className="compare-table-teacher">
+                                                            <Avatar name={t.name} imageUrl={t.image_url} className="compare-table-avatar" />
+                                                            <div className="compare-table-teacher-info">
+                                                                <span className="compare-table-name">{t.name}</span>
+                                                                <span className="compare-table-dept">{t.department}</span>
                                                             </div>
-                                                        ))
-                                                    )}
-                                                    {t.reviews && t.reviews.length > 2 && (
-                                                        <p className="compare-more-reviews">+{t.reviews.length - 2} more review{t.reviews.length - 2 !== 1 ? 's' : ''}</p>
-                                                    )}
-                                                </div>
-
-                                                <button
-                                                    onClick={() => {
-                                                        setIsComparing(false);
-                                                        handleTeacherClick({ ...t } as Teacher);
-                                                    }}
-                                                    className="compare-view-btn"
-                                                >
-                                                    View Full Profile →
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-
-                                    {compareDetails.length < 3 && (
-                                        <p className="compare-hint">Tip: use the search box above to add up to 3 teachers, or tap "+" on any card.</p>
-                                    )}
-                                    <p className="compare-swipe-hint">← Swipe sideways to compare →</p>
-                                </>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setCompareList(prev => prev.filter(x => x.id !== t.id));
+                                                                    setCompareDetails(prev => prev.filter(x => x.id !== t.id));
+                                                                }}
+                                                                className="compare-table-remove"
+                                                                aria-label={`Remove ${t.name} from comparison`}
+                                                            >
+                                                                ✕
+                                                            </button>
+                                                        </div>
+                                                    </th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td className="compare-metric-cell">Reviews</td>
+                                                {compareDetails.map((t) => (
+                                                    <td key={t.id} className="compare-value-cell">
+                                                        <span className="compare-count-badge">{t.review_count || 0}</span>
+                                                        <span className="compare-count-label">
+                                                            {t.review_count === 1 ? 'review' : 'reviews'}
+                                                        </span>
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                            <tr>
+                                                <td className="compare-metric-cell">Last review</td>
+                                                {compareDetails.map((t) => (
+                                                    <td key={t.id} className="compare-value-cell">
+                                                        {t.reviews && t.reviews.length > 0
+                                                            ? timeAgo(t.reviews[0].created_at)
+                                                            : '—'}
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                            <tr>
+                                                <td className="compare-metric-cell">Recent review</td>
+                                                {compareDetails.map((t) => (
+                                                    <td key={t.id} className="compare-value-cell">
+                                                        {t.reviews && t.reviews.length > 0 ? (
+                                                            <blockquote className="compare-snippet">
+                                                                "{t.reviews[0].comment.length > 90
+                                                                    ? `${t.reviews[0].comment.slice(0, 90)}…`
+                                                                    : t.reviews[0].comment}"
+                                                                <footer className="compare-snippet-author">
+                                                                    — {t.reviews[0].user_name || 'Anonymous'}
+                                                                </footer>
+                                                            </blockquote>
+                                                        ) : (
+                                                            <span className="compare-no-reviews">No reviews yet</span>
+                                                        )}
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                            <tr>
+                                                <td className="compare-metric-cell">Profile</td>
+                                                {compareDetails.map((t) => (
+                                                    <td key={t.id} className="compare-value-cell">
+                                                        <button
+                                                            onClick={() => {
+                                                                setIsComparing(false);
+                                                                handleTeacherClick({ ...t } as Teacher);
+                                                            }}
+                                                            className="compare-view-btn"
+                                                        >
+                                                            View full profile
+                                                        </button>
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <p className="compare-swipe-hint">← Swipe the table sideways to compare →</p>
+                                </div>
                             )}
                         </div>
                     ) : selectedTeacher ? (
