@@ -16,6 +16,8 @@ interface TeacherAutocompleteProps {
     onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     onSelect: (teacher: Teacher) => void;
     onClear: () => void;
+    onCompare?: (teacher: Teacher) => void;
+    isInCompare?: (teacher: Teacher) => boolean;
     placeholder?: string;
     inputRef?: React.RefObject<HTMLInputElement>;
 }
@@ -25,6 +27,8 @@ const TeacherAutocomplete: React.FC<TeacherAutocompleteProps> = ({
     onInputChange,
     onSelect,
     onClear,
+    onCompare,
+    isInCompare,
     placeholder = 'Search by teacher name or department...',
     inputRef
 }) => {
@@ -116,6 +120,20 @@ const TeacherAutocomplete: React.FC<TeacherAutocompleteProps> = ({
                                 <span className="autocomplete-name">{t.name}</span>
                                 <span className="autocomplete-dept">{t.department}</span>
                             </div>
+                            {onCompare && (
+                                <button
+                                    onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        onCompare(t);
+                                    }}
+                                    className={`autocomplete-compare-btn ${isInCompare && isInCompare(t) ? 'autocomplete-compare-btn-active' : ''}`}
+                                    aria-label={`Compare ${t.name}`}
+                                    title="Add to comparison"
+                                >
+                                    <span>{isInCompare && isInCompare(t) ? '✓' : '+'}</span>
+                                </button>
+                            )}
                         </li>
                     ))}
                 </ul>

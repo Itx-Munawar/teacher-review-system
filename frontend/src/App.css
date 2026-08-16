@@ -2628,6 +2628,7 @@ body::after {
     display: flex;
     flex-direction: column;
     min-width: 0;
+    flex: 1;
 }
 
 .autocomplete-name {
@@ -2645,6 +2646,42 @@ body::after {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.autocomplete-compare-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1.5px dashed rgba(255, 255, 255, 0.4);
+    background: transparent;
+    color: #e0e7ff;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.autocomplete-compare-btn:hover {
+    transform: scale(1.1);
+    border-color: #667eea;
+    color: #a5b4fc;
+}
+
+.autocomplete-compare-btn-active {
+    border: 1.5px solid #667eea;
+    background: linear-gradient(120deg, #667eea, #764ba2);
+    color: #fff;
+}
+
+.autocomplete-compare-btn span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
 }
 
 /* ========== Q&A SECTION ========== */

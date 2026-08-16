@@ -478,6 +478,7 @@ const App: React.FC = () => {
     const logoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const listScrollPosRef = useRef(0);
     const searchInputRef = useRef<HTMLInputElement>(null);
+    const compareSearchInputRef = useRef<HTMLInputElement>(null);
 
     const [showAboutModal, setShowAboutModal] = useState(false);
     const [showContactModal, setShowContactModal] = useState(false);
@@ -1233,6 +1234,29 @@ const App: React.FC = () => {
         }
     }, [compareList, fetchCompareDetails, showToast]);
 
+    const handleCardCompare = useCallback(async (teacher: Teacher) => {
+        haptic(8);
+        const exists = compareList.some(t => t.id === teacher.id);
+        let next: Teacher[];
+        if (exists) {
+            next = compareList.filter(t => t.id !== teacher.id);
+        } else if (compareList.length >= 3) {
+            showToast('You can compare up to 3 teachers at once', 'info');
+            return;
+        } else {
+            next = [...compareList, teacher];
+        }
+        setCompareList(next);
+        setSelectedTeacher(null);
+        setShowReviewForm(false);
+        setIsComparing(true);
+        navigate('/');
+        if (next.length >= 2) {
+            await fetchCompareDetails(next);
+        }
+        setTimeout(() => mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+    }, [compareList, fetchCompareDetails, navigate, showToast]);
+
     const displayTeachers = isSearching ? searchResults : teachers;
 
     const loadMore = useCallback(() => {
@@ -1280,6 +1304,7 @@ const App: React.FC = () => {
         setShowReviewForm(false);
         if (isComparing) {
             setTimeout(() => mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+            setTimeout(() => compareSearchInputRef.current?.focus(), 150);
             return;
         }
         navigate('/');
@@ -1288,6 +1313,7 @@ const App: React.FC = () => {
             runCompare();
         }
         setTimeout(() => mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+        setTimeout(() => compareSearchInputRef.current?.focus(), 250);
     }, [isComparing, compareList.length, runCompare, navigate]);
 
     const handleTabAdmin = useCallback(() => {
@@ -1436,6 +1462,14 @@ const App: React.FC = () => {
                                 });
                                 handleTeacherClick(teacher);
                             }}
+                            onCompare={(teacher) => {
+                                if (window.innerWidth > 768) {
+                                    handleCardCompare(teacher);
+                                } else {
+                                    toggleCompare(teacher);
+                                }
+                            }}
+                            isInCompare={(teacher) => compareList.some(t => t.id === teacher.id)}
                             onClear={() => handleSearch({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
                         />
                         {isSearching && searchTerm && (
@@ -1513,7 +1547,11 @@ const App: React.FC = () => {
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    toggleCompare(teacher);
+                                                    if (window.innerWidth > 768) {
+                                                        handleCardCompare(teacher);
+                                                    } else {
+                                                        toggleCompare(teacher);
+                                                    }
                                                 }}
                                                 className={`compare-toggle-btn ${compareList.some(t => t.id === teacher.id) ? 'compare-toggle-btn-active' : ''}`}
                                                 aria-label={`Compare ${teacher.name}`}
@@ -1554,7 +1592,7 @@ const App: React.FC = () => {
                                 <TeacherAutocomplete
                                     value={compareSearchTerm}
                                     onInputChange={(e) => setCompareSearchTerm(e.target.value)}
-                                    inputRef={undefined}
+                                    inputRef={compareSearchInputRef}
                                     onSelect={(teacher) => {
                                         setCompareSearchTerm('');
                                         handleCompareAdd(teacher);
