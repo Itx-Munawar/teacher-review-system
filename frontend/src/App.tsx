@@ -1275,20 +1275,19 @@ const App: React.FC = () => {
     const handleTabCompare = useCallback(() => {
         haptic(10);
         setShowMobileMenu(false);
+        setSelectedTeacher(null);
+        setShowReviewForm(false);
         if (isComparing) {
             setTimeout(() => mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
             return;
         }
+        navigate('/');
+        setIsComparing(true);
         if (compareList.length >= 2) {
             runCompare();
-        } else if (compareList.length === 1) {
-            showToast('Add at least 1 more teacher to compare', 'info');
-            scrollListIntoView();
-        } else {
-            showToast('Tap the + icon on any teacher card to add it', 'info');
-            scrollListIntoView();
         }
-    }, [isComparing, compareList.length, runCompare, showToast, scrollListIntoView]);
+        setTimeout(() => mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+    }, [isComparing, compareList.length, runCompare, navigate]);
 
     const handleTabAdmin = useCallback(() => {
         haptic(10);
@@ -1541,7 +1540,7 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="main-content" ref={mainContentRef}>
-                    {isComparing && compareDetails.length > 0 ? (
+                    {isComparing ? (
                         <div className="compare-view">
                             <div className="compare-view-header">
                                 <button onClick={() => { setIsComparing(false); restoreListScroll(); }} className="back-button">
@@ -1565,58 +1564,68 @@ const App: React.FC = () => {
                                 <p className="compare-search-hint">{compareList.length}/3 selected — tap a result to add it to the comparison.</p>
                             </div>
 
-                            <div className="compare-grid">
-                                {compareDetails.map((t) => (
-                                    <div key={t.id} className="compare-card">
-                                        <button
-                                            onClick={() => {
-                                                setCompareList(prev => prev.filter(x => x.id !== t.id));
-                                                setCompareDetails(prev => prev.filter(x => x.id !== t.id));
-                                            }}
-                                            className="compare-card-remove"
-                                            aria-label={`Remove ${t.name} from comparison`}
-                                        >
-                                            ✕
-                                        </button>
-                                        <Avatar name={t.name} imageUrl={t.image_url} className="compare-card-image" />
-                                        <h2 className="compare-card-name">{t.name}</h2>
-                                        <p className="compare-card-dept">{t.department}</p>
-                                        <span className="compare-card-count">{t.review_count} reviews</span>
+                            {compareDetails.length === 0 ? (
+                                <EmptyState
+                                    icon="compare"
+                                    title="Start comparing teachers"
+                                    message="Search above to add at least 2 teachers, then their reviews appear side by side."
+                                />
+                            ) : (
+                                <>
+                                    <div className="compare-grid">
+                                        {compareDetails.map((t) => (
+                                            <div key={t.id} className="compare-card">
+                                                <button
+                                                    onClick={() => {
+                                                        setCompareList(prev => prev.filter(x => x.id !== t.id));
+                                                        setCompareDetails(prev => prev.filter(x => x.id !== t.id));
+                                                    }}
+                                                    className="compare-card-remove"
+                                                    aria-label={`Remove ${t.name} from comparison`}
+                                                >
+                                                    ✕
+                                                </button>
+                                                <Avatar name={t.name} imageUrl={t.image_url} className="compare-card-image" />
+                                                <h2 className="compare-card-name">{t.name}</h2>
+                                                <p className="compare-card-dept">{t.department}</p>
+                                                <span className="compare-card-count">{t.review_count} reviews</span>
 
-                                        <div className="compare-card-reviews">
-                                            <h3><Icon name="book-open" size={16} /> Reviews</h3>
-                                            {!t.reviews || t.reviews.length === 0 ? (
-                                                <p className="compare-no-reviews">No reviews yet.</p>
-                                            ) : (
-                                                t.reviews.slice(0, 2).map((review) => (
-                                                    <div key={review.id} className="compare-review">
-                                                        <p className="compare-review-text">"{review.comment}"</p>
-                                                        <span className="compare-review-author">— {review.user_name || 'Anonymous'}</span>
-                                                    </div>
-                                                ))
-                                            )}
-                                            {t.reviews && t.reviews.length > 2 && (
-                                                <p className="compare-more-reviews">+{t.reviews.length - 2} more review{t.reviews.length - 2 !== 1 ? 's' : ''}</p>
-                                            )}
-                                        </div>
+                                                <div className="compare-card-reviews">
+                                                    <h3><Icon name="book-open" size={16} /> Reviews</h3>
+                                                    {!t.reviews || t.reviews.length === 0 ? (
+                                                        <p className="compare-no-reviews">No reviews yet.</p>
+                                                    ) : (
+                                                        t.reviews.slice(0, 2).map((review) => (
+                                                            <div key={review.id} className="compare-review">
+                                                                <p className="compare-review-text">"{review.comment}"</p>
+                                                                <span className="compare-review-author">— {review.user_name || 'Anonymous'}</span>
+                                                            </div>
+                                                        ))
+                                                    )}
+                                                    {t.reviews && t.reviews.length > 2 && (
+                                                        <p className="compare-more-reviews">+{t.reviews.length - 2} more review{t.reviews.length - 2 !== 1 ? 's' : ''}</p>
+                                                    )}
+                                                </div>
 
-                                        <button
-                                            onClick={() => {
-                                                setIsComparing(false);
-                                                handleTeacherClick({ ...t } as Teacher);
-                                            }}
-                                            className="compare-view-btn"
-                                        >
-                                            View Full Profile →
-                                        </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setIsComparing(false);
+                                                        handleTeacherClick({ ...t } as Teacher);
+                                                    }}
+                                                    className="compare-view-btn"
+                                                >
+                                                    View Full Profile →
+                                                </button>
+                                            </div>
+                                        ))}
                                     </div>
-                                ))}
-                            </div>
 
-                            {compareDetails.length < 3 && (
-                                <p className="compare-hint">Tip: use the search box above to add up to 3 teachers, or tap "+" on any card.</p>
+                                    {compareDetails.length < 3 && (
+                                        <p className="compare-hint">Tip: use the search box above to add up to 3 teachers, or tap "+" on any card.</p>
+                                    )}
+                                    <p className="compare-swipe-hint">← Swipe sideways to compare →</p>
+                                </>
                             )}
-                            <p className="compare-swipe-hint">← Swipe sideways to compare →</p>
                         </div>
                     ) : selectedTeacher ? (
                         <div className="teacher-detail">
