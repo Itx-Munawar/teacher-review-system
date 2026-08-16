@@ -1302,18 +1302,17 @@ const App: React.FC = () => {
         setShowMobileMenu(false);
         setSelectedTeacher(null);
         setShowReviewForm(false);
-        if (isComparing) {
-            setTimeout(() => mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
-            setTimeout(() => compareSearchInputRef.current?.focus(), 150);
-            return;
+        if (!isComparing) {
+            navigate('/');
+            setIsComparing(true);
+            if (compareList.length >= 2) {
+                runCompare();
+            }
         }
-        navigate('/');
-        setIsComparing(true);
-        if (compareList.length >= 2) {
-            runCompare();
-        }
-        setTimeout(() => mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
-        setTimeout(() => compareSearchInputRef.current?.focus(), 250);
+        setTimeout(() => {
+            mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            compareSearchInputRef.current?.focus();
+        }, 140);
     }, [isComparing, compareList.length, runCompare, navigate]);
 
     const handleTabAdmin = useCallback(() => {
