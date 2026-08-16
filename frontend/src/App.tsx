@@ -1565,11 +1565,15 @@ const App: React.FC = () => {
                                 <p className="compare-search-hint">{compareList.length}/3 selected — tap a result to add it to the comparison.</p>
                             </div>
 
-                            {compareDetails.length === 0 ? (
+                            {compareDetails.length < 2 ? (
                                 <EmptyState
                                     icon="compare"
-                                    title="Start comparing teachers"
-                                    message="Search above to add at least 2 teachers, then their reviews appear side by side."
+                                    title={compareList.length === 0 ? "Start comparing teachers" : "Add one more teacher"}
+                                    message={
+                                        compareList.length === 0
+                                            ? "Search above to add at least 2 teachers, then their reviews appear side by side."
+                                            : "Search above to add 1 more teacher to start comparing."
+                                    }
                                 />
                             ) : (
                                 <div className="compare-table-wrap">
