@@ -451,6 +451,7 @@ const App: React.FC = () => {
     const [isComparing, setIsComparing] = useState(false);
     const [compareDetails, setCompareDetails] = useState<TeacherDetail[]>([]);
     const [compareLoading, setCompareLoading] = useState(false);
+    const [compareSearchTerm, setCompareSearchTerm] = useState('');
     const [showReviewForm, setShowReviewForm] = useState(false);
     const [reviewComment, setReviewComment] = useState('');
     const [reviewUserName, setReviewUserName] = useState('');
@@ -1165,15 +1166,11 @@ const App: React.FC = () => {
         setIsComparing(false);
     }, []);
 
-    const runCompare = useCallback(async () => {
-        if (compareList.length < 2) {
-            showToast('Select at least 2 teachers to compare', 'info');
-            return;
-        }
+    const fetchCompareDetails = useCallback(async (list: Teacher[]) => {
         setCompareLoading(true);
         try {
-            const results = await Promise.all(compareList.map(t => getTeacherDetail(t.id)));
-            const details: TeacherDetail[] = results.map((res, i) => {
+            const results = await Promise.all(list.map(t => getTeacherDetail(t.id)));
+            const details: TeacherDetail[] = results.map((res) => {
                 const data = res.data;
                 const teacherInfo = data.teacher || data;
                 const reviewsList = data.reviews || [];
@@ -1189,23 +1186,51 @@ const App: React.FC = () => {
                 };
             });
             setCompareDetails(details);
-            setIsComparing(true);
-            setSelectedTeacher(null);
-            navigate('/');
-            // Auto-scroll to compare view on mobile
-            if (window.innerWidth <= 768 && mainContentRef.current) {
-                listScrollPosRef.current = window.scrollY;
-                setTimeout(() => {
-                    mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }, 150);
-            }
+            return true;
         } catch (error) {
             console.error('Error loading compare data:', error);
             showToast('Failed to load comparison data', 'error');
+            return false;
         } finally {
             setCompareLoading(false);
         }
-    }, [compareList, navigate, showToast]);
+    }, [showToast]);
+
+    const runCompare = useCallback(async () => {
+        if (compareList.length < 2) {
+            showToast('Select at least 2 teachers to compare', 'info');
+            return;
+        }
+        const ok = await fetchCompareDetails(compareList);
+        if (!ok) return;
+        setIsComparing(true);
+        setSelectedTeacher(null);
+        navigate('/');
+        // Auto-scroll to compare view on mobile
+        if (window.innerWidth <= 768 && mainContentRef.current) {
+            listScrollPosRef.current = window.scrollY;
+            setTimeout(() => {
+                mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 150);
+        }
+    }, [compareList, fetchCompareDetails, navigate, showToast]);
+
+    const handleCompareAdd = useCallback((teacher: Teacher) => {
+        haptic(8);
+        if (compareList.some(t => t.id === teacher.id)) {
+            showToast('This teacher is already in the comparison', 'info');
+            return;
+        }
+        if (compareList.length >= 3) {
+            showToast('You can compare up to 3 teachers at once', 'info');
+            return;
+        }
+        const next = [...compareList, teacher];
+        setCompareList(next);
+        if (next.length >= 2) {
+            fetchCompareDetails(next);
+        }
+    }, [compareList, fetchCompareDetails, showToast]);
 
     const displayTeachers = isSearching ? searchResults : teachers;
 
@@ -1525,9 +1550,34 @@ const App: React.FC = () => {
                                 <h1 className="gradient-text compare-title"><Icon name="compare" size={26} /> Compare Teachers</h1>
                             </div>
 
+                            <div className="compare-search">
+                                <TeacherAutocomplete
+                                    value={compareSearchTerm}
+                                    onInputChange={(e) => setCompareSearchTerm(e.target.value)}
+                                    inputRef={undefined}
+                                    onSelect={(teacher) => {
+                                        setCompareSearchTerm('');
+                                        handleCompareAdd(teacher);
+                                    }}
+                                    onClear={() => setCompareSearchTerm('')}
+                                    placeholder="Search and add a teacher to compare..."
+                                />
+                                <p className="compare-search-hint">{compareList.length}/3 selected — tap a result to add it to the comparison.</p>
+                            </div>
+
                             <div className="compare-grid">
                                 {compareDetails.map((t) => (
                                     <div key={t.id} className="compare-card">
+                                        <button
+                                            onClick={() => {
+                                                setCompareList(prev => prev.filter(x => x.id !== t.id));
+                                                setCompareDetails(prev => prev.filter(x => x.id !== t.id));
+                                            }}
+                                            className="compare-card-remove"
+                                            aria-label={`Remove ${t.name} from comparison`}
+                                        >
+                                            ✕
+                                        </button>
                                         <Avatar name={t.name} imageUrl={t.image_url} className="compare-card-image" />
                                         <h2 className="compare-card-name">{t.name}</h2>
                                         <p className="compare-card-dept">{t.department}</p>
@@ -1564,7 +1614,7 @@ const App: React.FC = () => {
                             </div>
 
                             {compareDetails.length < 3 && (
-                                <p className="compare-hint">Tip: add up to 3 teachers with the "+" button on any card.</p>
+                                <p className="compare-hint">Tip: use the search box above to add up to 3 teachers, or tap "+" on any card.</p>
                             )}
                             <p className="compare-swipe-hint">← Swipe sideways to compare →</p>
                         </div>
