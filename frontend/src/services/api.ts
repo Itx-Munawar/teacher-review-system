@@ -9,7 +9,27 @@ const api = axios.create({
     withCredentials: true, // send the HttpOnly admin cookie on cross-origin requests
 });
 
+// ========== HELPERS ==========
+
+/** Read a cookie value by name (no library needed). */
+function getCookie(name: string): string | null {
+    const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[\.$?*|{}()\[\]\\]/g, '\\$&') + '=([^;]*)'));
+    return match ? decodeURIComponent(match[1]) : null;
+}
+
 // ========== INTERCEPTORS ==========
+
+// Request interceptor – attach CSRF token header on state-changing requests
+api.interceptors.request.use((config) => {
+    const safeMethods = ['get', 'head', 'options'];
+    if (!safeMethods.includes((config.method || 'get').toLowerCase())) {
+        const csrfToken = getCookie('csrf_token');
+        if (csrfToken) {
+            config.headers.set('X-CSRF-Token', csrfToken);
+        }
+    }
+    return config;
+});
 
 // Response interceptor – handle 401/403 (session expired)
 api.interceptors.response.use(
@@ -116,7 +136,6 @@ export const deleteTeacher = (id: number) => {
  * Update an existing teacher (admin only)
  */
 export const updateTeacher = (id: number, data: { name: string; department: string; image_url?: string }) => {
-    console.log(`✏️ Updating teacher ID ${id}:`, data);
     return api.put(`/admin/teachers/${id}`, data);
 };
 

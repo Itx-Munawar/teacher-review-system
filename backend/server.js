@@ -10,6 +10,7 @@ const { body, validationResult } = require('express-validator');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const db = require('./db');
+const { csrfSetCookie, csrfValidate } = require('./csrf');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -72,6 +73,9 @@ app.use(cors({
     credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
+
+// CSRF: set cookie on every response so the frontend can read it
+app.use(csrfSetCookie);
 
 // Rate limiting
 const reviewLimiter = rateLimit({
@@ -563,7 +567,7 @@ app.post('/api/reviews', reviewLimiter, [
 
 // ========== ADMIN API ENDPOINTS ==========
 
-app.post('/api/admin/login', loginLimiter, async (req, res) => {
+app.post('/api/admin/login', loginLimiter, csrfValidate, async (req, res) => {
     // ... (your existing admin login code) ...
     try {
         const { username, password } = req.body;
@@ -598,12 +602,12 @@ app.get('/api/admin/me', verifyAdmin, (req, res) => {
 });
 
 // POST /api/admin/logout - clear the admin session cookie
-app.post('/api/admin/logout', (req, res) => {
+app.post('/api/admin/logout', csrfValidate, (req, res) => {
     res.clearCookie('admin_token', { ...buildCookieOptions(req), maxAge: undefined });
     res.json({ success: true, message: 'Logged out successfully' });
 });
 
-app.post('/api/admin/forgot-password', resetLimiter, async (req, res) => {
+app.post('/api/admin/forgot-password', resetLimiter, csrfValidate, async (req, res) => {
     // ... (your existing forgot password code) ...
     try {
         const { email } = req.body;
@@ -614,7 +618,8 @@ app.post('/api/admin/forgot-password', resetLimiter, async (req, res) => {
         const resetToken = crypto.randomBytes(32).toString('hex');
         const tokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
         await db.query('UPDATE admins SET reset_token = ?, reset_token_expires = ? WHERE id = ?', [resetToken, tokenExpiry, admin.id]);
-        const resetLink = `http://localhost:3000/reset-password?token=${resetToken}`;
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+        const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
         await sendEmail(email, 'Password Reset Request', `<p>Click <a href="${resetLink}">here</a> to reset your password. Link expires in 1 hour.</p>`);
         res.json({ success: true, message: 'Reset link sent to email.' });
     } catch (error) {
@@ -623,7 +628,7 @@ app.post('/api/admin/forgot-password', resetLimiter, async (req, res) => {
     }
 });
 
-app.post('/api/admin/reset-password', async (req, res) => {
+app.post('/api/admin/reset-password', csrfValidate, async (req, res) => {
     // ... (your existing reset password code) ...
     try {
         const { token, newPassword } = req.body;
@@ -639,7 +644,7 @@ app.post('/api/admin/reset-password', async (req, res) => {
     }
 });
 
-app.post('/api/admin/setup', async (req, res) => {
+app.post('/api/admin/setup', csrfValidate, async (req, res) => {
     // Only usable when ADMIN_SETUP_SECRET is configured and provided via x-setup-secret header
     const setupSecret = process.env.ADMIN_SETUP_SECRET;
     if (!setupSecret || req.headers['x-setup-secret'] !== setupSecret) {
@@ -660,7 +665,7 @@ app.post('/api/admin/setup', async (req, res) => {
     }
 });
 
-app.post('/api/admin/teachers', verifyAdmin, [
+app.post('/api/admin/teachers', verifyAdmin, csrfValidate, [
     body('name').isLength({ min: 2, max: 100 }).withMessage('Name must be 2-100 characters'),
     body('department').isLength({ min: 2, max: 100 }).withMessage('Department must be 2-100 characters'),
     body('image_url').optional().isURL().withMessage('Image URL must be a valid URL')
@@ -683,7 +688,7 @@ app.post('/api/admin/teachers', verifyAdmin, [
     }
 });
 
-app.delete('/api/admin/teachers/:id', verifyAdmin, async (req, res) => {
+app.delete('/api/admin/teachers/:id', verifyAdmin, csrfValidate, async (req, res) => {
     // ... (your existing delete teacher code) ...
     try {
         const teacherId = req.params.id;
@@ -700,7 +705,7 @@ app.delete('/api/admin/teachers/:id', verifyAdmin, async (req, res) => {
 });
 
 // ========== UPDATE TEACHER (admin only) ==========
-app.put('/api/admin/teachers/:id', verifyAdmin, [
+app.put('/api/admin/teachers/:id', verifyAdmin, csrfValidate, [
     body('name').isLength({ min: 2, max: 100 }).withMessage('Name must be 2-100 characters'),
     body('department').isLength({ min: 2, max: 100 }).withMessage('Department must be 2-100 characters'),
     body('image_url').optional().isURL().withMessage('Image URL must be a valid URL')
@@ -774,7 +779,7 @@ app.get('/api/admin/reviews', verifyAdmin, async (req, res) => {
     }
 });
 
-app.delete('/api/admin/reviews/:id', verifyAdmin, async (req, res) => {
+app.delete('/api/admin/reviews/:id', verifyAdmin, csrfValidate, async (req, res) => {
     // ... (your existing delete review code) ...
     try {
         const reviewId = req.params.id;
@@ -823,7 +828,7 @@ app.get('/api/admin/questions', verifyAdmin, async (req, res) => {
 });
 
 // DELETE /api/admin/questions/:id - delete a question and its answers (admin only)
-app.delete('/api/admin/questions/:id', verifyAdmin, async (req, res) => {
+app.delete('/api/admin/questions/:id', verifyAdmin, csrfValidate, async (req, res) => {
     try {
         const questionId = req.params.id;
         await db.query('DELETE FROM question_answers WHERE question_id = ?', [questionId]);

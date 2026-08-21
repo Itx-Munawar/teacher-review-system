@@ -1,12 +1,13 @@
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
 module.exports = function (app) {
+    const target = process.env.REACT_APP_API_BASE || 'http://localhost:5000';
     app.use(
         '/api',
         createProxyMiddleware({
-            target: 'https://teacher-review-system.onrender.com',
+            target,
             changeOrigin: true,
-            secure: true,
+            secure: false,
         })
     );
 };

@@ -31,47 +31,12 @@ import Icon from './components/Icon';
 import Avatar from './components/Avatar';
 import EmptyState from './components/EmptyState';
 import BottomNav from './components/BottomNav';
+import AdminPanel from './components/AdminPanel';
+import LoginForm from './components/LoginForm';
 import { haptic } from './utils/haptics';
 import { timeAgo } from './utils/timeAgo';
+import type { Teacher, Review, TeacherDetail, AdminReview, Toast } from './types';
 import './App.css';
-
-// ========== INTERFACES ==========
-interface Teacher {
-    id: number;
-    name: string;
-    department: string;
-    review_count: number;
-    created_at?: string;
-    image_url?: string;
-}
-
-interface Review {
-    id: number;
-    teacher_id: number;
-    comment: string;
-    user_name: string;
-    created_at: string;
-}
-
-interface TeacherDetail extends Teacher {
-    reviews: Review[];
-    total_reviews: number;
-}
-
-interface AdminReview {
-    id: number;
-    teacher_id: number;
-    teacher_name: string;
-    comment: string;
-    user_name: string;
-    created_at: string;
-}
-
-interface Toast {
-    id: number;
-    message: string;
-    type: 'success' | 'error' | 'info';
-}
 
 // ========== TOASTS ==========
 const ToastHost = memo(({ toasts }: { toasts: Toast[] }) => (
@@ -84,349 +49,21 @@ const ToastHost = memo(({ toasts }: { toasts: Toast[] }) => (
     </div>
 ));
 
-// ========== ADMIN PANEL ==========
-interface AdminPanelProps {
-    teachers: Teacher[];
-    reviewsForModeration: AdminReview[];
-    onAddTeacher: (e: React.FormEvent) => void;
-    onDeleteTeacher: (id: number) => void;
-    onUpdateTeacher: (id: number, data: { name: string; department: string; image_url?: string }) => void;
-    onDeleteReview: (id: number) => void;
-    onLogout: () => void;
-    showAddTeacherForm: boolean;
-    setShowAddTeacherForm: (v: boolean) => void;
-    newTeacherName: string;
-    setNewTeacherName: (v: string) => void;
-    newTeacherDepartment: string;
-    setNewTeacherDepartment: (v: string) => void;
-    newTeacherImage: string;
-    setNewTeacherImage: (v: string) => void;
-    totalTeachersCount: number;
-    loadingMore: boolean;
-    onLoadMore: () => void;
-    adminSearchTerm: string;
-    onAdminSearchChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    adminSearchResults: Teacher[];
-    adminIsSearching: boolean;
-    onLoadMoreReviews: () => void;
-    adminLoadingMoreReviews: boolean;
-    adminReviewsTotalPages: number;
-    adminReviewsPage: number;
-    adminQuestions: AdminQuestion[];
-    onDeleteQuestion: (id: number) => void;
-    adminLoadingMoreQuestions: boolean;
-    adminQuestionsPage: number;
-    adminQuestionsTotalPages: number;
-    onLoadMoreQuestions: () => void;
-}
-
-const AdminPanel = memo(({
-    teachers,
-    reviewsForModeration,
-    onAddTeacher,
-    onDeleteTeacher,
-    onUpdateTeacher,
-    onDeleteReview,
-    onLogout,
-    showAddTeacherForm,
-    setShowAddTeacherForm,
-    newTeacherName,
-    setNewTeacherName,
-    newTeacherDepartment,
-    setNewTeacherDepartment,
-    newTeacherImage,
-    setNewTeacherImage,
-    totalTeachersCount,
-    loadingMore,
-    onLoadMore,
-    adminSearchTerm,
-    onAdminSearchChange,
-    adminSearchResults,
-    adminIsSearching,
-    onLoadMoreReviews,
-    adminLoadingMoreReviews,
-    adminReviewsTotalPages,
-    adminReviewsPage,
-    adminQuestions,
-    onDeleteQuestion,
-    adminLoadingMoreQuestions,
-    adminQuestionsPage,
-    adminQuestionsTotalPages,
-    onLoadMoreQuestions
-}: AdminPanelProps) => {
-    const totalReviews = reviewsForModeration?.length || 0;
-
-    const displayTeachers = adminSearchTerm ? adminSearchResults : teachers;
-
-    // Edit state
-    const [editingTeacherId, setEditingTeacherId] = useState<number | null>(null);
-    const [editName, setEditName] = useState('');
-    const [editDepartment, setEditDepartment] = useState('');
-    const [editImageUrl, setEditImageUrl] = useState('');
-    // Edit handlers
-    const startEdit = (teacher: Teacher) => {
-        setEditingTeacherId(teacher.id);
-        setEditName(teacher.name);
-        setEditDepartment(teacher.department);
-        setEditImageUrl(teacher.image_url || '');
+// ========== HELPER: Map API response to TeacherDetail ==========
+const mapTeacherDetail = (data: any, fallback?: TeacherDetail): TeacherDetail => {
+    const teacherInfo = data.teacher || data;
+    const reviewsList = data.reviews || [];
+    const totalReviews = data.total_reviews || 0;
+    return {
+        id: teacherInfo.id,
+        name: teacherInfo.name,
+        department: teacherInfo.department,
+        review_count: totalReviews,
+        total_reviews: totalReviews,
+        image_url: teacherInfo.image_url || null,
+        reviews: reviewsList,
     };
-
-    const cancelEdit = () => {
-        setEditingTeacherId(null);
-        setEditName('');
-        setEditDepartment('');
-        setEditImageUrl('');
-    };
-
-    const handleUpdate = async (id: number) => {
-        await onUpdateTeacher(id, {
-            name: editName,
-            department: editDepartment,
-            image_url: editImageUrl || undefined
-        });
-        cancelEdit();
-    };
-
-    return (
-        <div className="admin-panel">
-            <div className="admin-header">
-                <h2 className="gradient-text">Admin Dashboard</h2>
-                <div className="admin-stats">
-                    <span><Icon name="book" size={15} /> {totalTeachersCount || teachers.length} Teachers</span>
-                    <span><Icon name="message-circle" size={15} /> {totalReviews} Reviews</span>
-                </div>
-                <button onClick={onLogout} className="logout-btn">Logout</button>
-            </div>
-
-            <div className="admin-section">
-                <button onClick={() => setShowAddTeacherForm(!showAddTeacherForm)} className="add-teacher-btn">
-                    {showAddTeacherForm ? (
-                        'Cancel'
-                    ) : (
-                        <>
-                            <Icon name="plus" size={16} /> Add New Teacher
-                        </>
-                    )}
-                </button>
-                {showAddTeacherForm && (
-                    <form onSubmit={onAddTeacher} className="add-teacher-form">
-                        <input type="text" placeholder="Teacher Name" aria-label="New teacher name" value={newTeacherName} onChange={(e) => setNewTeacherName(e.target.value)} required />
-                        <input type="text" placeholder="Department" aria-label="New teacher department" value={newTeacherDepartment} onChange={(e) => setNewTeacherDepartment(e.target.value)} required />
-                        <input type="url" placeholder="Image URL (optional)" aria-label="New teacher image URL" value={newTeacherImage} onChange={(e) => setNewTeacherImage(e.target.value)} />
-                        <button type="submit">Save Teacher</button>
-                    </form>
-                )}
-            </div>
-
-            <div className="admin-section">
-                <h3>Manage Teachers</h3>
-                <div className="search-box" style={{ marginBottom: '1rem' }}>
-                    <input
-                        type="text"
-                        placeholder="Search teachers by name or department..."
-                        aria-label="Search teachers by name or department"
-                        value={adminSearchTerm}
-                        onChange={onAdminSearchChange}
-                        className="search-input"
-                    />
-                    {adminSearchTerm && (
-                        <div className="search-info">
-                            Found {adminSearchResults.length} teacher{adminSearchResults.length !== 1 ? 's' : ''} matching "{adminSearchTerm}"
-                        </div>
-                    )}
-                </div>
-
-                <div className="admin-list">
-                    {adminIsSearching ? (
-                        <div className="loading">Searching...</div>
-                    ) : displayTeachers.length === 0 ? (
-                        <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
-                            {adminSearchTerm ? 'No teachers found' : 'No teachers added yet'}
-                        </p>
-                    ) : (
-                        displayTeachers.map((teacher: Teacher) => {
-                            const isEditing = editingTeacherId === teacher.id;
-                            return (
-                                <div key={teacher.id} className="admin-item">
-                                    {isEditing ? (
-                                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                            <input
-                                                type="text"
-                                                value={editName}
-                                                onChange={(e) => setEditName(e.target.value)}
-                                                placeholder="Name"
-                                                aria-label="Edit teacher name"
-                                                className="search-input"
-                                                style={{ margin: 0 }}
-                                            />
-                                            <input
-                                                type="text"
-                                                value={editDepartment}
-                                                onChange={(e) => setEditDepartment(e.target.value)}
-                                                placeholder="Department"
-                                                aria-label="Edit teacher department"
-                                                className="search-input"
-                                                style={{ margin: 0 }}
-                                            />
-                                            <input
-                                                type="url"
-                                                value={editImageUrl}
-                                                onChange={(e) => setEditImageUrl(e.target.value)}
-                                                placeholder="Image URL (optional)"
-                                                aria-label="Edit teacher image URL"
-                                                className="search-input"
-                                                style={{ margin: 0 }}
-                                            />
-                                            <div style={{ display: 'flex', gap: '8px' }}>
-                                                <button onClick={() => handleUpdate(teacher.id)} className="btn-submit" style={{ padding: '4px 12px' }}>Save</button>
-                                                <button onClick={cancelEdit} className="btn-cancel" style={{ padding: '4px 12px' }}>Cancel</button>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <span><strong>{teacher.name}</strong> - {teacher.department}</span>
-                                            <div>
-                                                <button onClick={() => startEdit(teacher)} className="edit-btn" style={{ marginRight: '8px' }} aria-label={`Edit ${teacher.name}`}>
-                                                    <Icon name="edit" size={14} />
-                                                </button>
-                                                <button onClick={() => onDeleteTeacher(teacher.id)} className="delete-btn">Delete</button>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            );
-                        })
-                    )}
-                </div>
-
-                {!adminSearchTerm && (
-                    <>
-                        {loadingMore && <div className="loading-more">Loading more teachers...</div>}
-                        {!loadingMore && teachers.length < totalTeachersCount && (
-                            <button onClick={onLoadMore} className="load-more-btn" style={{ marginTop: '1rem', width: '100%' }}>
-                                Load More ({teachers.length} / {totalTeachersCount})
-                            </button>
-                        )}
-                        {teachers.length === totalTeachersCount && totalTeachersCount > 0 && (
-                            <div className="end-of-list">You've seen all {totalTeachersCount} teachers</div>
-                        )}
-                    </>
-                )}
-            </div>
-
-            <div className="admin-section">
-                <h3>Manage Reviews ({totalReviews})</h3>
-                <div className="admin-list">
-                    {totalReviews === 0 ? (
-                        <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>No reviews yet.</p>
-                    ) : (
-                        reviewsForModeration.map((review: AdminReview) => (
-                            <div key={review.id} className="admin-item">
-                                <div className="review-info">
-                                    <strong>{review.teacher_name}</strong>
-                                    <p style={{ marginTop: '8px', marginBottom: '5px' }}>"{review.comment}"</p>
-                                    <small>
-                                        <Icon name="user" size={12} /> {review.user_name || 'Anonymous'} | <Icon name="calendar" size={12} /> {new Date(review.created_at).toLocaleDateString()}
-                                    </small>
-                                </div>
-                                <button onClick={() => onDeleteReview(review.id)} className="delete-btn">Delete</button>
-                            </div>
-                        ))
-                    )}
-                </div>
-                {!adminLoadingMoreReviews && adminReviewsPage < adminReviewsTotalPages && (
-                    <button onClick={onLoadMoreReviews} className="load-more-btn" style={{ marginTop: '1rem', width: '100%' }}>
-                        Load More Reviews
-                    </button>
-                )}
-                {adminLoadingMoreReviews && <div className="loading-more">Loading more reviews...</div>}
-            </div>
-
-            <div className="admin-section">
-                <h3>Manage Questions ({adminQuestions.length})</h3>
-                <div className="admin-list">
-                    {adminQuestions.length === 0 ? (
-                        <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>No questions yet.</p>
-                    ) : (
-                        adminQuestions.map((question: AdminQuestion) => (
-                            <div key={question.id} className="admin-item">
-                                <div className="review-info">
-                                    <strong>{question.teacher_name}</strong>
-                                    <p style={{ marginTop: '8px', marginBottom: '5px' }}>"{question.question}"</p>
-                                    <small>
-                                        <Icon name="message-circle" size={12} /> {question.answer_count} answer{question.answer_count !== 1 ? 's' : ''} | <Icon name="calendar" size={12} /> {new Date(question.created_at).toLocaleDateString()}
-                                    </small>
-                                </div>
-                                <button
-                                    onClick={() => onDeleteQuestion(question.id)}
-                                    className="delete-btn"
-                                    disabled={adminLoadingMoreQuestions}
-                                >
-                                    Delete
-                                </button>
-                            </div>
-                        ))
-                    )}
-                </div>
-                {!adminLoadingMoreQuestions && adminQuestionsPage < adminQuestionsTotalPages && (
-                    <button onClick={onLoadMoreQuestions} className="load-more-btn" style={{ marginTop: '1rem', width: '100%' }}>
-                        Load More Questions
-                    </button>
-                )}
-                {adminLoadingMoreQuestions && <div className="loading-more">Loading more questions...</div>}
-            </div>
-        </div>
-    );
-});
-
-// ========== LOGIN FORM ==========
-interface LoginFormProps {
-    adminUsername: string;
-    setAdminUsername: (v: string) => void;
-    adminPassword: string;
-    setAdminPassword: (v: string) => void;
-    adminError: string;
-    onLogin: (e: React.FormEvent) => void;
-}
-
-const LoginForm = memo(({
-    adminUsername,
-    setAdminUsername,
-    adminPassword,
-    setAdminPassword,
-    adminError,
-    onLogin
-}: LoginFormProps) => (
-    <div className="login-form-container">
-        <div className="login-form">
-            <h2 className="gradient-text">Admin Login</h2>
-            <form onSubmit={onLogin}>
-                <input
-                    type="text"
-                    placeholder="Username"
-                    aria-label="Username"
-                    value={adminUsername}
-                    onChange={(e) => setAdminUsername(e.target.value)}
-                    required
-                    autoFocus
-                />
-                <input
-                    type="password"
-                    placeholder="Password"
-                    aria-label="Password"
-                    value={adminPassword}
-                    onChange={(e) => setAdminPassword(e.target.value)}
-                    required
-                />
-                {adminError && <div className="error-message">{adminError}</div>}
-                <button type="submit">Login</button>
-            </form>
-            <p style={{ textAlign: 'center', marginTop: '15px' }}>
-                <a href="/forgot-password" style={{ color: '#667eea' }}>Forgot Password?</a>
-            </p>
-        </div>
-    </div>
-));
+};
 
 // ========== MAIN APP ==========
 const App: React.FC = () => {
@@ -599,10 +236,7 @@ const App: React.FC = () => {
         }
     }, [setSearchParams, loadTeachers]);
 
-    const handleAdminSearch = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value;
-        setAdminSearchTerm(value);
-
+    const debouncedAdminSearch = useRef(debounce(async (value: string) => {
         if (value.trim()) {
             setAdminIsSearching(true);
             try {
@@ -618,6 +252,12 @@ const App: React.FC = () => {
             setAdminIsSearching(false);
             setAdminSearchResults([]);
         }
+    }, 300));
+
+    const handleAdminSearch = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setAdminSearchTerm(value);
+        debouncedAdminSearch.current(value);
     }, []);
 
     // ========== ADMIN DATA ==========
@@ -750,20 +390,7 @@ const App: React.FC = () => {
             (async () => {
                 try {
                     const response = await getTeacherDetail(parseInt(teacherId));
-                    const data = response.data;
-                    const teacherInfo = data.teacher;
-                    const reviewsList = data.reviews || [];
-                    const totalReviews = data.total_reviews || 0;
-                    const teacherData: TeacherDetail = {
-                        id: teacherInfo.id,
-                        name: teacherInfo.name,
-                        department: teacherInfo.department,
-                        review_count: totalReviews,
-                        total_reviews: totalReviews,
-                        image_url: teacherInfo.image_url || null,
-                        reviews: reviewsList,
-                    };
-                    setSelectedTeacher(teacherData);
+                    setSelectedTeacher(mapTeacherDetail(response.data));
                 } catch (err) {
                     console.error('Failed to restore teacher:', err);
                 }
@@ -779,20 +406,7 @@ const App: React.FC = () => {
         (async () => {
             try {
                 const response = await getTeacherDetail(parseInt(teacherIdParam));
-                const data = response.data;
-                const teacherInfo = data.teacher;
-                const reviewsList = data.reviews || [];
-                const totalReviews = data.total_reviews || 0;
-                const teacherData: TeacherDetail = {
-                    id: teacherInfo.id,
-                    name: teacherInfo.name,
-                    department: teacherInfo.department,
-                    review_count: totalReviews,
-                    total_reviews: totalReviews,
-                    image_url: teacherInfo.image_url || null,
-                    reviews: reviewsList,
-                };
-                setSelectedTeacher(teacherData);
+                setSelectedTeacher(mapTeacherDetail(response.data));
             } catch (err) {
                 console.error('Failed to restore teacher:', err);
             }
@@ -984,16 +598,7 @@ const App: React.FC = () => {
                 await loadAdminData();
                 if (selectedTeacher) {
                     const response = await getTeacherDetail(selectedTeacher.id);
-                    const data = response.data;
-                    setSelectedTeacher({
-                        id: data.id || selectedTeacher.id,
-                        name: data.name || data.teacher?.name || selectedTeacher.name,
-                        department: data.department || data.teacher?.department || selectedTeacher.department,
-                        review_count: data.review_count || data.total_reviews || 0,
-                        total_reviews: data.total_reviews || 0,
-                        image_url: data.image_url || data.teacher?.image_url || null,
-                        reviews: data.reviews || [],
-                    });
+                    setSelectedTeacher(mapTeacherDetail(response.data, selectedTeacher));
                 }
             } catch (error) {
                 showToast('Failed to delete review', 'error');
@@ -1009,16 +614,7 @@ const App: React.FC = () => {
                 await loadAdminData();
                 if (selectedTeacher) {
                     const response = await getTeacherDetail(selectedTeacher.id);
-                    const data = response.data;
-                    setSelectedTeacher({
-                        id: data.id || selectedTeacher.id,
-                        name: data.name || data.teacher?.name || selectedTeacher.name,
-                        department: data.department || data.teacher?.department || selectedTeacher.department,
-                        review_count: data.review_count || data.total_reviews || 0,
-                        total_reviews: data.total_reviews || 0,
-                        image_url: data.image_url || data.teacher?.image_url || null,
-                        reviews: data.reviews || [],
-                    });
+                    setSelectedTeacher(mapTeacherDetail(response.data, selectedTeacher));
                 }
             } catch (error) {
                 showToast('Failed to delete question', 'error');
@@ -1062,16 +658,7 @@ const App: React.FC = () => {
             setReviewSuccess(`Your review for ${selectedTeacher.name} has been submitted. Thank you!`);
 
             const response = await getTeacherDetail(selectedTeacher.id);
-            const data = response.data;
-            setSelectedTeacher({
-                id: data.id || selectedTeacher.id,
-                name: data.name || data.teacher?.name || selectedTeacher.name,
-                department: data.department || data.teacher?.department || selectedTeacher.department,
-                review_count: data.review_count || data.total_reviews || 0,
-                total_reviews: data.total_reviews || 0,
-                image_url: data.image_url || data.teacher?.image_url || null,
-                reviews: data.reviews || [],
-            });
+            setSelectedTeacher(mapTeacherDetail(response.data, selectedTeacher));
             await loadTeachers(1);
             await loadAdminData();
         } catch (err: any) {
@@ -1086,21 +673,7 @@ const App: React.FC = () => {
         searchInputRef.current?.blur();
         try {
             const response = await getTeacherDetail(teacher.id);
-            const data = response.data;
-            const teacherInfo = data.teacher;
-            const reviewsList = data.reviews || [];
-            const totalReviews = data.total_reviews || 0;
-
-            const teacherData: TeacherDetail = {
-                id: teacherInfo.id,
-                name: teacherInfo.name,
-                department: teacherInfo.department,
-                review_count: totalReviews,
-                total_reviews: totalReviews,
-                image_url: teacherInfo.image_url || null,
-                reviews: reviewsList,
-            };
-            setSelectedTeacher(teacherData);
+            setSelectedTeacher(mapTeacherDetail(response.data));
             setShowReviewForm(false);
             setReviewComment('');
             setReviewUserName('');
@@ -1172,21 +745,7 @@ const App: React.FC = () => {
         setCompareLoading(true);
         try {
             const results = await Promise.all(list.map(t => getTeacherDetail(t.id)));
-            const details: TeacherDetail[] = results.map((res) => {
-                const data = res.data;
-                const teacherInfo = data.teacher || data;
-                const reviewsList = data.reviews || [];
-                const totalReviews = data.total_reviews || 0;
-                return {
-                    id: teacherInfo.id,
-                    name: teacherInfo.name,
-                    department: teacherInfo.department,
-                    review_count: totalReviews,
-                    total_reviews: totalReviews,
-                    image_url: teacherInfo.image_url || null,
-                    reviews: reviewsList,
-                };
-            });
+            const details: TeacherDetail[] = results.map((res) => mapTeacherDetail(res.data));
             setCompareDetails(details);
             return true;
         } catch (error) {
@@ -1264,6 +823,12 @@ const App: React.FC = () => {
             setCurrentPage(prev => prev + 1);
         }
     }, [isSearching, hasMore, loadingMore]);
+
+    const handleLoadMoreTeachers = useCallback(() => {
+        if (!loadingMore) {
+            setCurrentPage(prev => prev + 1);
+        }
+    }, [loadingMore]);
 
     // ========== BOTTOM NAV (mobile) ==========
     const scrollListIntoView = useCallback(() => {
@@ -1376,11 +941,11 @@ const App: React.FC = () => {
                         setNewTeacherImage={setNewTeacherImage}
                         totalTeachersCount={totalTeachersCount}
                         loadingMore={loadingMore}
-                        onLoadMore={() => setCurrentPage(prev => prev + 1)}
-                        adminSearchTerm={adminSearchTerm}
-                        onAdminSearchChange={handleAdminSearch}
-                        adminSearchResults={adminSearchResults}
-                        adminIsSearching={adminIsSearching}
+                        onLoadMore={handleLoadMoreTeachers}
+                        searchTerm={adminSearchTerm}
+                        onSearchChange={handleAdminSearch}
+                        searchResults={adminSearchResults}
+                        isSearching={adminIsSearching}
                         onLoadMoreReviews={handleLoadMoreReviews}
                         adminLoadingMoreReviews={adminLoadingMoreReviews}
                         adminReviewsTotalPages={adminReviewsTotalPages}

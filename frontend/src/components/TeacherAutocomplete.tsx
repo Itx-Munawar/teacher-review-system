@@ -2,14 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { searchAllTeachers } from '../services/api';
 import { debounce } from '../utils/debounce';
 import Avatar from './Avatar';
-
-interface Teacher {
-    id: number;
-    name: string;
-    department: string;
-    review_count: number;
-    image_url?: string;
-}
+import type { Teacher } from '../types';
 
 interface TeacherAutocompleteProps {
     value: string;
