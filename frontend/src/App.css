@@ -3371,3 +3371,72 @@ body::after {
         opacity: 1;
     }
 }
+
+/* ========== ERROR BOUNDARY ========== */
+.error-boundary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+    padding: 2rem;
+    text-align: center;
+}
+
+.error-boundary-content {
+    max-width: 480px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 2.5rem;
+    backdrop-filter: blur(10px);
+}
+
+.error-boundary-content svg {
+    color: #ef4444;
+    margin-bottom: 1rem;
+}
+
+.error-boundary-content h2 {
+    margin: 0 0 0.5rem;
+    font-size: 1.25rem;
+    color: #f8fafc;
+}
+
+.error-boundary-message {
+    color: #94a3b8;
+    margin: 0 0 1rem;
+}
+
+.error-boundary-details {
+    text-align: left;
+    margin-bottom: 1.5rem;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.error-boundary-details summary {
+    cursor: pointer;
+    color: #64748b;
+    font-size: 0.85rem;
+    padding: 0.5rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+}
+
+.error-boundary-details pre {
+    margin: 0.5rem 0 0;
+    padding: 0.75rem;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    font-size: 0.8rem;
+    color: #f87171;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.error-boundary-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+}

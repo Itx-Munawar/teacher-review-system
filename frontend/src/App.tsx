@@ -36,6 +36,7 @@ import LoginForm from './components/LoginForm';
 import CompareView from './components/CompareView';
 import TeacherDetailView from './components/TeacherDetailView';
 import ReviewFormModal from './components/ReviewFormModal';
+import ErrorBoundary from './components/ErrorBoundary';
 import { haptic } from './utils/haptics';
 import { timeAgo } from './utils/timeAgo';
 import type { Teacher, Review, TeacherDetail, AdminReview, AdminQuestion, Toast } from './types';
@@ -931,6 +932,7 @@ const App: React.FC = () => {
                         <button onClick={() => setShowAdminPanel(false)} className="back-to-site-btn">← Back to Site</button>
                     </header>
                     <div className="container">
+                        <ErrorBoundary>
                         <LoginForm
                             adminUsername={adminUsername}
                             setAdminUsername={setAdminUsername}
@@ -939,6 +941,7 @@ const App: React.FC = () => {
                             adminError={adminError}
                             onLogin={handleAdminLogin}
                         />
+                        </ErrorBoundary>
                     </div>
                 </div>
             );
@@ -952,6 +955,7 @@ const App: React.FC = () => {
                     <button onClick={() => setShowAdminPanel(false)} className="back-to-site-btn">← Back to Site</button>
                 </header>
                 <div className="container">
+                    <ErrorBoundary>
                     <AdminPanel
                         teachers={teachers}
                         reviewsForModeration={reviewsForModeration}
@@ -988,6 +992,7 @@ const App: React.FC = () => {
                         adminQuestionsTotalPages={adminQuestionsTotalPages}
                         onLoadMoreQuestions={handleLoadMoreQuestions}
                     />
+                    </ErrorBoundary>
                 </div>
             </div>
         );
@@ -1174,6 +1179,7 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="main-content" ref={mainContentRef}>
+                <ErrorBoundary>
                     {isComparing ? (
                         <CompareView
                             compareDetails={compareDetails}
@@ -1219,6 +1225,7 @@ const App: React.FC = () => {
                             )}
                         </div>
                     )}
+                </ErrorBoundary>
                 </div>
             </div>
 
