@@ -3631,3 +3631,21 @@ body::after {
         max-width: none;
     }
 }
+
+/* ========== EMPTY STATE ILLUSTRATIONS ========== */
+.empty-state-visual {
+    margin-bottom: 1rem;
+}
+
+.empty-state-illustration {
+    width: 160px;
+    height: 128px;
+    opacity: 0.9;
+}
+
+@media (max-width: 480px) {
+    .empty-state-illustration {
+        width: 120px;
+        height: 96px;
+    }
+}
