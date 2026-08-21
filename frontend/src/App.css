@@ -4249,3 +4249,79 @@ select:focus-visible {
     margin: 0.25rem 0 0;
     font-weight: 500;
 }
+
+/* ========== TARGETED VISIBILITY FIXES ========== */
+/* Search input text */
+.search-input {
+    color: #000000 !important;
+}
+
+.search-input::placeholder {
+    color: #6b7280 !important;
+}
+
+/* Compare cards - review text */
+.compare-snippet {
+    color: #1f2937 !important;
+}
+
+.compare-snippet-author {
+    color: #4b5563 !important;
+}
+
+/* Compare cards - review count */
+.compare-count-badge {
+    color: #4f46e5 !important;
+    font-weight: 700;
+}
+
+.compare-count-label {
+    color: #6b7280 !important;
+}
+
+/* Swipeable cards - reviews */
+.swipe-review-quote {
+    color: #1f2937 !important;
+}
+
+.swipe-review-author {
+    color: #4b5563 !important;
+}
+
+/* Swipeable cards - stats */
+.swipe-stat-value {
+    color: #000000 !important;
+    font-weight: 700;
+}
+
+.swipe-stat-label {
+    color: #6b7280 !important;
+}
+
+/* Swipeable cards - name */
+.swipe-card-name {
+    color: #000000 !important;
+}
+
+.swipe-card-dept {
+    color: #4b5563 !important;
+}
+
+/* Compare table - all cells */
+.compare-table td {
+    color: #1f2937 !important;
+}
+
+.compare-table th {
+    color: #000000 !important;
+}
+
+/* Teacher card - review count */
+.reviews-count {
+    color: #4f46e5 !important;
+}
+
+/* Latest review text */
+.compare-value-cell {
+    color: #1f2937 !important;
+}
