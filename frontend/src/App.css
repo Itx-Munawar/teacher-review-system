@@ -4325,3 +4325,50 @@ select:focus-visible {
 .compare-value-cell {
     color: #1f2937 !important;
 }
+
+/* ========== FIX COMPARE BAR VISIBILITY ========== */
+.compare-bar-name {
+    background: #f3f4f6 !important;
+    color: #1f2937 !important;
+    border: 1px solid #d1d5db;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.compare-bar-name:hover {
+    background: #fee2e2 !important;
+    border-color: #fecaca;
+    color: #dc2626 !important;
+}
+
+.compare-bar-count {
+    color: #374151 !important;
+    font-weight: 600;
+}
+
+.compare-bar {
+    background: white !important;
+    border: 1px solid #e5e7eb !important;
+}
+
+.compare-go-btn {
+    background: #4f46e5 !important;
+    color: white !important;
+}
+
+.compare-go-btn:hover:not(:disabled) {
+    background: #4338ca !important;
+}
+
+.compare-clear-btn {
+    color: #6b7280 !important;
+    background: #f3f4f6 !important;
+    border: 1px solid #d1d5db !important;
+}
