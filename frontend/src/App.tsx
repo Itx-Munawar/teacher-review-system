@@ -992,11 +992,12 @@ const App: React.FC = () => {
 
     return (
         <div className="app">
+            <a href="#main-content" className="skip-link">Skip to main content</a>
             <ParticleBackground />
             <ToastHost toasts={toasts} onDismiss={dismissToast} />
             {compareList.length === 0 && <InstallPrompt />}
             <PullToRefresh onRefresh={handlePullRefresh}>
-                <header className="header">
+                <header className="header" role="banner">
                     <div className="header-top">
                         <div className="header-brand">
                             <img
@@ -1164,7 +1165,7 @@ const App: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="main-content" ref={mainContentRef}>
+                <main className="main-content" id="main-content" ref={mainContentRef}>
                 <ErrorBoundary>
                     {isComparing ? (
                         <CompareView
@@ -1177,6 +1178,11 @@ const App: React.FC = () => {
                             setIsComparing={setIsComparing}
                             restoreListScroll={restoreListScroll}
                             handleTeacherClick={handleTeacherClick}
+                            handleTeacherClickDetail={(t) => {
+                                setIsComparing(false);
+                                setSelectedTeacher(t);
+                                navigate(`/teacher/${t.id}`);
+                            }}
                             setCompareList={setCompareList}
                             setCompareDetails={setCompareDetails}
                         />
@@ -1212,10 +1218,10 @@ const App: React.FC = () => {
                         </div>
                     )}
                 </ErrorBoundary>
-                </div>
+                </main>
             </div>
 
-            <footer className="app-footer">
+            <footer className="app-footer" role="contentinfo">
                 <div className="footer-content">
                     <p>© {new Date().getFullYear()} UMT Teacher Reviews. All rights reserved.</p>
                     <p>Developed by Munawar Hussain</p>
