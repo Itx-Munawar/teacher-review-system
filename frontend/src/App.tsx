@@ -33,6 +33,9 @@ import EmptyState from './components/EmptyState';
 import BottomNav from './components/BottomNav';
 import AdminPanel from './components/AdminPanel';
 import LoginForm from './components/LoginForm';
+import CompareView from './components/CompareView';
+import TeacherDetailView from './components/TeacherDetailView';
+import ReviewFormModal from './components/ReviewFormModal';
 import { haptic } from './utils/haptics';
 import { timeAgo } from './utils/timeAgo';
 import type { Teacher, Review, TeacherDetail, AdminReview, AdminQuestion, Toast } from './types';
@@ -1172,221 +1175,31 @@ const App: React.FC = () => {
 
                 <div className="main-content" ref={mainContentRef}>
                     {isComparing ? (
-                        <div className="compare-view">
-                            <div className="compare-view-header">
-                                <button onClick={() => { setIsComparing(false); restoreListScroll(); }} className="back-button">
-                                    ← Back to list
-                                </button>
-                                <h1 className="gradient-text compare-title"><Icon name="compare" size={26} /> Compare Teachers</h1>
-                            </div>
-
-                            <div className="compare-search">
-                                <TeacherAutocomplete
-                                    value={compareSearchTerm}
-                                    onInputChange={(e) => setCompareSearchTerm(e.target.value)}
-                                    inputRef={compareSearchInputRef}
-                                    onSelect={(teacher) => {
-                                        setCompareSearchTerm('');
-                                        handleCompareAdd(teacher);
-                                    }}
-                                    onClear={() => setCompareSearchTerm('')}
-                                    placeholder="Search and add a teacher to compare..."
-                                />
-                                <p className="compare-search-hint">{compareList.length}/3 selected — tap a result to add it to the comparison.</p>
-                            </div>
-
-                            {compareDetails.length < 2 ? (
-                                <EmptyState
-                                    icon="compare"
-                                    title={compareList.length === 0 ? "Start comparing teachers" : "Add one more teacher"}
-                                    message={
-                                        compareList.length === 0
-                                            ? "Search above to add at least 2 teachers, then their reviews appear side by side."
-                                            : "Search above to add 1 more teacher to start comparing."
-                                    }
-                                />
-                            ) : (
-                                <div className="compare-table-wrap">
-                                    <table className="compare-table">
-                                        <thead>
-                                            <tr>
-                                                <th className="compare-metric-cell">Attribute</th>
-                                                {compareDetails.map((t) => (
-                                                    <th key={t.id} className="compare-teacher-cell">
-                                                        <div className="compare-table-teacher">
-                                                            <Avatar name={t.name} imageUrl={t.image_url} className="compare-table-avatar" />
-                                                            <div className="compare-table-teacher-info">
-                                                                <span className="compare-table-name">{t.name}</span>
-                                                                <span className="compare-table-dept">{t.department}</span>
-                                                            </div>
-                                                            <button
-                                                                onClick={() => {
-                                                                    setCompareList(prev => prev.filter(x => x.id !== t.id));
-                                                                    setCompareDetails(prev => prev.filter(x => x.id !== t.id));
-                                                                }}
-                                                                className="compare-table-remove"
-                                                                aria-label={`Remove ${t.name} from comparison`}
-                                                            >
-                                                                ✕
-                                                            </button>
-                                                        </div>
-                                                    </th>
-                                                ))}
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <tr>
-                                                <td className="compare-metric-cell">Reviews</td>
-                                                {compareDetails.map((t) => (
-                                                    <td key={t.id} className="compare-value-cell">
-                                                        <span className="compare-count-badge">{t.review_count || 0}</span>
-                                                        <span className="compare-count-label">
-                                                            {t.review_count === 1 ? 'review' : 'reviews'}
-                                                        </span>
-                                                    </td>
-                                                ))}
-                                            </tr>
-                                            <tr>
-                                                <td className="compare-metric-cell">Last review</td>
-                                                {compareDetails.map((t) => (
-                                                    <td key={t.id} className="compare-value-cell">
-                                                        {t.reviews && t.reviews.length > 0
-                                                            ? timeAgo(t.reviews[0].created_at)
-                                                            : '—'}
-                                                    </td>
-                                                ))}
-                                            </tr>
-                                            <tr>
-                                                <td className="compare-metric-cell">Recent review</td>
-                                                {compareDetails.map((t) => (
-                                                    <td key={t.id} className="compare-value-cell">
-                                                        {t.reviews && t.reviews.length > 0 ? (
-                                                            <blockquote className="compare-snippet">
-                                                                "{t.reviews[0].comment.length > 90
-                                                                    ? `${t.reviews[0].comment.slice(0, 90)}…`
-                                                                    : t.reviews[0].comment}"
-                                                                <footer className="compare-snippet-author">
-                                                                    — {t.reviews[0].user_name || 'Anonymous'}
-                                                                </footer>
-                                                            </blockquote>
-                                                        ) : (
-                                                            <span className="compare-no-reviews">No reviews yet</span>
-                                                        )}
-                                                    </td>
-                                                ))}
-                                            </tr>
-                                            <tr>
-                                                <td className="compare-metric-cell">Profile</td>
-                                                {compareDetails.map((t) => (
-                                                    <td key={t.id} className="compare-value-cell">
-                                                        <button
-                                                            onClick={() => {
-                                                                setIsComparing(false);
-                                                                handleTeacherClick({ ...t } as Teacher);
-                                                            }}
-                                                            className="compare-view-btn"
-                                                        >
-                                                            View full profile
-                                                        </button>
-                                                    </td>
-                                                ))}
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                    <p className="compare-swipe-hint">← Swipe the table sideways to compare →</p>
-                                </div>
-                            )}
-                        </div>
+                        <CompareView
+                            compareDetails={compareDetails}
+                            compareList={compareList}
+                            compareSearchTerm={compareSearchTerm}
+                            setCompareSearchTerm={setCompareSearchTerm}
+                            compareSearchInputRef={compareSearchInputRef}
+                            handleCompareAdd={handleCompareAdd}
+                            setIsComparing={setIsComparing}
+                            restoreListScroll={restoreListScroll}
+                            handleTeacherClick={handleTeacherClick}
+                            setCompareList={setCompareList}
+                            setCompareDetails={setCompareDetails}
+                        />
                     ) : selectedTeacher ? (
-                        <div className="teacher-detail">
-                            <button onClick={clearSelectedTeacher} className="back-button">
-                                ← Back to list
-                            </button>
-
-                            <Avatar name={selectedTeacher.name || 'Teacher'} imageUrl={selectedTeacher.image_url} className="teacher-detail-image" />
-
-                            <h1 className="teacher-name-heading gradient-text">{selectedTeacher.name || 'Teacher'}</h1>
-                            <p className="teacher-department">
-                                <Link to={`/department/${encodeURIComponent(selectedTeacher.department || '')}`} className="department-link">
-                                    {selectedTeacher.department || ''}
-                                </Link>
-                            </p>
-
-                            <button
-                                onClick={() => {
-                                    const url = window.location.href;
-                                    if (navigator.share) {
-                                        navigator.share({ title: `${selectedTeacher.name} - UMT Teacher Reviews`, url }).catch(() => {});
-                                    } else {
-                                        navigator.clipboard.writeText(url).then(() => showToast('Link copied to clipboard!', 'success')).catch(() => {});
-                                    }
-                                }}
-                                className="share-btn"
-                                aria-label={`Share ${selectedTeacher.name}`}
-                            >
-                                <Icon name="share" size={16} /> Share
-                            </button>
-
-                            {reviewSuccess && (
-                                <div className="success-message" role="status">
-                                    {reviewSuccess}
-                                </div>
-                            )}
-
-                            <button onClick={() => { if (selectedTeacher && selectedTeacher.id) setShowReviewForm(true); else setReviewError('Please select a teacher first'); }} className="btn-write-review">
-                                <Icon name="edit" size={18} /> Write a Review for {selectedTeacher.name}
-                            </button>
-
-                            <LazySection
-                                className="reviews-section"
-                                placeholder={<div className="reviews-section" style={{ minHeight: '80px' }} />}
-                            >
-                                <h3><Icon name="book-open" size={20} /> Student Reviews</h3>
-                                {!selectedTeacher.reviews || selectedTeacher.reviews.length === 0 ? (
-                                    <EmptyState
-                                        icon="book-open"
-                                        title="No reviews yet"
-                                        message="Be the first to review this teacher!"
-                                        action={
-                                            <button onClick={() => { if (selectedTeacher && selectedTeacher.id) setShowReviewForm(true); }} className="btn-write-review">
-                                                <Icon name="edit" size={16} /> Write a Review
-                                            </button>
-                                        }
-                                    />
-                                ) : (
-                                    selectedTeacher.reviews.map((review: Review) => (
-                                        <div key={review.id} className="review-card">
-                                            <div className="review-header">
-                                                <span className="reviewer-name"><Icon name="user" size={13} /> {review.user_name || 'Anonymous'}</span>
-                                                <span className="review-date"><Icon name="calendar" size={13} /> {new Date(review.created_at).toLocaleDateString()}</span>
-                                            </div>
-                                            <p className="review-comment">"{review.comment}"</p>
-                                        </div>
-                                    ))
-                                )}
-                            </LazySection>
-
-                            <LazySection
-                                className="qa-section-lazy"
-                                placeholder={<div className="qa-section" style={{ minHeight: '60px' }} />}
-                            >
-                                <QASection teacherId={selectedTeacher.id} teacherName={selectedTeacher.name || 'this teacher'} />
-                            </LazySection>
-
-                            {relatedTeachers.length > 0 && (
-                                <div className="related-teachers">
-                                    <h3><Icon name="users" size={18} /> More teachers in {selectedTeacher.department}</h3>
-                                    <div className="related-teachers-list">
-                                        {relatedTeachers.map((t) => (
-                                            <button key={t.id} onClick={() => handleTeacherClick(t)} className="related-teacher-card">
-                                                <span className="related-teacher-name">{t.name}</span>
-                                                <span className="related-teacher-count">({t.review_count} reviews)</span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
+                        <TeacherDetailView
+                            selectedTeacher={selectedTeacher}
+                            relatedTeachers={relatedTeachers}
+                            reviewSuccess={reviewSuccess}
+                            reviewError={reviewError}
+                            departments={departments}
+                            onShowReviewForm={() => { if (selectedTeacher && selectedTeacher.id) setShowReviewForm(true); }}
+                            onClearSelectedTeacher={clearSelectedTeacher}
+                            onTeacherClick={handleTeacherClick}
+                            showToast={showToast}
+                        />
                     ) : (
                         <div className="welcome-message">
                             <h2 className="gradient-text">Welcome to Teacher Reviews</h2>
@@ -1454,30 +1267,17 @@ const App: React.FC = () => {
                 </div>
             )}
             {showReviewForm && selectedTeacher && (
-                <div className="modal-overlay" onClick={() => setShowReviewForm(false)}>
-                    <div className="modal-content review-sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={`Write a review for ${selectedTeacher.name}`}>
-                        <h3 className="review-form-title">
-                            <Icon name="edit" size={20} /> Write a Review for {selectedTeacher.name}
-                        </h3>
-                        {reviewError && <div className="error-message">{reviewError}</div>}
-                        <form onSubmit={handleSubmitReview}>
-                            <div className="form-group">
-                                <label>Your Name (optional)</label>
-                                <input type="text" value={reviewUserName} onChange={(e) => setReviewUserName(e.target.value)} placeholder="Leave blank to post anonymously" aria-label="Your name (optional)" />
-                            </div>
-                            <div className="form-group">
-                                <label>Your Review *</label>
-                                <textarea rows={4} value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} placeholder="Share your experience with this teacher..." required aria-label="Your review" />
-                            </div>
-                            <div className="form-buttons">
-                                <button type="button" onClick={() => setShowReviewForm(false)} className="btn-cancel">Cancel</button>
-                                <button type="submit" disabled={submitting} className="btn-submit">
-                                    {submitting ? <><span className="spinner-small"></span> Submitting...</> : 'Submit Review'}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
+                <ReviewFormModal
+                    selectedTeacher={selectedTeacher}
+                    reviewComment={reviewComment}
+                    setReviewComment={setReviewComment}
+                    reviewUserName={reviewUserName}
+                    setReviewUserName={setReviewUserName}
+                    reviewError={reviewError}
+                    submitting={submitting}
+                    onSubmit={handleSubmitReview}
+                    onClose={() => setShowReviewForm(false)}
+                />
             )}
             {compareList.length > 0 && !isComparing && (
                 <div className="compare-bar">
