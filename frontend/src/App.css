@@ -4249,3 +4249,220 @@ select:focus-visible {
     margin: 0.25rem 0 0;
     font-weight: 500;
 }
+
+/* ========== CONTRAST IMPROVEMENTS ========== */
+/* Enhanced color palette for better readability */
+
+:root {
+    /* Primary text - high contrast on dark backgrounds */
+    --text-primary: #f8fafc;
+    --text-secondary: #e2e8f0;
+    --text-muted: #94a3b8;
+    --text-faint: #64748b;
+
+    /* Accent colors - enhanced contrast */
+    --accent-primary: #818cf8;
+    --accent-success: #34d399;
+    --accent-warning: #fbbf24;
+    --accent-danger: #f87171;
+    --accent-info: #60a5fa;
+
+    /* Surface colors */
+    --surface-elevated: rgba(255, 255, 255, 0.08);
+    --surface-border: rgba(255, 255, 255, 0.12);
+    --surface-hover: rgba(255, 255, 255, 0.12);
+}
+
+/* Apply improved contrast to key elements */
+
+/* Text elements */
+.review-comment,
+.qa-question-text,
+.qa-answer-text,
+.compare-snippet,
+.swipe-review-quote {
+    color: var(--text-secondary);
+}
+
+.reviewer-name,
+.autocomplete-name,
+.teacher-name-heading,
+.swipe-card-name {
+    color: var(--text-primary);
+}
+
+.department,
+.autocomplete-dept,
+.swipe-card-dept,
+.review-date,
+.teacher-department {
+    color: var(--text-muted);
+}
+
+/* Interactive elements */
+button:not(:disabled) {
+    color: var(--text-primary);
+}
+
+.delete-btn:hover,
+.edit-btn:hover {
+    color: var(--accent-danger);
+}
+
+/* Form elements */
+input,
+textarea,
+select {
+    color: var(--text-primary);
+    border-color: var(--surface-border);
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: var(--text-faint);
+}
+
+/* Links */
+a,
+.department-link,
+.autocomplete-clear-btn {
+    color: var(--accent-primary);
+}
+
+a:hover,
+.department-link:hover {
+    color: #a5b4fc;
+}
+
+/* Status colors */
+.error-message {
+    color: var(--accent-danger);
+    background: rgba(248, 113, 113, 0.1);
+    border: 1px solid rgba(248, 113, 113, 0.2);
+}
+
+.success-message {
+    color: var(--accent-success);
+    background: rgba(52, 211, 153, 0.1);
+    border: 1px solid rgba(52, 211, 153, 0.2);
+}
+
+/* Badges and counts */
+.compare-count-badge,
+.swipe-stat-value {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.compare-count-label,
+.swipe-stat-label {
+    color: var(--text-muted);
+}
+
+/* Modal and overlay text */
+.modal-content {
+    color: var(--text-primary);
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid var(--surface-border);
+}
+
+.modal-heading {
+    color: var(--text-primary);
+}
+
+/* Toast improvements */
+.toast-success {
+    background: rgba(52, 211, 153, 0.15);
+    border-color: rgba(52, 211, 153, 0.3);
+}
+
+.toast-success .toast-icon { color: var(--accent-success); }
+
+.toast-error {
+    background: rgba(248, 113, 113, 0.15);
+    border-color: rgba(248, 113, 113, 0.3);
+}
+
+.toast-error .toast-icon { color: var(--accent-danger); }
+
+.toast-info {
+    background: rgba(96, 165, 250, 0.15);
+    border-color: rgba(96, 165, 250, 0.3);
+}
+
+.toast-info .toast-icon { color: var(--accent-info); }
+
+/* Button contrast */
+.btn-submit {
+    color: white;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.btn-submit:hover:not(:disabled) {
+    background: linear-gradient(135deg, #818cf8 0%, #9333ea 100%);
+}
+
+.btn-cancel {
+    color: var(--text-secondary);
+    background: var(--surface-elevated);
+    border: 1px solid var(--surface-border);
+}
+
+.btn-cancel:hover {
+    background: var(--surface-hover);
+}
+
+/* Admin panel contrast */
+.admin-header h2 {
+    color: var(--text-primary);
+}
+
+.admin-section h3 {
+    color: var(--text-primary);
+}
+
+.admin-item span {
+    color: var(--text-secondary);
+}
+
+/* Search input contrast */
+.search-input {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--surface-border);
+}
+
+.search-input:focus {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.2);
+}
+
+/* Footer contrast */
+.app-footer {
+    color: var(--text-muted);
+}
+
+.footer-links a {
+    color: var(--accent-primary);
+}
+
+/* Empty state contrast */
+.empty-state-title {
+    color: var(--text-primary);
+}
+
+.empty-state-message {
+    color: var(--text-secondary);
+}
+
+/* Skeleton override for better visibility */
+.skeleton {
+    background: linear-gradient(
+        90deg,
+        rgba(255, 255, 255, 0.08) 25%,
+        rgba(255, 255, 255, 0.15) 50%,
+        rgba(255, 255, 255, 0.08) 75%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
