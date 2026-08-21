@@ -30,7 +30,7 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
     onTeacherClick,
     showToast,
 }) => (
-    <div className="teacher-detail">
+    <div className="teacher-detail page-enter">
         <button onClick={onClearSelectedTeacher} className="back-button">
             ← Back to list
         </button>

@@ -33,7 +33,7 @@ const CompareView: React.FC<CompareViewProps> = ({
     setCompareList,
     setCompareDetails,
 }) => (
-    <div className="compare-view">
+    <div className="compare-view page-enter">
         <div className="compare-view-header">
             <button onClick={() => { setIsComparing(false); restoreListScroll(); }} className="back-button">
                 ← Back to list

@@ -3649,3 +3649,89 @@ body::after {
         height: 96px;
     }
 }
+
+/* ========== RESPONSIVE IMPROVEMENTS ========== */
+@media (max-width: 768px) {
+    /* Sticky review button on mobile */
+    .btn-write-review {
+        position: sticky;
+        bottom: 4.5rem;
+        z-index: 100;
+        width: 100%;
+        margin-top: 0.5rem;
+        padding: 0.875rem 1.5rem;
+        font-size: 1rem;
+    }
+
+    /* Better touch targets */
+    .teacher-card {
+        min-height: 80px;
+    }
+
+    .admin-item {
+        min-height: 60px;
+        padding: 1rem;
+    }
+
+    .review-card {
+        padding: 1rem;
+    }
+
+    /* Improved header spacing */
+    .header {
+        padding: 0.75rem 1rem;
+    }
+
+    .header-tagline {
+        font-size: 0.8rem;
+    }
+
+    /* Better modal on mobile */
+    .modal-content {
+        max-height: 90vh;
+        overflow-y: auto;
+        margin: 0.5rem;
+        border-radius: 16px 16px 0 0;
+    }
+
+    /* Improved filter bar */
+    .filter-bar {
+        flex-direction: column;
+    }
+
+    .filter-select {
+        width: 100%;
+    }
+}
+
+/* ========== SMOOTH SCROLL-TO-TOP ========== */
+@keyframes scroll-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.scroll-to-top-visible {
+    animation: scroll-fade-in 0.3s ease-out;
+}
+
+/* ========== PAGE TRANSITIONS ========== */
+.page-enter {
+    animation: page-slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes page-slide-in {
+    from {
+        opacity: 0;
+        transform: translateX(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
