@@ -44,8 +44,9 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
             setShowAskForm(false);
             setSuccess('Question posted! Other students can now answer it.');
             loadQuestions();
-        } catch (err: any) {
-            setError(err.response?.data?.error || 'Failed to post question');
+        } catch (err) {
+            const axiosErr = err as { response?: { data?: { error?: string } } };
+            setError(axiosErr.response?.data?.error || 'Failed to post question');
         } finally {
             setSubmitting(false);
         }
@@ -63,8 +64,9 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
             setOpenAnswerForms(prev => ({ ...prev, [questionId]: false }));
             setSuccess('Answer posted!');
             loadQuestions();
-        } catch (err: any) {
-            setError(err.response?.data?.error || 'Failed to post answer');
+        } catch (err) {
+            const axiosErr = err as { response?: { data?: { error?: string } } };
+            setError(axiosErr.response?.data?.error || 'Failed to post answer');
         } finally {
             setSubmitting(false);
         }

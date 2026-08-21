@@ -15,9 +15,9 @@ import {
     deleteReview,
     getAdminReviews,
     getAdminQuestions,
+    getAdminStats,
     deleteQuestion,
-    submitReview,
-    type AdminQuestion
+    submitReview
 } from './services/api';
 import { debounce } from './utils/debounce';
 import ParticleBackground from './components/ParticleBackground';
@@ -35,7 +35,7 @@ import AdminPanel from './components/AdminPanel';
 import LoginForm from './components/LoginForm';
 import { haptic } from './utils/haptics';
 import { timeAgo } from './utils/timeAgo';
-import type { Teacher, Review, TeacherDetail, AdminReview, Toast } from './types';
+import type { Teacher, Review, TeacherDetail, AdminReview, AdminQuestion, Toast } from './types';
 import './App.css';
 
 // ========== TOASTS ==========
@@ -98,6 +98,7 @@ const App: React.FC = () => {
     const [reviewSuccess, setReviewSuccess] = useState('');
 
     const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
+    const [adminMutationLoading, setAdminMutationLoading] = useState(false);
     const [showAdminPanel, setShowAdminPanel] = useState(false);
     const [adminUsername, setAdminUsername] = useState('');
     const [adminPassword, setAdminPassword] = useState('');
@@ -107,6 +108,7 @@ const App: React.FC = () => {
     const [newTeacherDepartment, setNewTeacherDepartment] = useState('');
     const [newTeacherImage, setNewTeacherImage] = useState('');
     const [reviewsForModeration, setReviewsForModeration] = useState<AdminReview[]>([]);
+    const [adminStats, setAdminStats] = useState<{ total_teachers: number; total_reviews: number; reviews_last_week: number } | null>(null);
 
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastIdRef = useRef(0);
@@ -168,9 +170,10 @@ const App: React.FC = () => {
                 setHasMore(page < data.pagination.totalPages);
                 setTotalTeachersCount(data.pagination.total);
             }
-        } catch (err: any) {
+        } catch (err) {
             console.error('Failed to load teachers:', err);
-            if (retryCount === 0 && (err.code === 'ECONNABORTED' || err.message?.includes('timeout'))) {
+            const axiosErr = err as { code?: string; message?: string };
+            if (retryCount === 0 && (axiosErr.code === 'ECONNABORTED' || axiosErr.message?.includes('timeout'))) {
                 console.log('Auto-retrying after timeout...');
                 setTimeout(() => loadTeachers(page, 1), 2000);
                 return;
@@ -209,8 +212,6 @@ const App: React.FC = () => {
             setLoading(false);
         }
     }, []);
-
-    const debouncedSearch = useRef(debounce((value: string) => { performSearch(value); }, 350));
 
     const handleSearch = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
@@ -311,6 +312,14 @@ const App: React.FC = () => {
         setAdminQuestions(questionsData);
         setAdminReviewsPage(1);
         setAdminQuestionsPage(1);
+
+        // Fetch actual totals from the stats endpoint
+        try {
+            const statsRes = await getAdminStats();
+            setAdminStats(statsRes.data);
+        } catch (err) {
+            console.error('Error loading admin stats:', err);
+        }
     }, []);
 
     const handleLoadMoreReviews = useCallback(async () => {
@@ -474,8 +483,9 @@ const App: React.FC = () => {
             showToast('Admin login successful!', 'success');
             await loadAdminData();
             await loadTeachers(1);
-        } catch (error: any) {
-            setAdminError(error.response?.data?.error || 'Login failed');
+        } catch (error) {
+            const err = error as { response?: { data?: { error?: string } } };
+            setAdminError(err.response?.data?.error || 'Login failed');
         }
     }, [adminUsername, adminPassword, loadAdminData, loadTeachers, showToast]);
 
@@ -538,6 +548,7 @@ const App: React.FC = () => {
     // ---------- End of auto-logout code ----------
 
     const handleUpdateTeacher = useCallback(async (id: number, data: { name: string; department: string; image_url?: string }) => {
+        setAdminMutationLoading(true);
         try {
             await updateTeacher(id, data);
             showToast('Teacher updated successfully!', 'success');
@@ -546,6 +557,8 @@ const App: React.FC = () => {
         } catch (error) {
             console.error('Update error:', error);
             showToast('Failed to update teacher', 'error');
+        } finally {
+            setAdminMutationLoading(false);
         }
     }, [loadTeachers, loadAdminData, showToast]);
 
@@ -555,6 +568,7 @@ const App: React.FC = () => {
             showToast('Please fill in all fields', 'error');
             return;
         }
+        setAdminMutationLoading(true);
         try {
             await addTeacher({
                 name: newTeacherName,
@@ -570,11 +584,14 @@ const App: React.FC = () => {
             await loadAdminData();
         } catch (error) {
             showToast('Failed to add teacher', 'error');
+        } finally {
+            setAdminMutationLoading(false);
         }
     }, [newTeacherName, newTeacherDepartment, newTeacherImage, loadTeachers, loadAdminData, showToast]);
 
     const handleDeleteTeacher = useCallback(async (id: number) => {
         if (window.confirm('Are you sure you want to delete this teacher? All reviews will also be deleted.')) {
+            setAdminMutationLoading(true);
             try {
                 await deleteTeacher(id);
                 showToast('Teacher deleted successfully!', 'success');
@@ -586,12 +603,15 @@ const App: React.FC = () => {
                 await loadAdminData();
             } catch (error) {
                 showToast('Failed to delete teacher', 'error');
+            } finally {
+                setAdminMutationLoading(false);
             }
         }
     }, [selectedTeacher, loadTeachers, loadAdminData, showToast]);
 
     const handleDeleteReview = useCallback(async (id: number) => {
         if (window.confirm('Are you sure you want to delete this review?')) {
+            setAdminMutationLoading(true);
             try {
                 await deleteReview(id);
                 showToast('Review deleted successfully!', 'success');
@@ -602,12 +622,15 @@ const App: React.FC = () => {
                 }
             } catch (error) {
                 showToast('Failed to delete review', 'error');
+            } finally {
+                setAdminMutationLoading(false);
             }
         }
     }, [selectedTeacher, loadAdminData, showToast]);
 
     const handleDeleteQuestion = useCallback(async (id: number) => {
         if (window.confirm('Are you sure you want to delete this question and all its answers?')) {
+            setAdminMutationLoading(true);
             try {
                 await deleteQuestion(id);
                 showToast('Question deleted successfully!', 'success');
@@ -618,6 +641,8 @@ const App: React.FC = () => {
                 }
             } catch (error) {
                 showToast('Failed to delete question', 'error');
+            } finally {
+                setAdminMutationLoading(false);
             }
         }
     }, [selectedTeacher, loadAdminData, showToast]);
@@ -661,9 +686,10 @@ const App: React.FC = () => {
             setSelectedTeacher(mapTeacherDetail(response.data, selectedTeacher));
             await loadTeachers(1);
             await loadAdminData();
-        } catch (err: any) {
+        } catch (err) {
             console.error('Submit error:', err);
-            setReviewError(err.response?.data?.error || 'Failed to submit review');
+            const axiosErr = err as { response?: { data?: { error?: string } } };
+            setReviewError(axiosErr.response?.data?.error || 'Failed to submit review');
         } finally {
             setSubmitting(false);
         }
@@ -926,6 +952,7 @@ const App: React.FC = () => {
                     <AdminPanel
                         teachers={teachers}
                         reviewsForModeration={reviewsForModeration}
+                        totalReviewsCount={adminStats?.total_reviews ?? 0}
                         onAddTeacher={handleAddTeacher}
                         onUpdateTeacher={handleUpdateTeacher}
                         onDeleteTeacher={handleDeleteTeacher}
@@ -952,6 +979,7 @@ const App: React.FC = () => {
                         adminReviewsPage={adminReviewsPage}
                         adminQuestions={adminQuestions}
                         onDeleteQuestion={handleDeleteQuestion}
+                        adminMutationLoading={adminMutationLoading}
                         adminLoadingMoreQuestions={adminLoadingMoreQuestions}
                         adminQuestionsPage={adminQuestionsPage}
                         adminQuestionsTotalPages={adminQuestionsTotalPages}

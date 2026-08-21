@@ -29,6 +29,15 @@ export interface AdminReview {
     created_at: string;
 }
 
+export interface AdminQuestion {
+    id: number;
+    teacher_id: number;
+    teacher_name: string;
+    question: string;
+    answer_count: number;
+    created_at: string;
+}
+
 export interface Toast {
     id: number;
     message: string;
