@@ -37,21 +37,12 @@ import CompareView from './components/CompareView';
 import TeacherDetailView from './components/TeacherDetailView';
 import ReviewFormModal from './components/ReviewFormModal';
 import ErrorBoundary from './components/ErrorBoundary';
+import { TeacherCardSkeleton } from './components/Skeleton';
+import { ToastHost } from './components/Toast';
 import { haptic } from './utils/haptics';
 import { timeAgo } from './utils/timeAgo';
 import type { Teacher, Review, TeacherDetail, AdminReview, AdminQuestion, Toast } from './types';
 import './App.css';
-
-// ========== TOASTS ==========
-const ToastHost = memo(({ toasts }: { toasts: Toast[] }) => (
-    <div className="toast-container" aria-live="polite">
-        {toasts.map((t) => (
-            <div key={t.id} className={`toast toast-${t.type}`} role="status">
-                {t.message}
-            </div>
-        ))}
-    </div>
-));
 
 // ========== HELPER: Map API response to TeacherDetail ==========
 const mapTeacherDetail = (data: any, fallback?: TeacherDetail): TeacherDetail => {
@@ -148,9 +139,10 @@ const App: React.FC = () => {
     const showToast = useCallback((message: string, type: Toast['type'] = 'info') => {
         const id = ++toastIdRef.current;
         setToasts(prev => [...prev, { id, message, type }]);
-        setTimeout(() => {
-            setToasts(prev => prev.filter(t => t.id !== id));
-        }, 4000);
+    }, []);
+
+    const dismissToast = useCallback((id: number) => {
+        setToasts(prev => prev.filter(t => t.id !== id));
     }, []);
 
     // ========== TEACHER LOADING (PAGINATED) ==========
@@ -926,7 +918,7 @@ const App: React.FC = () => {
             return (
                 <div className="app">
                     <ParticleBackground />
-                    <ToastHost toasts={toasts} />
+                    <ToastHost toasts={toasts} onDismiss={dismissToast} />
                 <header className={`header${headerScrolled ? ' header-scrolled' : ''}`}>
                         <h1>Teacher Review System - Admin</h1>
                         <button onClick={() => setShowAdminPanel(false)} className="back-to-site-btn">← Back to Site</button>
@@ -949,7 +941,7 @@ const App: React.FC = () => {
         return (
             <div className="app">
                 <ParticleBackground />
-                <ToastHost toasts={toasts} />
+                <ToastHost toasts={toasts} onDismiss={dismissToast} />
                 <header className="header">
                     <h1>Teacher Review System - Admin Panel</h1>
                     <button onClick={() => setShowAdminPanel(false)} className="back-to-site-btn">← Back to Site</button>
@@ -1001,7 +993,7 @@ const App: React.FC = () => {
     return (
         <div className="app">
             <ParticleBackground />
-            <ToastHost toasts={toasts} />
+            <ToastHost toasts={toasts} onDismiss={dismissToast} />
             {compareList.length === 0 && <InstallPrompt />}
             <PullToRefresh onRefresh={handlePullRefresh}>
                 <header className="header">
@@ -1111,13 +1103,7 @@ const App: React.FC = () => {
                         {loading ? (
                             <>
                                 {[...Array(5)].map((_, i) => (
-                                    <div key={i} className="skeleton-card">
-                                        <div className="skeleton-image"></div>
-                                        <div className="skeleton-text">
-                                            <div className="skeleton-text-line"></div>
-                                            <div className="skeleton-text-line"></div>
-                                        </div>
-                                    </div>
+                                    <TeacherCardSkeleton key={i} />
                                 ))}
                             </>
                         ) : error ? (
