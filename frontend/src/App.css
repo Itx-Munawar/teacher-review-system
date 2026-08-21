@@ -4213,3 +4213,39 @@ select:focus-visible {
         stroke-dashoffset: 0;
     }
 }
+
+/* ========== SWIPE CARD REVIEWS ========== */
+.swipe-card-reviews {
+    margin-bottom: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.swipe-review-quote {
+    font-style: italic;
+    color: #cbd5e1;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    margin: 0;
+    padding: 0.65rem 0.75rem;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    border-left: 3px solid rgba(102, 126, 234, 0.4);
+}
+
+.swipe-review-author {
+    display: block;
+    margin-top: 0.4rem;
+    font-style: normal;
+    font-size: 0.75rem;
+    color: #64748b;
+}
+
+.swipe-reviews-more {
+    font-size: 0.75rem;
+    color: #667eea;
+    text-align: center;
+    margin: 0.25rem 0 0;
+    font-weight: 500;
+}

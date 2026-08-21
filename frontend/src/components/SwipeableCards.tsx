@@ -163,15 +163,22 @@ const SwipeableCards: React.FC<SwipeableCardsProps> = ({
                             </div>
 
                             {teacher.reviews && teacher.reviews.length > 0 && (
-                                <div className="swipe-card-review">
-                                    <blockquote className="swipe-review-quote">
-                                        "{teacher.reviews[0].comment.length > 120
-                                            ? `${teacher.reviews[0].comment.slice(0, 120)}…`
-                                            : teacher.reviews[0].comment}"
-                                        <footer className="swipe-review-author">
-                                            — {teacher.reviews[0].user_name || 'Anonymous'}
-                                        </footer>
-                                    </blockquote>
+                                <div className="swipe-card-reviews">
+                                    {teacher.reviews.slice(0, 3).map((review, idx) => (
+                                        <blockquote key={review.id || idx} className="swipe-review-quote">
+                                            "{review.comment.length > 120
+                                                ? `${review.comment.slice(0, 120)}…`
+                                                : review.comment}"
+                                            <footer className="swipe-review-author">
+                                                — {review.user_name || 'Anonymous'} · {new Date(review.created_at).toLocaleDateString()}
+                                            </footer>
+                                        </blockquote>
+                                    ))}
+                                    {teacher.reviews.length > 3 && (
+                                        <p className="swipe-reviews-more">
+                                            +{teacher.reviews.length - 3} more review{teacher.reviews.length - 3 !== 1 ? 's' : ''}
+                                        </p>
+                                    )}
                                 </div>
                             )}
 
