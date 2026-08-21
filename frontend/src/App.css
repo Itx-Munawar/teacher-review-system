@@ -4372,3 +4372,100 @@ select:focus-visible {
     background: #f3f4f6 !important;
     border: 1px solid #d1d5db !important;
 }
+
+/* ========== COMPARE SELECTED TEACHERS PREVIEW ========== */
+.compare-selected-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    width: 100%;
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+.compare-selected-teachers {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.compare-selected-card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 1rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.compare-selected-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.compare-selected-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.compare-selected-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.compare-selected-initials {
+    color: white;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.compare-selected-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.compare-selected-name {
+    display: block;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #0f172a;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.compare-selected-dept {
+    display: block;
+    font-size: 0.85rem;
+    color: #6b7280;
+}
+
+.compare-selected-remove {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    color: #6b7280;
+    font-size: 1.2rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.15s ease;
+}
+
+.compare-selected-remove:hover {
+    background: #fee2e2;
+    border-color: #fecaca;
+    color: #dc2626;
+}

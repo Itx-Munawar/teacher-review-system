@@ -66,15 +66,47 @@ const CompareView: React.FC<CompareViewProps> = ({
             </div>
 
             {compareDetails.length < 2 ? (
-                <EmptyState
-                    icon="compare"
-                    title={compareList.length === 0 ? "Start comparing teachers" : "Add one more teacher"}
-                    message={
-                        compareList.length === 0
-                            ? "Search above to add at least 2 teachers, then their reviews appear side by side."
-                            : "Search above to add 1 more teacher to start comparing."
-                    }
-                />
+                <div className="compare-selected-preview">
+                    {compareList.length > 0 && (
+                        <div className="compare-selected-teachers">
+                            {compareList.map((teacher) => (
+                                <div key={teacher.id} className="compare-selected-card">
+                                    <div className="compare-selected-header">
+                                        <div className="compare-selected-avatar">
+                                            {teacher.image_url ? (
+                                                <img src={teacher.image_url} alt={teacher.name} />
+                                            ) : (
+                                                <span className="compare-selected-initials">
+                                                    {teacher.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="compare-selected-info">
+                                            <span className="compare-selected-name">{teacher.name}</span>
+                                            <span className="compare-selected-dept">{teacher.department}</span>
+                                        </div>
+                                        <button
+                                            className="compare-selected-remove"
+                                            onClick={() => handleRemove(teacher.id)}
+                                            aria-label={`Remove ${teacher.name} from comparison`}
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    <EmptyState
+                        icon="compare"
+                        title={compareList.length === 0 ? "Start comparing teachers" : "Add one more teacher"}
+                        message={
+                            compareList.length === 0
+                                ? "Search above to add at least 2 teachers, then their reviews appear side by side."
+                                : "Search above to add 1 more teacher to start comparing."
+                        }
+                    />
+                </div>
             ) : (
                 <>
                     <div className="compare-table-wrap">
