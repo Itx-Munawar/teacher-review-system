@@ -4629,3 +4629,94 @@ select:focus-visible {
     border-color: #fecaca;
     color: #dc2626;
 }
+
+/* ================================ */
+/* MOBILE PERFORMANCE OPTIMIZATIONS */
+/* ================================ */
+/* Disable GPU-heavy effects on mobile to prevent lag and jank */
+
+@media (pointer: coarse) and (max-width: 768px) {
+    /* Kill floating blobs (filter: blur(90px) is extremely expensive on mobile) */
+    body::before,
+    body::after {
+        animation: none !important;
+        opacity: 0 !important;
+    }
+
+    /* Freeze body gradient animation (constant repaints) */
+    body {
+        animation: none !important;
+    }
+n    /* Stop gradient text animation */
+    .gradient-text {
+        animation: none !important;
+    }
+
+    /* Freeze header gradient */
+    .header {
+        animation: none !important;
+    }
+
+    /* Freeze footer gradient */
+    .app-footer {
+        animation: none !important;
+    }
+
+    /* Remove backdrop-filter (blur) from ALL elements - biggest FPS killer */
+    .header,
+    .sidebar,
+    .teacher-card,
+    .main-content,
+    .review-card,
+    .review-form-container,
+    .login-form,
+    .admin-panel,
+    .admin-section,
+    .modal-overlay,
+    .modal-content,
+    .app-footer,
+    .compare-table,
+    .legal-container {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+
+    /* Freeze floating teacher avatar */
+    .teacher-detail-image {
+        animation: none !important;
+    }
+n    /* Simplify card entrance animations */
+    .teacher-card-enter {
+        animation: fadeIn 0.2s ease-out both !important;
+    }
+
+    /* Remove 3D tilt effect overhead */
+    .tilt-card {
+        transform-style: flat !important;
+    }
+n    /* Reduce shadow complexity */
+    .teacher-card {
+        box-shadow: 0 2px 8px rgba(120, 70, 200, 0.12) !important;
+    }
+
+    .main-content {
+        box-shadow: none !important;
+    }
+
+    /* Simplify skeleton shimmer */
+    .skeleton-card {
+        animation: none !important;
+        background: rgba(255, 255, 255, 0.7) !important;
+    }
+
+    /* Trim transition complexity on buttons */
+    .admin-login-btn,
+    .back-to-site-btn,
+    .btn-write-review,
+    .btn-submit,
+    .btn-cancel,
+    .delete-btn,
+    .edit-btn {
+        transition: background 0.15s ease, transform 0.15s ease !important;
+    }
+}
