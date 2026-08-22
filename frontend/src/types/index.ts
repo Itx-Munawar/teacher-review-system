@@ -13,6 +13,8 @@ export interface Review {
     comment: string;
     user_name: string;
     created_at: string;
+    upvotes?: number;
+    downvotes?: number;
 }
 
 export interface TeacherDetail extends Teacher {

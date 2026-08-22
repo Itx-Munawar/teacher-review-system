@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import Icon from './Icon';
 import Avatar from './Avatar';
 import EmptyState from './EmptyState';
 import LazySection from './LazySection';
 import QASection from './QASection';
+import { voteReview } from '../services/api';
 import type { Teacher, TeacherDetail, Review } from '../types';
 
 interface TeacherDetailViewProps {
@@ -18,6 +19,64 @@ interface TeacherDetailViewProps {
     onTeacherClick: (teacher: Teacher) => void;
     showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
 }
+
+// Inline vote buttons for a single review
+const VoteButtons: React.FC<{
+    review: Review;
+    showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
+}> = ({ review, showToast }) => {
+    const [votes, setVotes] = useState({
+        upvotes: review.upvotes ?? 0,
+        downvotes: review.downvotes ?? 0,
+        userVote: 0 as 1 | -1 | 0,
+    });
+    const [loading, setLoading] = useState(false);
+
+    const handleVote = useCallback(async (newVote: 1 | -1 | 0) => {
+        if (loading) return;
+        setLoading(true);
+        try {
+            const res = await voteReview(review.id, newVote);
+            setVotes({
+                upvotes: res.data.upvotes,
+                downvotes: res.data.downvotes,
+                userVote: res.data.userVote,
+            });
+        } catch {
+            showToast('Failed to vote. Please try again.', 'error');
+        } finally {
+            setLoading(false);
+        }
+    }, [review.id, loading, showToast]);
+
+    const netScore = votes.upvotes - votes.downvotes;
+
+    return (
+        <div className="review-votes">
+            <button
+                className={`vote-btn vote-up ${votes.userVote === 1 ? 'vote-active' : ''}`}
+                onClick={() => handleVote(votes.userVote === 1 ? 0 : 1)}
+                disabled={loading}
+                aria-label="Upvote this review"
+                title="Helpful"
+            >
+                ▲
+            </button>
+            <span className={`vote-score ${netScore > 0 ? 'vote-positive' : netScore < 0 ? 'vote-negative' : ''}`}>
+                {netScore > 0 ? '+' : ''}{netScore}
+            </span>
+            <button
+                className={`vote-btn vote-down ${votes.userVote === -1 ? 'vote-active' : ''}`}
+                onClick={() => handleVote(votes.userVote === -1 ? 0 : -1)}
+                disabled={loading}
+                aria-label="Downvote this review"
+                title="Not helpful"
+            >
+                ▼
+            </button>
+        </div>
+    );
+};
 
 const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
     selectedTeacher,
@@ -99,6 +158,7 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                             <span className="review-date"><Icon name="calendar" size={13} /> {new Date(review.created_at).toLocaleDateString()}</span>
                         </div>
                         <p className="review-comment">"{review.comment}"</p>
+                        <VoteButtons review={review} showToast={showToast} />
                     </div>
                 ))
             )}

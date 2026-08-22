@@ -537,6 +537,72 @@ body::after {
     font-style: italic;
 }
 
+/* Review Vote Buttons */
+.review-votes {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid rgba(225, 215, 245, 0.5);
+}
+
+.vote-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1.5px solid rgba(168, 85, 247, 0.25);
+    background: rgba(255, 255, 255, 0.8);
+    color: #6b7280;
+    font-size: 0.85rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    line-height: 1;
+}
+
+.vote-btn:hover:not(:disabled) {
+    transform: scale(1.12);
+}
+
+.vote-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.vote-up:hover:not(:disabled),
+.vote-up.vote-active {
+    color: #10b981;
+    border-color: rgba(16, 185, 129, 0.5);
+    background: rgba(16, 185, 129, 0.08);
+}
+
+.vote-down:hover:not(:disabled),
+.vote-down.vote-active {
+    color: #ef4444;
+    border-color: rgba(239, 68, 68, 0.5);
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.vote-score {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #6b7280;
+    min-width: 28px;
+    text-align: center;
+    user-select: none;
+}
+
+.vote-positive {
+    color: #10b981;
+}
+
+.vote-negative {
+    color: #ef4444;
+}
+
 /* Welcome Message */
 .welcome-message {
     text-align: center;
