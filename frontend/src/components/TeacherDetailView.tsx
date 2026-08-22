@@ -60,8 +60,10 @@ const VoteButtons: React.FC<{
             if (newVote === 1) triggerPop('up');
             else if (newVote === -1) triggerPop('down');
             else triggerPop(votes.userVote === 1 ? 'up' : 'down');
-        } catch {
-            showToast('Failed to vote. Please try again.', 'error');
+        } catch (err) {
+            console.error('Vote error:', err);
+            const axiosErr = err as { response?: { data?: { error?: string } } };
+            showToast(axiosErr.response?.data?.error || 'Failed to vote. Please try again.', 'error');
         } finally {
             setLoading(false);
         }

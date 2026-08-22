@@ -591,14 +591,23 @@ const voteLimiter = rateLimit({
 });
 
 app.post('/api/reviews/:id/vote', voteLimiter, [
-    body('vote').isInt({ min: -1, max: 1 }).withMessage('Vote must be 1 (upvote), -1 (downvote), or 0 (remove vote)')
+    body('vote').custom((value) => {
+        const v = Number(value);
+        if (!Number.isInteger(v) || v < -1 || v > 1) {
+            throw new Error('Vote must be 1 (upvote), -1 (downvote), or 0 (remove vote)');
+        }
+        return true;
+    })
 ], async (req, res) => {
     const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
+    if (!errors.isEmpty()) {
+        console.error('Vote validation failed:', errors.array());
+        return res.status(400).json({ error: errors.array()[0].msg });
+    }
 
     try {
         const reviewId = parseInt(req.params.id);
-        const { vote } = req.body;
+        const vote = Number(req.body.vote);
 
         // Generate or read a session ID from a cookie (no login required)
         let sessionId = parseCookies(req)._rv_sid;
