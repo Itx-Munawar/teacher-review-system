@@ -210,21 +210,9 @@ const runSchemaBootstrap = async () => {
                 KEY idx_answers_question (question_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         `);
-        await db.query(`
-            CREATE TABLE IF NOT EXISTS review_votes (
-                id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-                review_id INT UNSIGNED NOT NULL,
-                session_id VARCHAR(64) NOT NULL,
-                vote TINYINT NOT NULL COMMENT '1 = upvote, -1 = downvote',
-                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (id),
-                UNIQUE KEY uq_vote (review_id, session_id),
-                KEY idx_votes_review (review_id)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-        `);
         schemaBootstrapError = null;
         schemaBootstrapDone = true;
-        console.log('✅ Schema bootstrap complete (questions, question_answers, review_votes)');
+        console.log('✅ Schema bootstrap complete (questions, question_answers)');
     } catch (error) {
         schemaBootstrapError = error.message;
         console.error('❌ Schema bootstrap failed:', error.message);
@@ -385,15 +373,11 @@ app.get('/api/teachers/:id', async (req, res) => {
             return res.status(404).json({ error: 'Teacher not found' });
         }
 
-        // Get approved reviews for this teacher (with vote counts)
+        // Get approved reviews for this teacher
         const [reviews] = await db.query(
-            `SELECT r.*,
-                    COALESCE(SUM(CASE WHEN rv.vote = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
-                    COALESCE(SUM(CASE WHEN rv.vote = -1 THEN 1 ELSE 0 END), 0) AS downvotes
+            `SELECT r.*
              FROM reviews r
-             LEFT JOIN review_votes rv ON rv.review_id = r.id
              WHERE r.teacher_id = ? AND r.is_approved = 1
-             GROUP BY r.id
              ORDER BY r.created_at DESC`,
             [teacherId]
         );
@@ -404,9 +388,7 @@ app.get('/api/teachers/:id', async (req, res) => {
             [teacherId]
         );
 
-        // Don't cache publicly – vote counts change frequently and
-        // Cloudflare/Vercel would otherwise serve stale zero-count data.
-        res.set('Cache-Control', 'no-store');
+
         res.json({
             teacher: teachers[0],
             reviews: reviews,
@@ -580,96 +562,6 @@ app.post('/api/reviews', reviewLimiter, [
         });
     } catch (error) {
         console.error('Error saving review:', error);
-        res.status(500).json({ error: 'Database error' });
-    }
-});
-
-// POST /api/reviews/:id/vote - upvote or downvote a review
-// Uses a cookie-based session_id to prevent duplicate votes (1 vote per review per session)
-const voteLimiter = rateLimit({
-    windowMs: 5 * 60 * 1000,
-    max: 30,
-    message: { error: 'Too many votes. Please try again later.' }
-});
-
-app.post('/api/reviews/:id/vote', voteLimiter, [
-    body('vote').custom((value) => {
-        const v = Number(value);
-        if (!Number.isInteger(v) || v < -1 || v > 1) {
-            throw new Error('Vote must be 1 (upvote), -1 (downvote), or 0 (remove vote)');
-        }
-        return true;
-    })
-], async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-        console.error('Vote validation failed:', errors.array());
-        return res.status(400).json({ error: errors.array()[0].msg });
-    }
-
-    try {
-        const reviewId = parseInt(req.params.id);
-        const vote = Number(req.body.vote);
-
-        // Generate or read a session ID from a cookie (no login required)
-        let sessionId = parseCookies(req)._rv_sid;
-        if (!sessionId) {
-            sessionId = crypto.randomBytes(16).toString('hex');
-        }
-
-        // Verify the review exists
-        const [reviews] = await db.query('SELECT id FROM reviews WHERE id = ? AND is_approved = 1', [reviewId]);
-        if (reviews.length === 0) return res.status(404).json({ error: 'Review not found' });
-
-        if (vote === 0) {
-            // Remove existing vote
-            await db.query('DELETE FROM review_votes WHERE review_id = ? AND session_id = ?', [reviewId, sessionId]);
-        } else {
-            // Upsert: insert or update the vote
-            await db.query(
-                `INSERT INTO review_votes (review_id, session_id, vote)
-                 VALUES (?, ?, ?)
-                 ON DUPLICATE KEY UPDATE vote = VALUES(vote)`,
-                [reviewId, sessionId, vote]
-            );
-        }
-
-        // Return updated vote counts
-        const [counts] = await db.query(
-            `SELECT
-                COALESCE(SUM(CASE WHEN vote = 1 THEN 1 ELSE 0 END), 0) AS upvotes,
-                COALESCE(SUM(CASE WHEN vote = -1 THEN 1 ELSE 0 END), 0) AS downvotes
-             FROM review_votes WHERE review_id = ?`,
-            [reviewId]
-        );
-
-        // Get the user's current vote for this review
-        const [userVote] = await db.query(
-            'SELECT vote FROM review_votes WHERE review_id = ? AND session_id = ?',
-            [reviewId, sessionId]
-        );
-
-        // Set session cookie if it was newly generated.
-        // Always use SameSite=None; Secure because the frontend lives on
-        // a different origin (Vercel) and needs the cookie sent cross-site.
-        const needsCookie = !parseCookies(req)._rv_sid;
-        if (needsCookie) {
-            res.cookie('_rv_sid', sessionId, {
-                httpOnly: true,
-                secure: true,
-                sameSite: 'none',
-                maxAge: 365 * 24 * 60 * 60 * 1000, // 1 year
-                path: '/'
-            });
-        }
-
-        res.json({
-            upvotes: Number(counts[0].upvotes),
-            downvotes: Number(counts[0].downvotes),
-            userVote: userVote.length > 0 ? userVote[0].vote : 0
-        });
-    } catch (error) {
-        console.error('Error voting on review:', error);
         res.status(500).json({ error: 'Database error' });
     }
 });

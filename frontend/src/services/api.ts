@@ -110,10 +110,6 @@ export const submitReview = (data: {
     return api.post('/reviews', reviewData);
 };
 
-export const voteReview = (reviewId: number, vote: 1 | -1 | 0) => {
-    return api.post(`/reviews/${reviewId}/vote`, { vote });
-};
-
 // ========== ADMIN APIs ==========
 
 export const adminLogin = (username: string, password: string) => {

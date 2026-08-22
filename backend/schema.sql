@@ -59,19 +59,6 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     KEY idx_audit_admin (admin_id),
     KEY idx_audit_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Votes on reviews (upvote / downvote) for helpfulness ranking
-CREATE TABLE IF NOT EXISTS review_votes (
-    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    review_id INT UNSIGNED NOT NULL,
-    session_id VARCHAR(64) NOT NULL,
-    vote TINYINT NOT NULL COMMENT '1 = upvote, -1 = downvote',
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    UNIQUE KEY uq_vote (review_id, session_id),
-    KEY idx_votes_review (review_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 -- Questions asked about a teacher (anonymous Q&A)
 -- NOTE: no FOREIGN KEY on teacher_id so the bootstrap works with any
 -- production teachers.id type (INT vs INT UNSIGNED); the app validates
