@@ -404,7 +404,9 @@ app.get('/api/teachers/:id', async (req, res) => {
             [teacherId]
         );
 
-        res.set('Cache-Control', 'public, max-age=300');
+        // Don't cache publicly – vote counts change frequently and
+        // Cloudflare/Vercel would otherwise serve stale zero-count data.
+        res.set('Cache-Control', 'no-store');
         res.json({
             teacher: teachers[0],
             reviews: reviews,
@@ -647,11 +649,18 @@ app.post('/api/reviews/:id/vote', voteLimiter, [
             [reviewId, sessionId]
         );
 
-        // Set session cookie if it was newly generated
+        // Set session cookie if it was newly generated.
+        // Always use SameSite=None; Secure because the frontend lives on
+        // a different origin (Vercel) and needs the cookie sent cross-site.
         const needsCookie = !parseCookies(req)._rv_sid;
         if (needsCookie) {
-            const opts = buildCookieOptions(req);
-            res.cookie('_rv_sid', sessionId, { ...opts, maxAge: 365 * 24 * 60 * 60 * 1000 }); // 1 year
+            res.cookie('_rv_sid', sessionId, {
+                httpOnly: true,
+                secure: true,
+                sameSite: 'none',
+                maxAge: 365 * 24 * 60 * 60 * 1000, // 1 year
+                path: '/'
+            });
         }
 
         res.json({
