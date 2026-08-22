@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import Icon from './Icon';
 import Avatar from './Avatar';
@@ -21,6 +21,10 @@ interface TeacherDetailViewProps {
 }
 
 // Inline vote buttons for a single review
+// Each click changes the net score by exactly 1:
+//   - Click same vote → toggle off (score ±1)
+//   - No current vote  → add vote  (score ±1)
+//   - Switching votes  → remove old only (score ±1)
 const VoteButtons: React.FC<{
     review: Review;
     showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
@@ -30,7 +34,12 @@ const VoteButtons: React.FC<{
         downvotes: review.downvotes ?? 0,
         userVote: 0 as 1 | -1 | 0,
     });
-    const [loading, setLoading] = useState(false);
+    // Use refs to avoid stale closures in async handlers
+    const votesRef = useRef(votes);
+    votesRef.current = votes;
+    const busyRef = useRef(false);
+    const [isBusy, setIsBusy] = useState(false);
+
     const [upPop, setUpPop] = useState(false);
     const [downPop, setDownPop] = useState(false);
     const [scoreAnimate, setScoreAnimate] = useState(false);
@@ -47,27 +56,61 @@ const VoteButtons: React.FC<{
         setTimeout(() => setScoreAnimate(false), 320);
     }, []);
 
-    const handleVote = useCallback(async (newVote: 1 | -1 | 0) => {
-        if (loading) return;
-        setLoading(true);
+    const handleVote = useCallback(async (newVote: 1 | -1) => {
+        if (busyRef.current) return;
+        const prev = votesRef.current;
+
+        // Compute the next state — each path changes the score by exactly 1
+        let nextUp = prev.upvotes;
+        let nextDown = prev.downvotes;
+        let nextUserVote: 0 | 1 | -1 = prev.userVote;
+        let serverVote: 0 | 1 | -1;
+
+        if (prev.userVote === newVote) {
+            // Toggle off: click same vote again → remove it
+            if (newVote === 1) nextUp = Math.max(0, prev.upvotes - 1);
+            else nextDown = Math.max(0, prev.downvotes - 1);
+            nextUserVote = 0;
+            serverVote = 0;
+        } else if (prev.userVote === 0) {
+            // No current vote → add this one
+            if (newVote === 1) nextUp = prev.upvotes + 1;
+            else nextDown = prev.downvotes + 1;
+            nextUserVote = newVote;
+            serverVote = newVote;
+        } else {
+            // Switching from opposite → remove old only (don't add new yet)
+            if (prev.userVote === 1) nextUp = Math.max(0, prev.upvotes - 1);
+            else nextDown = Math.max(0, prev.downvotes - 1);
+            nextUserVote = 0;
+            serverVote = 0;
+        }
+
+        // Optimistic update — UI changes instantly
+        setVotes({ upvotes: nextUp, downvotes: nextDown, userVote: nextUserVote });
+        triggerPop(newVote === 1 ? 'up' : 'down');
+        busyRef.current = true;
+        setIsBusy(true);
+
         try {
-            const res = await voteReview(review.id, newVote);
+            const res = await voteReview(review.id, serverVote);
+            // Sync with server truth
             setVotes({
                 upvotes: res.data.upvotes,
                 downvotes: res.data.downvotes,
                 userVote: res.data.userVote,
             });
-            if (newVote === 1) triggerPop('up');
-            else if (newVote === -1) triggerPop('down');
-            else triggerPop(votes.userVote === 1 ? 'up' : 'down');
         } catch (err) {
+            // Revert optimistic update on failure
+            setVotes(prev);
             console.error('Vote error:', err);
             const axiosErr = err as { response?: { data?: { error?: string } } };
             showToast(axiosErr.response?.data?.error || 'Failed to vote. Please try again.', 'error');
         } finally {
-            setLoading(false);
+            busyRef.current = false;
+            setIsBusy(false);
         }
-    }, [review.id, loading, showToast, triggerPop, votes.userVote]);
+    }, [review.id, showToast, triggerPop]);
 
     const netScore = votes.upvotes - votes.downvotes;
 
@@ -75,8 +118,8 @@ const VoteButtons: React.FC<{
         <div className="review-votes">
             <button
                 className={`vote-btn vote-up ${votes.userVote === 1 ? 'vote-active' : ''} ${upPop ? 'vote-pop vote-glow' : ''}`}
-                onClick={() => handleVote(votes.userVote === 1 ? 0 : 1)}
-                disabled={loading}
+                onClick={() => handleVote(1)}
+                disabled={isBusy}
                 aria-label="Upvote this review"
                 title="Helpful"
             >
@@ -87,8 +130,8 @@ const VoteButtons: React.FC<{
             </span>
             <button
                 className={`vote-btn vote-down ${votes.userVote === -1 ? 'vote-active' : ''} ${downPop ? 'vote-pop vote-glow' : ''}`}
-                onClick={() => handleVote(votes.userVote === -1 ? 0 : -1)}
-                disabled={loading}
+                onClick={() => handleVote(-1)}
+                disabled={isBusy}
                 aria-label="Downvote this review"
                 title="Not helpful"
             >
