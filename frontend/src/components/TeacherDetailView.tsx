@@ -106,7 +106,24 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
     onClearSelectedTeacher,
     onTeacherClick,
     showToast,
-}) => (
+}) => {
+    const [reviewSort, setReviewSort] = useState<'newest' | 'helpful'>('newest');
+
+    // Sort reviews based on selected sort option
+    const sortedReviews = React.useMemo(() => {
+        if (!selectedTeacher.reviews) return [];
+        const reviews = [...selectedTeacher.reviews];
+        if (reviewSort === 'helpful') {
+            return reviews.sort((a, b) => {
+                const scoreA = (a.upvotes ?? 0) - (a.downvotes ?? 0);
+                const scoreB = (b.upvotes ?? 0) - (b.downvotes ?? 0);
+                return scoreB - scoreA;
+            });
+        }
+        return reviews.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    }, [selectedTeacher.reviews, reviewSort]);
+
+    return (
     <div className="teacher-detail page-enter">
         <button onClick={onClearSelectedTeacher} className="back-button">
             ← Back to list
@@ -156,7 +173,23 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
             className="reviews-section"
             placeholder={<div className="reviews-section" style={{ minHeight: '80px' }} />}
         >
-            <h3><Icon name="book-open" size={20} /> Student Reviews</h3>
+            <div className="reviews-header">
+                <h3><Icon name="book-open" size={20} /> Student Reviews</h3>
+                <div className="review-sort-toggle">
+                    <button
+                        className={`sort-pill ${reviewSort === 'newest' ? 'sort-pill-active' : ''}`}
+                        onClick={() => setReviewSort('newest')}
+                    >
+                        <Icon name="calendar" size={13} /> Newest
+                    </button>
+                    <button
+                        className={`sort-pill ${reviewSort === 'helpful' ? 'sort-pill-active' : ''}`}
+                        onClick={() => setReviewSort('helpful')}
+                    >
+                        <Icon name="star" size={13} /> Most Helpful
+                    </button>
+                </div>
+            </div>
             {!selectedTeacher.reviews || selectedTeacher.reviews.length === 0 ? (
                 <EmptyState
                     icon="book-open"
@@ -169,7 +202,7 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                     }
                 />
             ) : (
-                selectedTeacher.reviews.map((review: Review) => (
+                sortedReviews.map((review: Review) => (
                     <div key={review.id} className="review-card">
                         <div className="review-header">
                             <span className="reviewer-name"><Icon name="user" size={13} /> {review.user_name || 'Anonymous'}</span>
@@ -203,6 +236,7 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
             </div>
         )}
     </div>
-);
+    );
+};
 
 export default TeacherDetailView;

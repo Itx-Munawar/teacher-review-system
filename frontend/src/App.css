@@ -480,12 +480,55 @@ body::after {
     margin-top: 2rem;
 }
 
-.reviews-section h3 {
-    text-align: center;
+.reviews-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
     margin-bottom: 1rem;
+}
+
+.reviews-header h3 {
+    text-align: center;
+    margin-bottom: 0;
     color: #1e1b4b;
     font-size: 1.4rem;
     font-weight: 700;
+}
+
+.review-sort-toggle {
+    display: flex;
+    gap: 0.35rem;
+    background: rgba(225, 215, 245, 0.5);
+    border-radius: 999px;
+    padding: 3px;
+}
+
+.sort-pill {
+    border: none;
+    background: transparent;
+    padding: 5px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #6b7280;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.2s ease;
+}
+
+.sort-pill:hover:not(.sort-pill-active) {
+    color: #4c1d95;
+    background: rgba(255, 255, 255, 0.6);
+}
+
+.sort-pill-active {
+    background: linear-gradient(120deg, #667eea, #764ba2);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.35);
 }
 
 .review-card {
