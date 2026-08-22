@@ -31,6 +31,21 @@ const VoteButtons: React.FC<{
         userVote: 0 as 1 | -1 | 0,
     });
     const [loading, setLoading] = useState(false);
+    const [upPop, setUpPop] = useState(false);
+    const [downPop, setDownPop] = useState(false);
+    const [scoreAnimate, setScoreAnimate] = useState(false);
+
+    const triggerPop = useCallback((which: 'up' | 'down') => {
+        if (which === 'up') {
+            setUpPop(true);
+            setTimeout(() => setUpPop(false), 380);
+        } else {
+            setDownPop(true);
+            setTimeout(() => setDownPop(false), 380);
+        }
+        setScoreAnimate(true);
+        setTimeout(() => setScoreAnimate(false), 320);
+    }, []);
 
     const handleVote = useCallback(async (newVote: 1 | -1 | 0) => {
         if (loading) return;
@@ -42,19 +57,22 @@ const VoteButtons: React.FC<{
                 downvotes: res.data.downvotes,
                 userVote: res.data.userVote,
             });
+            if (newVote === 1) triggerPop('up');
+            else if (newVote === -1) triggerPop('down');
+            else triggerPop(votes.userVote === 1 ? 'up' : 'down');
         } catch {
             showToast('Failed to vote. Please try again.', 'error');
         } finally {
             setLoading(false);
         }
-    }, [review.id, loading, showToast]);
+    }, [review.id, loading, showToast, triggerPop, votes.userVote]);
 
     const netScore = votes.upvotes - votes.downvotes;
 
     return (
         <div className="review-votes">
             <button
-                className={`vote-btn vote-up ${votes.userVote === 1 ? 'vote-active' : ''}`}
+                className={`vote-btn vote-up ${votes.userVote === 1 ? 'vote-active' : ''} ${upPop ? 'vote-pop vote-glow' : ''}`}
                 onClick={() => handleVote(votes.userVote === 1 ? 0 : 1)}
                 disabled={loading}
                 aria-label="Upvote this review"
@@ -62,11 +80,11 @@ const VoteButtons: React.FC<{
             >
                 ▲
             </button>
-            <span className={`vote-score ${netScore > 0 ? 'vote-positive' : netScore < 0 ? 'vote-negative' : ''}`}>
+            <span className={`vote-score ${netScore > 0 ? 'vote-positive' : netScore < 0 ? 'vote-negative' : ''} ${scoreAnimate ? 'vote-score-animate' : ''}`}>
                 {netScore > 0 ? '+' : ''}{netScore}
             </span>
             <button
-                className={`vote-btn vote-down ${votes.userVote === -1 ? 'vote-active' : ''}`}
+                className={`vote-btn vote-down ${votes.userVote === -1 ? 'vote-active' : ''} ${downPop ? 'vote-pop vote-glow' : ''}`}
                 onClick={() => handleVote(votes.userVote === -1 ? 0 : -1)}
                 disabled={loading}
                 aria-label="Downvote this review"
