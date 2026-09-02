@@ -210,9 +210,11 @@ const runSchemaBootstrap = async () => {
                 KEY idx_answers_question (question_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         `);
+        // Drop the old review_votes table (vote feature removed)
+        await db.query('DROP TABLE IF EXISTS review_votes');
         schemaBootstrapError = null;
         schemaBootstrapDone = true;
-        console.log('✅ Schema bootstrap complete (questions, question_answers)');
+        console.log('✅ Schema bootstrap complete (questions, question_answers, cleanup)');
     } catch (error) {
         schemaBootstrapError = error.message;
         console.error('❌ Schema bootstrap failed:', error.message);
