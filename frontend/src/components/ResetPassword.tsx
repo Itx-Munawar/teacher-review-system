@@ -25,8 +25,9 @@ const ResetPassword: React.FC = () => {
             const res = await api.post('/admin/reset-password', { token, newPassword: password });
             setMessage(res.data.message);
             setTimeout(() => navigate('/'), 3000);
-        } catch (err: any) {
-            setError(err.response?.data?.error || 'Reset failed');
+        } catch (err) {
+            const axiosErr = err as { response?: { data?: { error?: string } } };
+            setError(axiosErr.response?.data?.error || 'Reset failed');
         }
     };
 

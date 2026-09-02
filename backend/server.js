@@ -541,7 +541,7 @@ app.post('/api/reviews', reviewLimiter, [
     }
     
     try {
-        const { teacher_id, rating, comment, user_name } = req.body;
+        const { teacher_id, comment, user_name } = req.body;
         const sanitizedComment = validator.escape(comment.trim());
         const sanitizedName = user_name ? validator.escape(user_name.trim()) : 'Anonymous';
         
@@ -551,9 +551,9 @@ app.post('/api/reviews', reviewLimiter, [
         }
         
         const [result] = await db.query(
-            `INSERT INTO reviews (teacher_id, rating, comment, user_name, is_approved) 
-             VALUES (?, ?, ?, ?, 1)`,
-            [teacher_id, Number(rating) || 5, sanitizedComment, sanitizedName]
+            `INSERT INTO reviews (teacher_id, comment, user_name, is_approved) 
+             VALUES (?, ?, ?, 1)`,
+            [teacher_id, sanitizedComment, sanitizedName]
         );
         
         invalidateCache('teachers');

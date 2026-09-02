@@ -13,8 +13,9 @@ const ForgotPassword: React.FC = () => {
         try {
             const res = await api.post('/admin/forgot-password', { email });
             setMessage(res.data.message || 'Check your email for reset link.');
-        } catch (err: any) {
-            setError(err.response?.data?.error || 'Something went wrong.');
+        } catch (err) {
+            const axiosErr = err as { response?: { data?: { error?: string } } };
+            setError(axiosErr.response?.data?.error || 'Something went wrong.');
         }
     };
 

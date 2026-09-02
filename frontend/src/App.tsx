@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, memo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useParams, useNavigate, Link } from 'react-router-dom';
 import {
     getTeachers,
@@ -1192,7 +1192,6 @@ const App: React.FC = () => {
                             relatedTeachers={relatedTeachers}
                             reviewSuccess={reviewSuccess}
                             reviewError={reviewError}
-                            departments={departments}
                             onShowReviewForm={() => { if (selectedTeacher && selectedTeacher.id) setShowReviewForm(true); }}
                             onClearSelectedTeacher={clearSelectedTeacher}
                             onTeacherClick={handleTeacherClick}

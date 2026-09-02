@@ -12,7 +12,6 @@ interface TeacherDetailViewProps {
     relatedTeachers: Teacher[];
     reviewSuccess: string;
     reviewError: string;
-    departments: { department: string; teacher_count: number }[];
     onShowReviewForm: () => void;
     onClearSelectedTeacher: () => void;
     onTeacherClick: (teacher: Teacher) => void;
@@ -24,7 +23,6 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
     relatedTeachers,
     reviewSuccess,
     reviewError,
-    departments,
     onShowReviewForm,
     onClearSelectedTeacher,
     onTeacherClick,
