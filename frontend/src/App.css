@@ -86,17 +86,6 @@ body::after {
     z-index: 1;
 }
 
-/* 3D Particle Canvas Background */
-.particle-bg {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 0;
-    pointer-events: none;
-}
-
 /* Animated gradient text helper */
 .gradient-text {
     background: linear-gradient(90deg, #ff5e9c, #a855f7, #00c9ff, #ff9a56, #ff5e9c);
@@ -825,6 +814,48 @@ body::after {
     padding: 2rem;
     width: 100%;
     box-shadow: var(--shadow-soft);
+}
+
+.admin-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    padding: 4px;
+    background: rgba(168, 85, 247, 0.08);
+    border-radius: var(--radius);
+}
+
+.admin-tab {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0.6rem 1rem;
+    border: none;
+    border-radius: calc(var(--radius) - 4px);
+    background: transparent;
+    color: #6b7280;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.admin-tab:hover {
+    background: rgba(168, 85, 247, 0.1);
+    color: var(--primary);
+}
+
+.admin-tab-active {
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(168, 85, 247, 0.35);
+}
+
+.admin-tab-active:hover {
+    color: #fff;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
 }
 
 .admin-header {
@@ -2539,6 +2570,16 @@ body::after {
     .admin-panel {
         padding: 0.75rem;
         border-radius: 18px;
+    }
+
+    .admin-tabs {
+        flex-wrap: wrap;
+        gap: 0.35rem;
+    }
+
+    .admin-tab {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.8rem;
     }
 
     .admin-header h2 {

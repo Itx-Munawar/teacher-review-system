@@ -20,7 +20,6 @@ import {
     submitReview
 } from './services/api';
 import { debounce } from './utils/debounce';
-import ParticleBackground from './components/ParticleBackground';
 import TiltCard from './components/TiltCard';
 import LazySection from './components/LazySection';
 import TeacherAutocomplete from './components/TeacherAutocomplete';
@@ -921,7 +920,6 @@ const App: React.FC = () => {
         if (!isAdminLoggedIn) {
             return (
                 <div className="app">
-                    <ParticleBackground />
                     <ToastHost toasts={toasts} onDismiss={dismissToast} />
                 <header className={`header${headerScrolled ? ' header-scrolled' : ''}`}>
                         <h1>Teacher Review System - Admin</h1>
@@ -944,7 +942,6 @@ const App: React.FC = () => {
         }
         return (
             <div className="app">
-                <ParticleBackground />
                 <ToastHost toasts={toasts} onDismiss={dismissToast} />
                 <header className="header">
                     <h1>Teacher Review System - Admin Panel</h1>
@@ -997,7 +994,6 @@ const App: React.FC = () => {
     return (
         <div className="app">
             <a href="#main-content" className="skip-link">Skip to main content</a>
-            <ParticleBackground />
             <ToastHost toasts={toasts} onDismiss={dismissToast} />
             {compareList.length === 0 && <InstallPrompt />}
             <PullToRefresh onRefresh={handlePullRefresh}>

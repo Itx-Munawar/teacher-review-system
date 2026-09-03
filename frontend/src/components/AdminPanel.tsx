@@ -2,6 +2,8 @@ import React, { useState, memo } from 'react';
 import Icon from './Icon';
 import type { Teacher, AdminReview, AdminQuestion } from '../types';
 
+type AdminTab = 'teachers' | 'reviews' | 'qa';
+
 export interface AdminPanelProps {
     teachers: Teacher[];
     reviewsForModeration: AdminReview[];
@@ -79,6 +81,9 @@ const AdminPanel = memo(({
 
     const displayTeachers = searchTerm ? searchResults : teachers;
 
+    // Tab state
+    const [activeTab, setActiveTab] = useState<AdminTab>('teachers');
+
     // Edit state
     const [editingTeacherId, setEditingTeacherId] = useState<number | null>(null);
     const [editName, setEditName] = useState('');
@@ -119,6 +124,29 @@ const AdminPanel = memo(({
                 <button onClick={onLogout} className="logout-btn">Logout</button>
             </div>
 
+            <div className="admin-tabs">
+                <button
+                    className={`admin-tab ${activeTab === 'teachers' ? 'admin-tab-active' : ''}`}
+                    onClick={() => setActiveTab('teachers')}
+                >
+                    <Icon name="book" size={15} /> Teachers
+                </button>
+                <button
+                    className={`admin-tab ${activeTab === 'reviews' ? 'admin-tab-active' : ''}`}
+                    onClick={() => setActiveTab('reviews')}
+                >
+                    <Icon name="message-circle" size={15} /> Reviews
+                </button>
+                <button
+                    className={`admin-tab ${activeTab === 'qa' ? 'admin-tab-active' : ''}`}
+                    onClick={() => setActiveTab('qa')}
+                >
+                    <Icon name="message-square" size={15} /> Q&A
+                </button>
+            </div>
+
+            {activeTab === 'teachers' && (
+            <>
             <div className="admin-section">
                 <button onClick={() => setShowAddTeacherForm(!showAddTeacherForm)} className="add-teacher-btn">
                     {showAddTeacherForm ? (
@@ -234,9 +262,12 @@ const AdminPanel = memo(({
                     </>
                 )}
             </div>
+            </>
+            )}
 
+            {activeTab === 'reviews' && (
             <div className="admin-section">
-                <h3>Manage Reviews ({totalReviews})</h3>
+                <h3>All Reviews ({totalReviews})</h3>
                 <div className="admin-list">
                     {totalReviews === 0 ? (
                         <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>No reviews yet.</p>
@@ -262,9 +293,11 @@ const AdminPanel = memo(({
                 )}
                 {adminLoadingMoreReviews && <div className="loading-more">Loading more reviews...</div>}
             </div>
+            )}
 
+            {activeTab === 'qa' && (
             <div className="admin-section">
-                <h3>Manage Questions ({adminQuestions.length})</h3>
+                <h3>All Questions ({adminQuestions.length})</h3>
                 <div className="admin-list">
                     {adminQuestions.length === 0 ? (
                         <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>No questions yet.</p>
@@ -296,6 +329,7 @@ const AdminPanel = memo(({
                 )}
                 {adminLoadingMoreQuestions && <div className="loading-more">Loading more questions...</div>}
             </div>
+            )}
         </div>
     );
 });
