@@ -24,8 +24,6 @@ body {
     font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
         'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
     background: linear-gradient(120deg, #e0e7ff, #f5f3ff, #ede9fe, #e0f2fe, #fdf4ff, #f5f3ff, #e0e7ff);
-    background-size: 400% 400%;
-    animation: gradientShift 24s ease infinite;
     min-height: 100vh;
     min-height: 100dvh;
     overflow-x: hidden;
@@ -36,35 +34,7 @@ body {
     touch-action: manipulation;
 }
 
-/* Colorful floating blobs */
-body::before,
-body::after {
-    content: '';
-    position: fixed;
-    border-radius: 50%;
-    filter: blur(90px);
-    opacity: 0.28;
-    z-index: 0;
-    pointer-events: none;
-    animation: blobFloat 18s ease-in-out infinite alternate;
-}
-
-body::before {
-    width: 520px;
-    height: 520px;
-    top: -140px;
-    left: -140px;
-    background: radial-gradient(circle at 30% 30%, #ff5e9c, transparent 62%);
-}
-
-body::after {
-    width: 620px;
-    height: 620px;
-    bottom: -160px;
-    right: -160px;
-    background: radial-gradient(circle at 70% 70%, #00c9ff, transparent 62%);
-    animation-delay: -8s;
-}
+/* Body background is the gradient only — no floating blobs */
 
 @keyframes gradientShift {
     0% { background-position: 0% 50%; }
@@ -72,10 +42,7 @@ body::after {
     100% { background-position: 0% 50%; }
 }
 
-@keyframes blobFloat {
-    from { transform: translate(0, 0) scale(1); }
-    to { transform: translate(70px, 50px) scale(1.2); }
-}
+/* blobFloat removed */
 
 .app {
     min-height: 100vh;
@@ -1228,12 +1195,6 @@ body::after {
     padding: 4px;
     background: linear-gradient(135deg, #ff5e9c, #a855f7, #00c9ff);
     box-shadow: 0 10px 30px rgba(168, 85, 247, 0.45);
-    animation: floatY 4s ease-in-out infinite;
-}
-
-@keyframes floatY {
-     0%, 100% { transform: translateY(0); }
-     50% { transform: translateY(-10px); }
 }
 
 /* Skeleton loading styles */
