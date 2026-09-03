@@ -88,6 +88,7 @@ const App: React.FC = () => {
     const [showReviewForm, setShowReviewForm] = useState(false);
     const [reviewComment, setReviewComment] = useState('');
     const [reviewUserName, setReviewUserName] = useState('');
+    const [reviewTags, setReviewTags] = useState<string[]>([]);
     const [submitting, setSubmitting] = useState(false);
     const [reviewError, setReviewError] = useState('');
     const [reviewSuccess, setReviewSuccess] = useState('');
@@ -659,7 +660,8 @@ const App: React.FC = () => {
             await submitReview({
                 teacher_id: selectedTeacher.id,
                 comment: reviewComment.trim(),
-                user_name: reviewUserName.trim() || 'Anonymous'
+                user_name: reviewUserName.trim() || 'Anonymous',
+                tags: reviewTags
             });
             showToast('Review submitted successfully!', 'success');
             haptic([12, 40, 12]);
@@ -675,6 +677,7 @@ const App: React.FC = () => {
             setShowReviewForm(false);
             setReviewComment('');
             setReviewUserName('');
+            setReviewTags([]);
             setReviewError('');
             setReviewSuccess(`Your review for ${selectedTeacher.name} has been submitted. Thank you!`);
 
@@ -689,7 +692,7 @@ const App: React.FC = () => {
         } finally {
             setSubmitting(false);
         }
-    }, [selectedTeacher, reviewComment, reviewUserName, loadTeachers, loadAdminData, showToast]);
+    }, [selectedTeacher, reviewComment, reviewUserName, reviewTags, loadTeachers, loadAdminData, showToast]);
 
     const handleTeacherClick = useCallback(async (teacher: Teacher) => {
         searchInputRef.current?.blur();
@@ -699,6 +702,7 @@ const App: React.FC = () => {
             setShowReviewForm(false);
             setReviewComment('');
             setReviewUserName('');
+            setReviewTags([]);
             setReviewError('');
             setReviewSuccess('');
 
@@ -1271,6 +1275,8 @@ const App: React.FC = () => {
                     setReviewComment={setReviewComment}
                     reviewUserName={reviewUserName}
                     setReviewUserName={setReviewUserName}
+                    reviewTags={reviewTags}
+                    setReviewTags={setReviewTags}
                     reviewError={reviewError}
                     submitting={submitting}
                     onSubmit={handleSubmitReview}

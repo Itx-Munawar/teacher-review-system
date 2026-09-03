@@ -1,11 +1,20 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Icon from './Icon';
 import Avatar from './Avatar';
 import EmptyState from './EmptyState';
 import LazySection from './LazySection';
 import QASection from './QASection';
+import { getTeacherSummary } from '../services/api';
 import type { Teacher, TeacherDetail, Review } from '../types';
+
+interface TeacherSummary {
+    total: number;
+    pros: string[];
+    cons: string[];
+    tagCounts: Record<string, number>;
+    topTraits: { tag: string; count: number }[];
+}
 
 interface TeacherDetailViewProps {
     selectedTeacher: TeacherDetail;
@@ -28,12 +37,36 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
     onTeacherClick,
     showToast,
 }) => {
-    // Sort reviews by newest first
+    const [summary, setSummary] = useState<TeacherSummary | null>(null);
+    const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
+
+    // Load summary
+    useEffect(() => {
+        if (selectedTeacher.reviews && selectedTeacher.reviews.length > 0) {
+            getTeacherSummary(selectedTeacher.id)
+                .then(res => setSummary(res.data))
+                .catch(() => {});
+        }
+    }, [selectedTeacher.id, selectedTeacher.reviews]);
+
+    // Sort reviews by newest first, optionally filter by tag
     const sortedReviews = React.useMemo(() => {
         if (!selectedTeacher.reviews) return [];
-        return [...selectedTeacher.reviews].sort(
+        let reviews = [...selectedTeacher.reviews].sort(
             (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
+        if (activeTagFilter) {
+            reviews = reviews.filter(r => r.tags?.includes(activeTagFilter));
+        }
+        return reviews;
+    }, [selectedTeacher.reviews, activeTagFilter]);
+
+    // Collect all unique tags from reviews
+    const allTags = React.useMemo(() => {
+        if (!selectedTeacher.reviews) return [];
+        const tagSet = new Set<string>();
+        selectedTeacher.reviews.forEach(r => r.tags?.forEach(t => tagSet.add(t)));
+        return Array.from(tagSet);
     }, [selectedTeacher.reviews]);
 
     return (
@@ -82,6 +115,51 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
             <Icon name="edit" size={18} /> Write a Review for {selectedTeacher.name}
         </button>
 
+        {/* AI Review Summary */}
+        {summary && summary.total > 0 && (
+            <LazySection
+                className="review-summary-section"
+                placeholder={<div className="review-summary-card" style={{ minHeight: '120px' }} />}
+            >
+                <div className="review-summary-card">
+                    <h3><Icon name="star" size={18} /> Review Summary</h3>
+                    <p className="summary-count">{summary.total} review{summary.total !== 1 ? 's' : ''} analyzed</p>
+
+                    {summary.topTraits.length > 0 && (
+                        <div className="summary-traits">
+                            <span className="summary-label">Top Traits:</span>
+                            <div className="summary-trait-chips">
+                                {summary.topTraits.map(({ tag, count }) => (
+                                    <span key={tag} className="summary-trait-chip">
+                                        {tag} <span className="trait-count">({count})</span>
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="summary-columns">
+                        {summary.pros.length > 0 && (
+                            <div className="summary-pros">
+                                <span className="summary-label pros-label"><Icon name="thumbs-up" size={14} /> Common Positives</span>
+                                <ul>
+                                    {summary.pros.map(p => <li key={p}>{p}</li>)}
+                                </ul>
+                            </div>
+                        )}
+                        {summary.cons.length > 0 && (
+                            <div className="summary-cons">
+                                <span className="summary-label cons-label"><Icon name="thumbs-down" size={14} /> Common Negatives</span>
+                                <ul>
+                                    {summary.cons.map(c => <li key={c}>{c}</li>)}
+                                </ul>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </LazySection>
+        )}
+
         <LazySection
             className="reviews-section"
             placeholder={<div className="reviews-section" style={{ minHeight: '80px' }} />}
@@ -89,6 +167,28 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
             <div className="reviews-header">
                 <h3><Icon name="book-open" size={20} /> Student Reviews</h3>
             </div>
+
+            {/* Tag Filter */}
+            {allTags.length > 0 && (
+                <div className="tag-filter-bar">
+                    <button
+                        className={`tag-chip tag-chip-filter ${activeTagFilter === null ? 'tag-chip-active' : ''}`}
+                        onClick={() => setActiveTagFilter(null)}
+                    >
+                        All
+                    </button>
+                    {allTags.map(tag => (
+                        <button
+                            key={tag}
+                            className={`tag-chip tag-chip-filter ${activeTagFilter === tag ? 'tag-chip-active' : ''}`}
+                            onClick={() => setActiveTagFilter(activeTagFilter === tag ? null : tag)}
+                        >
+                            {tag}
+                        </button>
+                    ))}
+                </div>
+            )}
+
             {!selectedTeacher.reviews || selectedTeacher.reviews.length === 0 ? (
                 <EmptyState
                     icon="book-open"
@@ -100,6 +200,12 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                         </button>
                     }
                 />
+            ) : sortedReviews.length === 0 ? (
+                <EmptyState
+                    icon="search"
+                    title="No reviews match this filter"
+                    message="Try selecting a different tag."
+                />
             ) : (
                 sortedReviews.map((review: Review) => (
                     <div key={review.id} className="review-card">
@@ -108,6 +214,13 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                             <span className="review-date"><Icon name="calendar" size={13} /> {new Date(review.created_at).toLocaleDateString()}</span>
                         </div>
                         <p className="review-comment">"{review.comment}"</p>
+                        {review.tags && review.tags.length > 0 && (
+                            <div className="review-tags">
+                                {review.tags.map(tag => (
+                                    <span key={tag} className="review-tag">{tag}</span>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 ))
             )}

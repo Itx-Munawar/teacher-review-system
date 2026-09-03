@@ -3,12 +3,16 @@ import Icon from './Icon';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import type { TeacherDetail } from '../types';
 
+const REVIEW_TAGS = ['Clear Lectures', 'Strict Grading', 'Engaging', 'Patient', 'Unresponsive', 'Fair', 'Interesting', 'Helpful', 'Boring', 'Organized'];
+
 interface ReviewFormModalProps {
     selectedTeacher: TeacherDetail;
     reviewComment: string;
     setReviewComment: (v: string) => void;
     reviewUserName: string;
     setReviewUserName: (v: string) => void;
+    reviewTags: string[];
+    setReviewTags: (v: string[]) => void;
     reviewError: string;
     submitting: boolean;
     onSubmit: (e: React.FormEvent) => void;
@@ -21,6 +25,8 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
     setReviewComment,
     reviewUserName,
     setReviewUserName,
+    reviewTags,
+    setReviewTags,
     reviewError,
     submitting,
     onSubmit,
@@ -78,6 +84,27 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                             required
                             aria-required="true"
                         />
+                    </div>
+                    <div className="form-group">
+                        <label>Tags (optional, max 3)</label>
+                        <div className="tag-selector">
+                            {REVIEW_TAGS.map((tag) => (
+                                <button
+                                    key={tag}
+                                    type="button"
+                                    className={`tag-chip ${reviewTags.includes(tag) ? 'tag-chip-active' : ''}`}
+                                    onClick={() => {
+                                        if (reviewTags.includes(tag)) {
+                                            setReviewTags(reviewTags.filter(t => t !== tag));
+                                        } else if (reviewTags.length < 3) {
+                                            setReviewTags([...reviewTags, tag]);
+                                        }
+                                    }}
+                                >
+                                    {tag}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                     <div className="form-buttons">
                         <button type="button" onClick={onClose} className="btn-cancel">

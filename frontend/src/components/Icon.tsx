@@ -24,7 +24,9 @@ export type IconName =
     | 'calendar'
     | 'download'
     | 'trash'
-    | 'help';
+    | 'help'
+    | 'thumbs-up'
+    | 'thumbs-down';
 
 const PATHS: Record<IconName, React.ReactNode> = {
     home: (
@@ -158,6 +160,18 @@ const PATHS: Record<IconName, React.ReactNode> = {
             <circle cx="12" cy="12" r="10" />
             <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
             <line x1="12" y1="17" x2="12.01" y2="17" />
+        </>
+    ),
+    'thumbs-up': (
+        <>
+            <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z" />
+            <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
+        </>
+    ),
+    'thumbs-down': (
+        <>
+            <path d="M10 15V19a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z" />
+            <path d="M17 2h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3" />
         </>
     ),
 };

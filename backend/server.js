@@ -212,6 +212,12 @@ const runSchemaBootstrap = async () => {
         `);
         // Drop the old review_votes table (vote feature removed)
         await db.query('DROP TABLE IF EXISTS review_votes');
+        // Add tags column to reviews if missing
+        const [cols] = await db.query("SHOW COLUMNS FROM reviews LIKE 'tags'");
+        if (cols.length === 0) {
+            await db.query('ALTER TABLE reviews ADD COLUMN tags JSON DEFAULT NULL AFTER comment');
+            console.log('✅ Added tags column to reviews table');
+        }
         schemaBootstrapError = null;
         schemaBootstrapDone = true;
         console.log('✅ Schema bootstrap complete (questions, question_answers, cleanup)');
@@ -377,12 +383,16 @@ app.get('/api/teachers/:id', async (req, res) => {
 
         // Get approved reviews for this teacher
         const [reviews] = await db.query(
-            `SELECT r.*
+            `SELECT r.*, COALESCE(r.tags, '[]') AS tags
              FROM reviews r
              WHERE r.teacher_id = ? AND r.is_approved = 1
              ORDER BY r.created_at DESC`,
             [teacherId]
         );
+        // Parse tags JSON for each review
+        reviews.forEach((r) => {
+            try { r.tags = JSON.parse(r.tags); } catch { r.tags = []; }
+        });
 
         // Get total review count
         const [countData] = await db.query(
@@ -422,6 +432,78 @@ app.get('/api/teachers/:id/related', async (req, res) => {
         res.json(related);
     } catch (error) {
         console.error('Error fetching related teachers:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// GET /api/teachers/:id/summary - AI-generated review summary
+// Extracts common pros/cons from all reviews for a teacher
+app.get('/api/teachers/:id/summary', async (req, res) => {
+    try {
+        const teacherId = parseInt(req.params.id);
+        const [teachers] = await db.query('SELECT id FROM teachers WHERE id = ?', [teacherId]);
+        if (teachers.length === 0) return res.status(404).json({ error: 'Teacher not found' });
+
+        const [reviews] = await db.query(
+            'SELECT comment, tags FROM reviews WHERE teacher_id = ? AND is_approved = 1',
+            [teacherId]
+        );
+
+        if (reviews.length === 0) {
+            return res.json({ total: 0, pros: [], cons: [], tagCounts: {}, topTraits: [] });
+        }
+
+        // Count tags
+        const tagCounts = {};
+        reviews.forEach((r) => {
+            let tags = [];
+            try { tags = JSON.parse(r.tags || '[]'); } catch { /* ignore */ }
+            tags.forEach(t => {
+                tagCounts[t] = (tagCounts[t] || 0) + 1;
+            });
+        });
+
+        // Keyword-based sentiment extraction
+        const POSITIVE_KEYWORDS = ['excellent', 'great', 'amazing', 'helpful', 'clear', 'engaging', 'patient', 'fair', 'best', 'love', 'recommend', 'inspiring', 'knowledgeable', 'responsive', 'organized', 'interesting', 'friendly', 'supportive', 'professional', 'passionate'];
+        const NEGATIVE_KEYWORDS = ['bad', 'worst', 'boring', 'rude', 'unfair', 'strict', 'unresponsive', 'confusing', 'unclear', 'waste', 'terrible', 'horrible', 'poor', 'difficult', 'arrogant', 'lazy', 'unprofessional', 'disorganized', 'monotone', 'dull'];
+        const POSITIVE_BIGRAMS = ['highly recommend', 'very helpful', 'great teacher', 'clear explanations', 'easy to understand'];
+        const NEGATIVE_BIGRAMS = ['waste of time', 'very strict', 'not helpful', 'hard to understand', 'no explanation'];
+
+        const pros = [];
+        const cons = [];
+
+        reviews.forEach((r) => {
+            const text = (r.comment || '').toLowerCase();
+            POSITIVE_BIGRAMS.forEach(bigram => {
+                if (text.includes(bigram) && !pros.includes(bigram)) pros.push(bigram);
+            });
+            NEGATIVE_BIGRAMS.forEach(bigram => {
+                if (text.includes(bigram) && !cons.includes(bigram)) cons.push(bigram);
+            });
+            POSITIVE_KEYWORDS.forEach(kw => {
+                if (text.includes(kw) && !pros.includes(kw)) pros.push(kw);
+            });
+            NEGATIVE_KEYWORDS.forEach(kw => {
+                if (text.includes(kw) && !cons.includes(kw)) cons.push(kw);
+            });
+        });
+
+        // Sort tags by frequency and get top 5
+        const topTraits = Object.entries(tagCounts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([tag, count]) => ({ tag, count }));
+
+        res.set('Cache-Control', 'public, max-age=120');
+        res.json({
+            total: reviews.length,
+            pros: pros.slice(0, 6),
+            cons: cons.slice(0, 6),
+            tagCounts,
+            topTraits
+        });
+    } catch (error) {
+        console.error('Error generating summary:', error);
         res.status(500).json({ error: 'Database error' });
     }
 });
@@ -541,9 +623,17 @@ app.post('/api/reviews', reviewLimiter, [
     }
     
     try {
-        const { teacher_id, comment, user_name } = req.body;
+        const { teacher_id, comment, user_name, tags } = req.body;
         const sanitizedComment = validator.escape(comment.trim());
         const sanitizedName = user_name ? validator.escape(user_name.trim()) : 'Anonymous';
+        
+        // Validate and sanitize tags (max 3 tags from predefined list)
+        const VALID_TAGS = ['Clear Lectures', 'Strict Grading', 'Engaging', 'Patient', 'Unresponsive', 'Fair', 'Interesting', 'Helpful', 'Boring', 'Organized'];
+        let sanitizedTags = null;
+        if (Array.isArray(tags) && tags.length > 0) {
+            sanitizedTags = tags.filter(t => VALID_TAGS.includes(t)).slice(0, 3);
+            if (sanitizedTags.length === 0) sanitizedTags = null;
+        }
         
         const [teachers] = await db.query('SELECT id FROM teachers WHERE id = ?', [teacher_id]);
         if (teachers.length === 0) {
@@ -551,9 +641,9 @@ app.post('/api/reviews', reviewLimiter, [
         }
         
         const [result] = await db.query(
-            `INSERT INTO reviews (teacher_id, comment, user_name, is_approved) 
-             VALUES (?, ?, ?, 1)`,
-            [teacher_id, sanitizedComment, sanitizedName]
+            `INSERT INTO reviews (teacher_id, comment, tags, user_name, is_approved) 
+             VALUES (?, ?, ?, ?, 1)`,
+            [teacher_id, sanitizedComment, sanitizedTags ? JSON.stringify(sanitizedTags) : null, sanitizedName]
         );
         
         invalidateCache('teachers');

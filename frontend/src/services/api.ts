@@ -97,6 +97,7 @@ export const submitReview = (data: {
     teacher_id: number; 
     comment: string; 
     user_name?: string;
+    tags?: string[];
 }) => {
     const teacherId = Number(data.teacher_id);
     if (isNaN(teacherId) || teacherId <= 0) {
@@ -105,9 +106,14 @@ export const submitReview = (data: {
     const reviewData = {
         teacher_id: teacherId,
         comment: data.comment,
-        user_name: data.user_name || 'Anonymous'
+        user_name: data.user_name || 'Anonymous',
+        tags: data.tags || []
     };
     return api.post('/reviews', reviewData);
+};
+
+export const getTeacherSummary = (id: number) => {
+    return api.get(`/teachers/${id}/summary`);
 };
 
 // ========== ADMIN APIs ==========
