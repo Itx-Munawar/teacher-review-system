@@ -211,12 +211,6 @@ const runSchemaBootstrap = async () => {
         `);
         // Drop the old review_votes table (vote feature removed)
         await db.query('DROP TABLE IF EXISTS review_votes');
-        // Add tags column to reviews if missing
-        const [cols] = await db.query("SHOW COLUMNS FROM reviews LIKE 'tags'");
-        if (cols.length === 0) {
-            await db.query('ALTER TABLE reviews ADD COLUMN tags JSON DEFAULT NULL AFTER comment');
-            console.log('✅ Added tags column to reviews table');
-        }
         schemaBootstrapError = null;
         schemaBootstrapDone = true;
         console.log('✅ Schema bootstrap complete (questions, question_answers, cleanup)');
@@ -388,10 +382,6 @@ app.get('/api/teachers/:id', async (req, res) => {
              ORDER BY r.created_at DESC`,
             [teacherId]
         );
-        // Parse tags JSON for each review
-        reviews.forEach((r) => {
-            try { r.tags = JSON.parse(r.tags); } catch { r.tags = []; }
-        });
 
         // Get total review count
         const [countData] = await db.query(
@@ -550,19 +540,9 @@ app.post('/api/reviews', reviewLimiter, [
     }
     
     try {
-        const { teacher_id, comment, user_name, tags } = req.body;
-        // Trim only — React escapes text in JSX, so validator.escape() is not needed
-        // and would convert ' to &#x27; etc., which looks broken in the UI
+        const { teacher_id, comment, user_name } = req.body;
         const sanitizedComment = comment.trim().slice(0, 1000);
         const sanitizedName = user_name ? user_name.trim().slice(0, 100) : 'Anonymous';
-        
-        // Validate and sanitize tags (max 3 tags from predefined list)
-        const VALID_TAGS = ['Clear Lectures', 'Strict Grading', 'Engaging', 'Patient', 'Unresponsive', 'Fair', 'Interesting', 'Helpful', 'Boring', 'Organized'];
-        let sanitizedTags = null;
-        if (Array.isArray(tags) && tags.length > 0) {
-            sanitizedTags = tags.filter(t => VALID_TAGS.includes(t)).slice(0, 3);
-            if (sanitizedTags.length === 0) sanitizedTags = null;
-        }
         
         const [teachers] = await db.query('SELECT id FROM teachers WHERE id = ?', [teacher_id]);
         if (teachers.length === 0) {
@@ -570,9 +550,9 @@ app.post('/api/reviews', reviewLimiter, [
         }
         
         const [result] = await db.query(
-            `INSERT INTO reviews (teacher_id, comment, tags, user_name, is_approved) 
-             VALUES (?, ?, ?, ?, 1)`,
-            [teacher_id, sanitizedComment, sanitizedTags ? JSON.stringify(sanitizedTags) : null, sanitizedName]
+            `INSERT INTO reviews (teacher_id, comment, user_name, is_approved) 
+             VALUES (?, ?, ?, 1)`,
+            [teacher_id, sanitizedComment, sanitizedName]
         );
         
         invalidateCache('teachers');

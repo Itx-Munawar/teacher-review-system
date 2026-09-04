@@ -11,7 +11,6 @@ export interface Review {
     id: number;
     teacher_id: number;
     comment: string;
-    tags?: string[];
     user_name: string;
     created_at: string;
 }

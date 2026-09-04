@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import Icon from './Icon';
 import Avatar from './Avatar';
@@ -28,26 +28,12 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
     onTeacherClick,
     showToast,
 }) => {
-    const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
-
-    // Sort reviews by newest first, optionally filter by tag
+    // Sort reviews by newest first
     const sortedReviews = useMemo(() => {
         if (!selectedTeacher.reviews) return [];
-        let reviews = [...selectedTeacher.reviews].sort(
+        return [...selectedTeacher.reviews].sort(
             (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
-        if (activeTagFilter) {
-            reviews = reviews.filter(r => r.tags?.includes(activeTagFilter));
-        }
-        return reviews;
-    }, [selectedTeacher.reviews, activeTagFilter]);
-
-    // Collect all unique tags from reviews
-    const allTags = useMemo(() => {
-        if (!selectedTeacher.reviews) return [];
-        const tagSet = new Set<string>();
-        selectedTeacher.reviews.forEach(r => r.tags?.forEach(t => tagSet.add(t)));
-        return Array.from(tagSet);
     }, [selectedTeacher.reviews]);
 
     return (
@@ -104,27 +90,6 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                 <h3><Icon name="book-open" size={20} /> Student Reviews</h3>
             </div>
 
-            {/* Tag Filter */}
-            {allTags.length > 0 && (
-                <div className="tag-filter-bar">
-                    <button
-                        className={`tag-chip tag-chip-filter ${activeTagFilter === null ? 'tag-chip-active' : ''}`}
-                        onClick={() => setActiveTagFilter(null)}
-                    >
-                        All
-                    </button>
-                    {allTags.map(tag => (
-                        <button
-                            key={tag}
-                            className={`tag-chip tag-chip-filter ${activeTagFilter === tag ? 'tag-chip-active' : ''}`}
-                            onClick={() => setActiveTagFilter(activeTagFilter === tag ? null : tag)}
-                        >
-                            {tag}
-                        </button>
-                    ))}
-                </div>
-            )}
-
             {!selectedTeacher.reviews || selectedTeacher.reviews.length === 0 ? (
                 <EmptyState
                     icon="book-open"
@@ -136,12 +101,6 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                         </button>
                     }
                 />
-            ) : sortedReviews.length === 0 ? (
-                <EmptyState
-                    icon="search"
-                    title="No reviews match this filter"
-                    message="Try selecting a different tag."
-                />
             ) : (
                 sortedReviews.map((review: Review) => (
                     <div key={review.id} className="review-card">
@@ -150,13 +109,6 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                             <span className="review-date"><Icon name="calendar" size={13} /> {new Date(review.created_at).toLocaleDateString()}</span>
                         </div>
                         <p className="review-comment">"{review.comment}"</p>
-                        {review.tags && review.tags.length > 0 && (
-                            <div className="review-tags">
-                                {review.tags.map(tag => (
-                                    <span key={tag} className="review-tag">{tag}</span>
-                                ))}
-                            </div>
-                        )}
                     </div>
                 ))
             )}
