@@ -42,7 +42,6 @@ body {
     100% { background-position: 0% 50%; }
 }
 
-/* blobFloat removed */
 
 .app {
     min-height: 100vh;
@@ -2676,12 +2675,6 @@ body {
         animation: none;
     }
 
-    /* Remove blurred floating blobs (re-blurred behind scrolling content) */
-    body::before,
-    body::after {
-        display: none;
-    }
-
     /* Disable 3D tilt + glare layer on cards */
     .tilt-card {
         transform-style: flat;
@@ -3508,11 +3501,6 @@ body {
 /* ========== REDUCED MOTION ========== */
 @media (prefers-reduced-motion: reduce) {
     body {
-        animation: none;
-    }
-
-    body::before,
-    body::after {
         animation: none;
     }
 
@@ -4663,13 +4651,6 @@ select:focus-visible {
 /* Disable GPU-heavy effects on mobile to prevent lag and jank */
 
 @media (pointer: coarse) and (max-width: 768px) {
-    /* Kill floating blobs (filter: blur(90px) is extremely expensive on mobile) */
-    body::before,
-    body::after {
-        animation: none !important;
-        opacity: 0 !important;
-    }
-
     /* Freeze body gradient animation (constant repaints) */
     body {
         animation: none !important;
