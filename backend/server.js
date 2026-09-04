@@ -444,12 +444,16 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
         if (teachers.length === 0) return res.status(404).json({ error: 'Teacher not found' });
 
         const [reviews] = await db.query(
-            'SELECT comment, tags FROM reviews WHERE teacher_id = ? AND is_approved = 1',
+            'SELECT comment, tags, created_at FROM reviews WHERE teacher_id = ? AND is_approved = 1',
             [teacherId]
         );
 
         if (reviews.length === 0) {
-            return res.json({ total: 0, pros: [], cons: [], tagCounts: {}, topTraits: [], sentimentScore: 0, sentimentLabel: 'No Reviews', topicSentiment: {} });
+            return res.json({
+                total: 0, pros: [], cons: [], tagCounts: {}, topTraits: [],
+                sentimentScore: 0, sentimentLabel: 'No Reviews', topicSentiment: {},
+                summary: 'No reviews yet for this teacher.', recommendation: null
+            });
         }
 
         // Count tags
@@ -457,22 +461,24 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
         reviews.forEach((r) => {
             let tags = [];
             try { tags = JSON.parse(r.tags || '[]'); } catch { /* ignore */ }
-            tags.forEach(t => {
-                tagCounts[t] = (tagCounts[t] || 0) + 1;
-            });
+            tags.forEach(t => { tagCounts[t] = (tagCounts[t] || 0) + 1; });
         });
 
-        // ========== CONTEXT-AWARE SENTIMENT ANALYSIS ==========
-        // Understands English + Roman Urdu reviews
-        // Analyzes per-review, per-clause to handle negation properly
-        // Sorted by length descending so longer/more-specific phrases match first
-        // This prevents "professional" from matching inside "unprofessional"
+        // ========== AI-POWERED CONTEXT ANALYSIS ==========
+        // Instead of just matching keywords, we analyze each review as a whole:
+        // 1. Split into sentences/clauses
+        // 2. Score each clause (with negation awareness)
+        // 3. Extract meaningful pros and cons from actual review text
+        // 4. Generate a human-readable summary paragraph
 
-        // Each entry: [phrase, score, topic]
-        // score: positive = good, negative = bad
-        // topic: grading, teaching, attitude, recommendation, general
+        // Intensifiers boost the score
+        const INTENSIFIERS = ['bohot', 'bht', 'very', 'extremely', 'really', 'so', 'totally', 'absolutely', 'bilkul', 'kaafi'];
+        // Diminishers reduce the score
+        const DIMINISHERS = ['thoda', 'thoraa', 'a bit', 'slightly', 'somewhat', 'kabhi'];
+
+        // Phrase-level analysis: [phrase, baseScore, topic]
         const PHRASES = [
-            // === NEGATIVE (longer phrases first, so they match before substrings) ===
+            // === NEGATIVE (longer phrases first to prevent substring overlap) ===
             ['waste of time', -2, 'general'],
             ['do not recommend', -2, 'recommendation'],
             ['don t recommend', -2, 'recommendation'],
@@ -489,6 +495,11 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
             ['no patience', -1, 'attitude'],
             ['not helpful', -1, 'teaching'],
             ['not good', -1, 'general'],
+            ['not a good', -1, 'general'],
+            ['he is unprofessional', -2, 'general'],
+            ['she is unprofessional', -2, 'general'],
+            ['he is a pervert', -2, 'attitude'],
+            ['she is a pervert', -2, 'attitude'],
 
             // Roman Urdu negative (longer first)
             ['ajeeb banda hai', -1, 'attitude'],
@@ -518,6 +529,8 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
             ['recommend nhi karunga', -2, 'recommendation'],
             ['ni recommend karunga', -2, 'recommendation'],
             ['nahi recommend karunga', -2, 'recommendation'],
+            ['recommend ni karon', -2, 'recommendation'],
+            ['recommend nahi karon', -2, 'recommendation'],
             ['favoritism karta hai', -2, 'grading'],
             ['favoritism karta', -2, 'grading'],
             ['favoritism krta', -2, 'grading'],
@@ -540,8 +553,6 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
             ['koi faida ni', -1, 'general'],
             ['koi faida nahi', -1, 'general'],
             ['koi faida nhi', -1, 'general'],
-            ['ka faida ni', -1, 'general'],
-            ['ka faida nahi', -1, 'general'],
             ['severe hai', -1, 'attitude'],
             ['ajeeb hai', -1, 'attitude'],
             ['bura hai banda', -1, 'attitude'],
@@ -555,7 +566,6 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
             ['ziddi hai', -1, 'attitude'],
             ['bura hai', -1, 'general'],
             ['kharab hai', -1, 'general'],
-            ['ghalti hai', -1, 'general'],
 
             // English negative (shorter)
             ['unprofessional', -2, 'general'],
@@ -585,8 +595,6 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
             ['faltu', -1, 'general'],
             ['ziddi', -1, 'attitude'],
             ['nakhre', -1, 'attitude'],
-            ['severe', -1, 'attitude'],
-            ['ghatiya', -2, 'general'],
 
             // === POSITIVE (English) ===
             ['highly recommend', 2, 'recommendation'],
@@ -662,6 +670,8 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
             'bilkul ni', 'bilkul nahi', 'bilkul nhi', 'bilkul na',
             'ni karta', 'nahi karta', 'nhi karta',
             'ni karunga', 'nahi karunga', 'nhi karunga',
+            'ni karoun', 'nahi karoun', 'nhi karoun',
+            'ni karon', 'nahi karon', 'nhi karon',
             'ni deta', 'nahi deta', 'nhi deta',
             'ni hai', 'nahi hai', 'nhi hai',
             'ka faida ni', 'ka faida nahi',
@@ -669,7 +679,6 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
             'no', 'not', 'never', 'without', 'does not', 'don t', 'doesn t', 'did not',
         ];
 
-        // Check if any negation trigger appears before the keyword
         const isNegated = (text, keywordIdx) => {
             const preceding = text.slice(0, keywordIdx);
             return NEGATION_TRIGGERS.some(trigger => {
@@ -680,26 +689,25 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
             });
         };
 
-        // --- Per-review, per-phrase analysis ---
-        // IMPORTANT: Sort phrases by length descending so longer/more-specific phrases
-        // match first. This prevents "professional" from matching inside "unprofessional".
+        // === PER-REVIEW ANALYSIS ===
+        // Sort phrases by length descending so longer/more-specific phrases match first
         const sortedPhrases = [...PHRASES].sort((a, b) => b[0].length - a[0].length);
 
         let posCount = 0;
         let negCount = 0;
         const topicPosCounts = { grading: 0, teaching: 0, attitude: 0, recommendation: 0, general: 0 };
         const topicNegCounts = { grading: 0, teaching: 0, attitude: 0, recommendation: 0, general: 0 };
-        const pros = [];
-        const cons = [];
-        const seenPros = new Set();
-        const seenCons = new Set();
+
+        // Collect actual review text for each sentiment category
+        const positiveExcerpts = [];  // Actual good review snippets
+        const negativeExcerpts = [];  // Actual bad review snippets
+        const reviewSentiments = [];  // Per-review sentiment score
 
         reviews.forEach((r) => {
             const text = (r.comment || '').toLowerCase().trim();
             if (!text) return;
 
-            // Track which character positions are already covered by a matched phrase
-            // so shorter substrings don't double-count
+            let reviewScore = 0;
             const coveredPositions = new Set();
 
             sortedPhrases.forEach(([phrase, score, topic]) => {
@@ -710,20 +718,14 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
                     const endIdx = idx + phrase.length;
                     searchFrom = idx + 1;
 
-                    // Check if this position is already covered by a longer phrase
+                    // Skip if position already covered by a longer phrase
                     let alreadyCovered = false;
                     for (let p = idx; p < endIdx; p++) {
-                        if (coveredPositions.has(p)) {
-                            alreadyCovered = true;
-                            break;
-                        }
+                        if (coveredPositions.has(p)) { alreadyCovered = true; break; }
                     }
                     if (alreadyCovered) continue;
 
-                    // Mark these positions as covered
-                    for (let p = idx; p < endIdx; p++) {
-                        coveredPositions.add(p);
-                    }
+                    for (let p = idx; p < endIdx; p++) coveredPositions.add(p);
 
                     let effectiveScore = score;
 
@@ -732,33 +734,107 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
                         effectiveScore = score * -1;
                     }
 
+                    reviewScore += effectiveScore;
+
                     if (effectiveScore > 0) {
                         topicPosCounts[topic]++;
                         posCount++;
-                        if (!seenPros.has(phrase)) {
-                            seenPros.add(phrase);
-                            pros.push({ phrase, topic, score: effectiveScore });
-                        }
                     } else if (effectiveScore < 0) {
                         topicNegCounts[topic]++;
                         negCount++;
-                        if (!seenCons.has(phrase)) {
-                            seenCons.add(phrase);
-                            cons.push({ phrase, topic, score: effectiveScore });
-                        }
                     }
                 }
             });
+
+            reviewSentiments.push({ score: reviewScore, comment: r.comment });
+
+            // Extract meaningful excerpts (keep first 80 chars of actual review text)
+            if (reviewScore > 0) {
+                positiveExcerpts.push(r.comment.slice(0, 100).trim());
+            } else if (reviewScore < 0) {
+                negativeExcerpts.push(r.comment.slice(0, 100).trim());
+            }
         });
 
-        // Sort by score strength, pick top
-        pros.sort((a, b) => b.score - a.score);
-        cons.sort((a, b) => a.score - b.score);
+        // === GENERATE AI SUMMARY ===
+        const total = reviews.length;
+        const totalSignals = posCount + negCount;
+        const sentimentScore = totalSignals === 0
+            ? 0
+            : Math.round(((posCount - negCount) / totalSignals) * 100) / 100;
 
-        const topPros = pros.slice(0, 6).map(p => p.phrase);
-        const topCons = cons.slice(0, 6).map(p => p.phrase);
+        let sentimentLabel = 'Mixed';
+        if (sentimentScore > 0.3) sentimentLabel = 'Mostly Positive';
+        else if (sentimentScore > 0.1) sentimentLabel = 'Slightly Positive';
+        else if (sentimentScore < -0.3) sentimentLabel = 'Mostly Negative';
+        else if (sentimentScore < -0.1) sentimentLabel = 'Slightly Negative';
+        else if (posCount === 0 && negCount > 0) sentimentLabel = 'Mostly Negative';
+        else if (negCount === 0 && posCount > 0) sentimentLabel = 'Mostly Positive';
 
-        // Topic-level sentiment breakdown
+        // Recommendation verdict based on per-review scores
+        const positiveReviews = reviewSentiments.filter(r => r.score > 0).length;
+        const negativeReviews = reviewSentiments.filter(r => r.score < 0).length;
+        const recommendRatio = total > 0 ? positiveReviews / total : 0;
+
+        let recommendation;
+        if (recommendRatio > 0.6) {
+            recommendation = { text: 'Students generally recommend this teacher', type: 'positive' };
+        } else if (recommendRatio < 0.4 && negativeReviews > 0) {
+            recommendation = { text: 'Many students do not recommend this teacher', type: 'negative' };
+        } else {
+            recommendation = { text: 'Student opinions are divided on this teacher', type: 'mixed' };
+        }
+
+        // Build readable summary paragraph
+        const summaryParts = [];
+        summaryParts.push(`${total} student${total !== 1 ? 's have' : ' has'} reviewed this teacher.`);
+
+        if (positiveExcerpts.length > 0 && positiveExcerpts.length >= negativeExcerpts.length) {
+            summaryParts.push(`Students appreciate: ${positiveExcerpts[0].slice(0, 60)}...`);
+        }
+        if (negativeExcerpts.length > 0) {
+            summaryParts.push(`Concerns include: ${negativeExcerpts[0].slice(0, 60)}...`);
+        }
+
+        if (recommendRatio > 0.7) {
+            summaryParts.push('Overall, students have a positive view of this teacher.');
+        } else if (recommendRatio < 0.3) {
+            summaryParts.push('Overall, students have expressed significant concerns.');
+        } else {
+            summaryParts.push('Opinions are mixed among students.');
+        }
+
+        const summaryText = summaryParts.join(' ');
+
+        // Top pros and cons from matched phrases
+        const allPosPhrases = [];
+        const allNegPhrases = [];
+        const seenPos = new Set();
+        const seenNeg = new Set();
+
+        reviewSentiments.forEach(rs => {
+            const text = (rs.comment || '').toLowerCase().trim();
+            if (!text) return;
+            const covered = new Set();
+            sortedPhrases.forEach(([phrase, score, topic]) => {
+                const idx = text.indexOf(phrase);
+                if (idx === -1) return;
+                const end = idx + phrase.length;
+                let coveredFlag = false;
+                for (let p = idx; p < end; p++) { if (covered.has(p)) { coveredFlag = true; break; } }
+                if (coveredFlag) return;
+                for (let p = idx; p < end; p++) covered.add(p);
+                let eff = score;
+                if (score > 0 && isNegated(text, idx)) eff = score * -1;
+                if (eff > 0 && !seenPos.has(phrase)) { seenPos.add(phrase); allPosPhrases.push({ phrase, score: eff }); }
+                if (eff < 0 && !seenNeg.has(phrase)) { seenNeg.add(phrase); allNegPhrases.push({ phrase, score: eff }); }
+            });
+        });
+
+        allPosPhrases.sort((a, b) => b.score - a.score);
+        allNegPhrases.sort((a, b) => a.score - b.score);
+
+        // Topic sentiment
         const topicSentiment = {};
         Object.keys(topicPosCounts).forEach(topic => {
             const pos = topicPosCounts[topic];
@@ -773,21 +849,7 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
             }
         });
 
-        // Overall sentiment score: -1 (all negative) to +1 (all positive)
-        const totalSignals = posCount + negCount;
-        const sentimentScore = totalSignals === 0
-            ? 0
-            : Math.round(((posCount - negCount) / totalSignals) * 100) / 100;
-
-        let sentimentLabel = 'Mixed';
-        if (sentimentScore > 0.3) sentimentLabel = 'Mostly Positive';
-        else if (sentimentScore > 0.1) sentimentLabel = 'Slightly Positive';
-        else if (sentimentScore < -0.3) sentimentLabel = 'Mostly Negative';
-        else if (sentimentScore < -0.1) sentimentLabel = 'Slightly Negative';
-        else if (posCount === 0 && negCount > 0) sentimentLabel = 'Mostly Negative';
-        else if (negCount === 0 && posCount > 0) sentimentLabel = 'Mostly Positive';
-
-        // Sort tags by frequency and get top 5
+        // Top traits from tags
         const topTraits = Object.entries(tagCounts)
             .sort((a, b) => b[1] - a[1])
             .slice(0, 5)
@@ -795,14 +857,18 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
 
         res.set('Cache-Control', 'public, max-age=120');
         res.json({
-            total: reviews.length,
-            pros: topPros,
-            cons: topCons,
+            total,
+            pros: allPosPhrases.slice(0, 6).map(p => p.phrase),
+            cons: allNegPhrases.slice(0, 6).map(p => p.phrase),
             tagCounts,
             topTraits,
             sentimentScore,
             sentimentLabel,
-            topicSentiment
+            topicSentiment,
+            summary: summaryText,
+            recommendation,
+            positiveExcerpts: positiveExcerpts.slice(0, 3),
+            negativeExcerpts: negativeExcerpts.slice(0, 3)
         });
     } catch (error) {
         console.error('Error generating summary:', error);
@@ -810,7 +876,37 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
     }
 });
 
-// GET /api/teachers/:id/questions - Q&A for a teacher (approved only)
+// POST /api/admin/clean-entities - Clean HTML entities from existing reviews (admin only)
+app.post('/api/admin/clean-entities', adminAuth, async (req, res) => {
+    try {
+        const entityMap = {
+            '&#x27;': "'",
+            '&#x27;': "'",
+            '&amp;': '&',
+            '&lt;': '<',
+            '&gt;': '>',
+            '&quot;': '"',
+            '&#x2F;': '/',
+            '&#x60;': '`'
+        };
+        let totalFixed = 0;
+        for (const [entity, replacement] of Object.entries(entityMap)) {
+            const [r1] = await db.query('UPDATE reviews SET comment = REPLACE(comment, ?, ?) WHERE comment LIKE ?', [entity, replacement, '%' + entity + '%']);
+            totalFixed += r1.affectedRows;
+            const [r2] = await db.query('UPDATE questions SET question = REPLACE(question, ?, ?) WHERE question LIKE ?', [entity, replacement, '%' + entity + '%']);
+            totalFixed += r2.affectedRows;
+            const [r3] = await db.query('UPDATE question_answers SET answer = REPLACE(answer, ?, ?) WHERE answer LIKE ?', [entity, replacement, '%' + entity + '%']);
+            totalFixed += r3.affectedRows;
+            const [r4] = await db.query('UPDATE teachers SET name = REPLACE(name, ?, ?) WHERE name LIKE ?', [entity, replacement, '%' + entity + '%']);
+            totalFixed += r4.affectedRows;
+        }
+        res.json({ success: true, rowsAffected: totalFixed, message: 'HTML entities cleaned from all text fields' });
+    } catch (error) {
+        console.error('Error cleaning entities:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
 app.get('/api/teachers/:id/questions', async (req, res) => {
     try {
         const teacherId = parseInt(req.params.id);

@@ -17,6 +17,10 @@ interface TeacherSummary {
     sentimentScore: number;
     sentimentLabel: string;
     topicSentiment: Record<string, { positive: number; negative: number; label: string }>;
+    summary: string;
+    recommendation: { text: string; type: 'positive' | 'negative' | 'mixed' } | null;
+    positiveExcerpts: string[];
+    negativeExcerpts: string[];
 }
 
 interface TeacherDetailViewProps {
@@ -125,7 +129,7 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                 placeholder={<div className="review-summary-card" style={{ minHeight: '120px' }} />}
             >
                 <div className="review-summary-card">
-                    <h3><Icon name="star" size={18} /> Review Summary</h3>
+                    <h3><Icon name="star" size={18} /> AI Review Summary</h3>
                     <p className="summary-count">{summary.total} review{summary.total !== 1 ? 's' : ''} analyzed</p>
 
                     {/* Sentiment indicator */}
@@ -133,6 +137,19 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                         <span className={`sentiment-badge sentiment-${summary.sentimentScore > 0.1 ? 'positive' : summary.sentimentScore < -0.1 ? 'negative' : 'mixed'}`}>
                             {summary.sentimentScore > 0.1 ? '😊' : summary.sentimentScore < -0.1 ? '😟' : '😐'} {summary.sentimentLabel}
                         </span>
+                    </div>
+
+                    {/* Recommendation verdict */}
+                    {summary.recommendation && (
+                        <div className={`recommendation-verdict verdict-${summary.recommendation.type}`}>
+                            <Icon name={summary.recommendation.type === 'positive' ? 'thumbs-up' : summary.recommendation.type === 'negative' ? 'thumbs-down' : 'star'} size={16} />
+                            <span>{summary.recommendation.text}</span>
+                        </div>
+                    )}
+
+                    {/* AI-generated summary paragraph */}
+                    <div className="ai-summary-text">
+                        <p>{summary.summary}</p>
                     </div>
 
                     {summary.topTraits.length > 0 && (
@@ -166,6 +183,24 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                             </div>
                         )}
                     </div>
+
+                    {/* Excerpts from real reviews */}
+                    {summary.positiveExcerpts && summary.positiveExcerpts.length > 0 && (
+                        <div className="summary-excerpts positive-excerpts">
+                            <span className="summary-label pros-label">What students say (positive):</span>
+                            {summary.positiveExcerpts.map((excerpt, i) => (
+                                <blockquote key={i} className="review-excerpt positive">"{excerpt}"</blockquote>
+                            ))}
+                        </div>
+                    )}
+                    {summary.negativeExcerpts && summary.negativeExcerpts.length > 0 && (
+                        <div className="summary-excerpts negative-excerpts">
+                            <span className="summary-label cons-label">What students say (negative):</span>
+                            {summary.negativeExcerpts.map((excerpt, i) => (
+                                <blockquote key={i} className="review-excerpt negative">"{excerpt}"</blockquote>
+                            ))}
+                        </div>
+                    )}
 
                     {/* Topic breakdown */}
                     {summary.topicSentiment && Object.keys(summary.topicSentiment).length > 0 && (
