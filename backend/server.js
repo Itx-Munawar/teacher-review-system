@@ -465,12 +465,129 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
         // ========== CONTEXT-AWARE SENTIMENT ANALYSIS ==========
         // Understands English + Roman Urdu reviews
         // Analyzes per-review, per-clause to handle negation properly
-        // e.g. "Grade nhi deta" = negative, "recommend ni karunga" = negative
+        // Sorted by length descending so longer/more-specific phrases match first
+        // This prevents "professional" from matching inside "unprofessional"
 
         // Each entry: [phrase, score, topic]
         // score: positive = good, negative = bad
         // topic: grading, teaching, attitude, recommendation, general
         const PHRASES = [
+            // === NEGATIVE (longer phrases first, so they match before substrings) ===
+            ['waste of time', -2, 'general'],
+            ['do not recommend', -2, 'recommendation'],
+            ['don t recommend', -2, 'recommendation'],
+            ['does not maintain', -1, 'attitude'],
+            ['deserves zero', -2, 'general'],
+            ['very strict', -1, 'attitude'],
+            ['very bad', -2, 'general'],
+            ['not fair', -2, 'grading'],
+            ['hard to understand', -1, 'teaching'],
+            ['no explanation', -1, 'teaching'],
+            ['not recommend', -2, 'recommendation'],
+            ['bad teacher', -2, 'teaching'],
+            ['worst teacher', -2, 'teaching'],
+            ['no patience', -1, 'attitude'],
+            ['not helpful', -1, 'teaching'],
+            ['not good', -1, 'general'],
+
+            // Roman Urdu negative (longer first)
+            ['ajeeb banda hai', -1, 'attitude'],
+            ['ajeeb banda h', -1, 'attitude'],
+            ['ajeeb insaan hai', -1, 'attitude'],
+            ['ajeeb insaan h', -1, 'attitude'],
+            ['grade ni deta', -2, 'grading'],
+            ['grade nahi deta', -2, 'grading'],
+            ['grade nhi deta', -2, 'grading'],
+            ['grade deta ni', -2, 'grading'],
+            ['grade deta nahi', -2, 'grading'],
+            ['grade deta nhi', -2, 'grading'],
+            ['grade bilkul ni', -2, 'grading'],
+            ['grade bilkul nahi', -2, 'grading'],
+            ['grade bilkul nhi', -2, 'grading'],
+            ['deserving ko ni deta', -2, 'grading'],
+            ['deserving ko nahi deta', -2, 'grading'],
+            ['deserving ko nhi deta', -2, 'grading'],
+            ['bilkul recommend ni', -2, 'recommendation'],
+            ['bilkul recommend nahi', -2, 'recommendation'],
+            ['bilkul recommend nhi', -2, 'recommendation'],
+            ['bilkul ni recommend', -2, 'recommendation'],
+            ['bilkul nahi recommend', -2, 'recommendation'],
+            ['bilkul nhi recommend', -2, 'recommendation'],
+            ['recommend ni karunga', -2, 'recommendation'],
+            ['recommend nahi karunga', -2, 'recommendation'],
+            ['recommend nhi karunga', -2, 'recommendation'],
+            ['ni recommend karunga', -2, 'recommendation'],
+            ['nahi recommend karunga', -2, 'recommendation'],
+            ['favoritism karta hai', -2, 'grading'],
+            ['favoritism karta', -2, 'grading'],
+            ['favoritism krta', -2, 'grading'],
+            ['favoritism', -2, 'grading'],
+            ['favouritism', -2, 'grading'],
+            ['favouritism karta', -2, 'grading'],
+            ['favouritism krta', -2, 'grading'],
+            ['pass ni karta', -2, 'grading'],
+            ['pass nahi karta', -2, 'grading'],
+            ['pass nhi karta', -2, 'grading'],
+            ['deserving ko ni', -1, 'grading'],
+            ['deserving ko nahi', -1, 'grading'],
+            ['favour karta', -2, 'grading'],
+            ['favour krta', -2, 'grading'],
+            ['favor krta', -2, 'grading'],
+            ['takleef deta hai', -1, 'general'],
+            ['takleef deta', -1, 'general'],
+            ['padhata thk hai', -1, 'teaching'],
+            ['padhata thk', -1, 'teaching'],
+            ['koi faida ni', -1, 'general'],
+            ['koi faida nahi', -1, 'general'],
+            ['koi faida nhi', -1, 'general'],
+            ['ka faida ni', -1, 'general'],
+            ['ka faida nahi', -1, 'general'],
+            ['severe hai', -1, 'attitude'],
+            ['ajeeb hai', -1, 'attitude'],
+            ['bura hai banda', -1, 'attitude'],
+            ['ghatiya hai', -2, 'general'],
+            ['bekar hai banda', -1, 'attitude'],
+            ['waste hai', -1, 'general'],
+            ['faltu hai', -1, 'general'],
+            ['nalaiq hai', -2, 'teaching'],
+            ['pagal hai', -2, 'attitude'],
+            ['dimagh kharab', -2, 'attitude'],
+            ['ziddi hai', -1, 'attitude'],
+            ['bura hai', -1, 'general'],
+            ['kharab hai', -1, 'general'],
+            ['ghalti hai', -1, 'general'],
+
+            // English negative (shorter)
+            ['unprofessional', -2, 'general'],
+            ['disorganized', -1, 'teaching'],
+            ['monotone', -1, 'teaching'],
+            ['arrogant', -1, 'attitude'],
+            ['unfair', -2, 'grading'],
+            ['confusing', -1, 'teaching'],
+            ['unclear', -1, 'teaching'],
+            ['terrible', -2, 'general'],
+            ['horrible', -2, 'general'],
+            ['boring', -1, 'teaching'],
+            ['rude', -1, 'attitude'],
+            ['lazy', -1, 'attitude'],
+            ['pervert', -2, 'attitude'],
+            ['pervy', -2, 'attitude'],
+            ['flirt', -2, 'attitude'],
+            ['worst', -2, 'general'],
+            ['poor', -1, 'general'],
+            ['dull', -1, 'teaching'],
+
+            // Roman Urdu negative (shorter)
+            ['ajeeb banda', -1, 'attitude'],
+            ['ajeeb insaan', -1, 'attitude'],
+            ['nalaiq', -2, 'teaching'],
+            ['ghatiya', -2, 'general'],
+            ['faltu', -1, 'general'],
+            ['ziddi', -1, 'attitude'],
+            ['nakhre', -1, 'attitude'],
+            ['severe', -1, 'attitude'],
+            ['ghatiya', -2, 'general'],
+
             // === POSITIVE (English) ===
             ['highly recommend', 2, 'recommendation'],
             ['very helpful', 2, 'teaching'],
@@ -487,12 +604,9 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
             ['inspiring', 1, 'teaching'],
             ['knowledgeable', 1, 'teaching'],
             ['engaging', 1, 'teaching'],
-            ['patient', 1, 'attitude'],
-            ['fair', 1, 'grading'],
             ['fair enough', 1, 'grading'],
-            ['friendly', 1, 'attitude'],
+            ['professional', 1, 'general'],
             ['supportive', 1, 'attitude'],
-            ['professional', 1, 'teaching'],
             ['passionate', 1, 'teaching'],
             ['organized', 1, 'teaching'],
             ['interesting', 1, 'teaching'],
@@ -500,7 +614,10 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
             ['amazing', 2, 'general'],
             ['wonderful', 1, 'general'],
             ['fantastic', 2, 'general'],
-            ['love', 1, 'general'],
+            ['friendly', 1, 'attitude'],
+            ['patient', 1, 'attitude'],
+            ['fair', 1, 'grading'],
+            ['good', 1, 'general'],
 
             // === POSITIVE (Roman Urdu) ===
             ['bohot acha', 2, 'general'],
@@ -527,119 +644,18 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
             ['pasand hai', 1, 'general'],
             ['mujhe pasand', 1, 'general'],
             ['kaafi acha', 1, 'general'],
-
-            // === NEGATIVE (English) ===
-            ['waste of time', -2, 'general'],
-            ['not helpful', -1, 'teaching'],
-            ['hard to understand', -1, 'teaching'],
-            ['no explanation', -1, 'teaching'],
-            ['do not recommend', -2, 'recommendation'],
-            ['don t recommend', -2, 'recommendation'],
-            ['not recommend', -2, 'recommendation'],
-            ['very bad', -2, 'general'],
-            ['not fair', -2, 'grading'],
-            ['very strict', -1, 'attitude'],
-            ['not good', -1, 'general'],
-            ['no patience', -1, 'attitude'],
-            ['bad teacher', -2, 'teaching'],
-            ['worst teacher', -2, 'teaching'],
-            ['terrible', -2, 'general'],
-            ['horrible', -2, 'general'],
-            ['boring', -1, 'teaching'],
-            ['rude', -1, 'attitude'],
-            ['arrogant', -1, 'attitude'],
-            ['unfair', -2, 'grading'],
-            ['confusing', -1, 'teaching'],
-            ['unclear', -1, 'teaching'],
-            ['lazy', -1, 'attitude'],
-            ['unprofessional', -1, 'general'],
-            ['disorganized', -1, 'teaching'],
-            ['monotone', -1, 'teaching'],
-            ['dull', -1, 'teaching'],
-            ['worst', -2, 'general'],
-            ['poor', -1, 'general'],
-
-            // === NEGATIVE (Roman Urdu) ===
-            ['ajeeb banda hai', -1, 'attitude'],
-            ['ajeeb banda h', -1, 'attitude'],
-            ['ajeeb insaan hai', -1, 'attitude'],
-            ['ajeeb insaan h', -1, 'attitude'],
-            ['ajeeb hai', -1, 'attitude'],
-            ['ajeeb banda', -1, 'attitude'],
-            ['ajeeb insaan', -1, 'attitude'],
-            ['grade ni deta', -2, 'grading'],
-            ['grade nahi deta', -2, 'grading'],
-            ['grade nhi deta', -2, 'grading'],
-            ['grade deta ni', -2, 'grading'],
-            ['grade deta nahi', -2, 'grading'],
-            ['grade deta nhi', -2, 'grading'],
-            ['grade bilkul ni', -2, 'grading'],
-            ['grade bilkul nahi', -2, 'grading'],
-            ['grade bilkul nhi', -2, 'grading'],
-            ['favoritism krta', -2, 'grading'],
-            ['favoritism karta', -2, 'grading'],
-            ['favoritism karta hai', -2, 'grading'],
-            ['favouritism krta', -2, 'grading'],
-            ['favouritism karta', -2, 'grading'],
-            ['favour krta', -2, 'grading'],
-            ['favour karta', -2, 'grading'],
-            ['favor krta', -2, 'grading'],
-            ['pass ni karta', -2, 'grading'],
-            ['pass nahi karta', -2, 'grading'],
-            ['pass nhi karta', -2, 'grading'],
-            ['deserving ko ni deta', -2, 'grading'],
-            ['deserving ko nahi deta', -2, 'grading'],
-            ['deserving ko nhi deta', -2, 'grading'],
-            ['deserving ko ni', -1, 'grading'],
-            ['deserving ko nahi', -1, 'grading'],
-            ['bilkul recommend ni', -2, 'recommendation'],
-            ['bilkul recommend nahi', -2, 'recommendation'],
-            ['bilkul recommend nhi', -2, 'recommendation'],
-            ['recommend ni karunga', -2, 'recommendation'],
-            ['recommend nahi karunga', -2, 'recommendation'],
-            ['recommend nhi karunga', -2, 'recommendation'],
-            ['bilkul ni recommend', -2, 'recommendation'],
-            ['bilkul nahi recommend', -2, 'recommendation'],
-            ['bilkul nhi recommend', -2, 'recommendation'],
-            ['ni recommend karunga', -2, 'recommendation'],
-            ['nahi recommend karunga', -2, 'recommendation'],
-            ['bura hai', -1, 'general'],
-            ['kharab hai', -1, 'general'],
-            ['ghatiya hai', -2, 'general'],
-            ['ghatiya', -2, 'general'],
-            ['bekar hai', -1, 'general'],
-            ['waste hai', -1, 'general'],
-            ['faltu hai', -1, 'general'],
-            ['faltu', -1, 'general'],
-            ['nalaiq hai', -2, 'teaching'],
-            ['nalaiq', -2, 'teaching'],
-            ['pagal hai', -2, 'attitude'],
-            ['dimagh kharab', -2, 'attitude'],
-            ['ziddi hai', -1, 'attitude'],
-            ['ziddi', -1, 'attitude'],
-            ['nakhre', -1, 'attitude'],
-            ['takleef deta', -1, 'general'],
-            ['takleef deta hai', -1, 'general'],
-            ['padhata thk hai', -1, 'teaching'],
-            ['padhata thk', -1, 'teaching'],
-            ['ghalti hai', -1, 'general'],
-            ['koi faida ni', -1, 'general'],
-            ['koi faida nahi', -1, 'general'],
-            ['koi faida nhi', -1, 'general'],
-            ['severe hai', -1, 'attitude'],
-            ['severe', -1, 'attitude'],
         ];
 
         // Negation triggers that flip positive phrases to negative
         const NEGATION_TRIGGERS = [
             'bilkul ni', 'bilkul nahi', 'bilkul nhi', 'bilkul na',
-            'ni', 'nahi', 'nhi', 'na', 'mat', 'bina',
             'ni karta', 'nahi karta', 'nhi karta',
             'ni karunga', 'nahi karunga', 'nhi karunga',
             'ni deta', 'nahi deta', 'nhi deta',
             'ni hai', 'nahi hai', 'nhi hai',
             'ka faida ni', 'ka faida nahi',
-            'no', 'not', 'never', 'without', 'dont', 'don t', 'doesn t', 'doesnt',
+            'ni', 'nahi', 'nhi', 'na', 'mat', 'bina',
+            'no', 'not', 'never', 'without', 'does not', 'don t', 'doesn t', 'did not',
         ];
 
         // Check if any negation trigger appears before the keyword
@@ -654,6 +670,10 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
         };
 
         // --- Per-review, per-phrase analysis ---
+        // IMPORTANT: Sort phrases by length descending so longer/more-specific phrases
+        // match first. This prevents "professional" from matching inside "unprofessional".
+        const sortedPhrases = [...PHRASES].sort((a, b) => b[0].length - a[0].length);
+
         let posCount = 0;
         let negCount = 0;
         const topicPosCounts = { grading: 0, teaching: 0, attitude: 0, recommendation: 0, general: 0 };
@@ -667,12 +687,32 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
             const text = (r.comment || '').toLowerCase().trim();
             if (!text) return;
 
-            PHRASES.forEach(([phrase, score, topic]) => {
+            // Track which character positions are already covered by a matched phrase
+            // so shorter substrings don't double-count
+            const coveredPositions = new Set();
+
+            sortedPhrases.forEach(([phrase, score, topic]) => {
                 let searchFrom = 0;
                 while (true) {
                     const idx = text.indexOf(phrase, searchFrom);
                     if (idx === -1) break;
+                    const endIdx = idx + phrase.length;
                     searchFrom = idx + 1;
+
+                    // Check if this position is already covered by a longer phrase
+                    let alreadyCovered = false;
+                    for (let p = idx; p < endIdx; p++) {
+                        if (coveredPositions.has(p)) {
+                            alreadyCovered = true;
+                            break;
+                        }
+                    }
+                    if (alreadyCovered) continue;
+
+                    // Mark these positions as covered
+                    for (let p = idx; p < endIdx; p++) {
+                        coveredPositions.add(p);
+                    }
 
                     let effectiveScore = score;
 
