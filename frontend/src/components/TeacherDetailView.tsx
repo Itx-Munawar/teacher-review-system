@@ -14,6 +14,9 @@ interface TeacherSummary {
     cons: string[];
     tagCounts: Record<string, number>;
     topTraits: { tag: string; count: number }[];
+    sentimentScore: number;
+    sentimentLabel: string;
+    topicSentiment: Record<string, { positive: number; negative: number; label: string }>;
 }
 
 interface TeacherDetailViewProps {
@@ -125,6 +128,13 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                     <h3><Icon name="star" size={18} /> Review Summary</h3>
                     <p className="summary-count">{summary.total} review{summary.total !== 1 ? 's' : ''} analyzed</p>
 
+                    {/* Sentiment indicator */}
+                    <div className="summary-sentiment">
+                        <span className={`sentiment-badge sentiment-${summary.sentimentScore > 0.1 ? 'positive' : summary.sentimentScore < -0.1 ? 'negative' : 'mixed'}`}>
+                            {summary.sentimentScore > 0.1 ? '😊' : summary.sentimentScore < -0.1 ? '😟' : '😐'} {summary.sentimentLabel}
+                        </span>
+                    </div>
+
                     {summary.topTraits.length > 0 && (
                         <div className="summary-traits">
                             <span className="summary-label">Top Traits:</span>
@@ -156,6 +166,22 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                             </div>
                         )}
                     </div>
+
+                    {/* Topic breakdown */}
+                    {summary.topicSentiment && Object.keys(summary.topicSentiment).length > 0 && (
+                        <div className="topic-sentiment">
+                            <span className="summary-label">By Topic:</span>
+                            <div className="topic-chips">
+                                {Object.entries(summary.topicSentiment).map(([topic, data]) => (
+                                    <span key={topic} className={`topic-chip topic-${data.label}`}>
+                                        {topic === 'grading' ? '📊' : topic === 'teaching' ? '📖' : topic === 'attitude' ? '💬' : topic === 'recommendation' ? '👍' : '📌'}{' '}
+                                        {topic.charAt(0).toUpperCase() + topic.slice(1)}
+                                        <span className="topic-score"> {data.label}</span>
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </LazySection>
         )}

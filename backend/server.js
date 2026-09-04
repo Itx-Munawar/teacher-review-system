@@ -449,7 +449,7 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
         );
 
         if (reviews.length === 0) {
-            return res.json({ total: 0, pros: [], cons: [], tagCounts: {}, topTraits: [] });
+            return res.json({ total: 0, pros: [], cons: [], tagCounts: {}, topTraits: [], sentimentScore: 0, sentimentLabel: 'No Reviews', topicSentiment: {} });
         }
 
         // Count tags
@@ -462,30 +462,279 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
             });
         });
 
-        // Keyword-based sentiment extraction
-        const POSITIVE_KEYWORDS = ['excellent', 'great', 'amazing', 'helpful', 'clear', 'engaging', 'patient', 'fair', 'best', 'love', 'recommend', 'inspiring', 'knowledgeable', 'responsive', 'organized', 'interesting', 'friendly', 'supportive', 'professional', 'passionate'];
-        const NEGATIVE_KEYWORDS = ['bad', 'worst', 'boring', 'rude', 'unfair', 'strict', 'unresponsive', 'confusing', 'unclear', 'waste', 'terrible', 'horrible', 'poor', 'difficult', 'arrogant', 'lazy', 'unprofessional', 'disorganized', 'monotone', 'dull'];
-        const POSITIVE_BIGRAMS = ['highly recommend', 'very helpful', 'great teacher', 'clear explanations', 'easy to understand'];
-        const NEGATIVE_BIGRAMS = ['waste of time', 'very strict', 'not helpful', 'hard to understand', 'no explanation'];
+        // ========== CONTEXT-AWARE SENTIMENT ANALYSIS ==========
+        // Understands English + Roman Urdu reviews
+        // Analyzes per-review, per-clause to handle negation properly
+        // e.g. "Grade nhi deta" = negative, "recommend ni karunga" = negative
 
+        // Each entry: [phrase, score, topic]
+        // score: positive = good, negative = bad
+        // topic: grading, teaching, attitude, recommendation, general
+        const PHRASES = [
+            // === POSITIVE (English) ===
+            ['highly recommend', 2, 'recommendation'],
+            ['very helpful', 2, 'teaching'],
+            ['great teacher', 2, 'teaching'],
+            ['clear explanations', 2, 'teaching'],
+            ['easy to understand', 2, 'teaching'],
+            ['best teacher', 2, 'teaching'],
+            ['good teacher', 1, 'teaching'],
+            ['well organized', 1, 'teaching'],
+            ['very kind', 1, 'attitude'],
+            ['very good', 1, 'general'],
+            ['so helpful', 1, 'teaching'],
+            ['great experience', 1, 'general'],
+            ['inspiring', 1, 'teaching'],
+            ['knowledgeable', 1, 'teaching'],
+            ['engaging', 1, 'teaching'],
+            ['patient', 1, 'attitude'],
+            ['fair', 1, 'grading'],
+            ['fair enough', 1, 'grading'],
+            ['friendly', 1, 'attitude'],
+            ['supportive', 1, 'attitude'],
+            ['professional', 1, 'teaching'],
+            ['passionate', 1, 'teaching'],
+            ['organized', 1, 'teaching'],
+            ['interesting', 1, 'teaching'],
+            ['excellent', 2, 'general'],
+            ['amazing', 2, 'general'],
+            ['wonderful', 1, 'general'],
+            ['fantastic', 2, 'general'],
+            ['love', 1, 'general'],
+
+            // === POSITIVE (Roman Urdu) ===
+            ['bohot acha', 2, 'general'],
+            ['bht acha', 2, 'general'],
+            ['bohot pyara', 1, 'attitude'],
+            ['bht pyara', 1, 'attitude'],
+            ['zabardast', 2, 'general'],
+            ['shandar', 2, 'general'],
+            ['lajawab', 2, 'general'],
+            ['mashallah', 1, 'general'],
+            ['mazey se padhata', 2, 'teaching'],
+            ['mazay se padhata', 2, 'teaching'],
+            ['mazey se parhata', 2, 'teaching'],
+            ['bohot friendly', 1, 'attitude'],
+            ['bht friendly', 1, 'attitude'],
+            ['bohot kind', 1, 'attitude'],
+            ['bht kind', 1, 'attitude'],
+            ['acha teacher', 1, 'teaching'],
+            ['accha teacher', 1, 'teaching'],
+            ['chill hai', 1, 'attitude'],
+            ['chill banda', 1, 'attitude'],
+            ['smart hai', 1, 'teaching'],
+            ['best hai', 1, 'general'],
+            ['pasand hai', 1, 'general'],
+            ['mujhe pasand', 1, 'general'],
+            ['kaafi acha', 1, 'general'],
+
+            // === NEGATIVE (English) ===
+            ['waste of time', -2, 'general'],
+            ['not helpful', -1, 'teaching'],
+            ['hard to understand', -1, 'teaching'],
+            ['no explanation', -1, 'teaching'],
+            ['do not recommend', -2, 'recommendation'],
+            ['don t recommend', -2, 'recommendation'],
+            ['not recommend', -2, 'recommendation'],
+            ['very bad', -2, 'general'],
+            ['not fair', -2, 'grading'],
+            ['very strict', -1, 'attitude'],
+            ['not good', -1, 'general'],
+            ['no patience', -1, 'attitude'],
+            ['bad teacher', -2, 'teaching'],
+            ['worst teacher', -2, 'teaching'],
+            ['terrible', -2, 'general'],
+            ['horrible', -2, 'general'],
+            ['boring', -1, 'teaching'],
+            ['rude', -1, 'attitude'],
+            ['arrogant', -1, 'attitude'],
+            ['unfair', -2, 'grading'],
+            ['confusing', -1, 'teaching'],
+            ['unclear', -1, 'teaching'],
+            ['lazy', -1, 'attitude'],
+            ['unprofessional', -1, 'general'],
+            ['disorganized', -1, 'teaching'],
+            ['monotone', -1, 'teaching'],
+            ['dull', -1, 'teaching'],
+            ['worst', -2, 'general'],
+            ['poor', -1, 'general'],
+
+            // === NEGATIVE (Roman Urdu) ===
+            ['ajeeb banda hai', -1, 'attitude'],
+            ['ajeeb banda h', -1, 'attitude'],
+            ['ajeeb insaan hai', -1, 'attitude'],
+            ['ajeeb insaan h', -1, 'attitude'],
+            ['ajeeb hai', -1, 'attitude'],
+            ['ajeeb banda', -1, 'attitude'],
+            ['ajeeb insaan', -1, 'attitude'],
+            ['grade ni deta', -2, 'grading'],
+            ['grade nahi deta', -2, 'grading'],
+            ['grade nhi deta', -2, 'grading'],
+            ['grade deta ni', -2, 'grading'],
+            ['grade deta nahi', -2, 'grading'],
+            ['grade deta nhi', -2, 'grading'],
+            ['grade bilkul ni', -2, 'grading'],
+            ['grade bilkul nahi', -2, 'grading'],
+            ['grade bilkul nhi', -2, 'grading'],
+            ['favoritism krta', -2, 'grading'],
+            ['favoritism karta', -2, 'grading'],
+            ['favoritism karta hai', -2, 'grading'],
+            ['favouritism krta', -2, 'grading'],
+            ['favouritism karta', -2, 'grading'],
+            ['favour krta', -2, 'grading'],
+            ['favour karta', -2, 'grading'],
+            ['favor krta', -2, 'grading'],
+            ['pass ni karta', -2, 'grading'],
+            ['pass nahi karta', -2, 'grading'],
+            ['pass nhi karta', -2, 'grading'],
+            ['deserving ko ni deta', -2, 'grading'],
+            ['deserving ko nahi deta', -2, 'grading'],
+            ['deserving ko nhi deta', -2, 'grading'],
+            ['deserving ko ni', -1, 'grading'],
+            ['deserving ko nahi', -1, 'grading'],
+            ['bilkul recommend ni', -2, 'recommendation'],
+            ['bilkul recommend nahi', -2, 'recommendation'],
+            ['bilkul recommend nhi', -2, 'recommendation'],
+            ['recommend ni karunga', -2, 'recommendation'],
+            ['recommend nahi karunga', -2, 'recommendation'],
+            ['recommend nhi karunga', -2, 'recommendation'],
+            ['bilkul ni recommend', -2, 'recommendation'],
+            ['bilkul nahi recommend', -2, 'recommendation'],
+            ['bilkul nhi recommend', -2, 'recommendation'],
+            ['ni recommend karunga', -2, 'recommendation'],
+            ['nahi recommend karunga', -2, 'recommendation'],
+            ['bura hai', -1, 'general'],
+            ['kharab hai', -1, 'general'],
+            ['ghatiya hai', -2, 'general'],
+            ['ghatiya', -2, 'general'],
+            ['bekar hai', -1, 'general'],
+            ['waste hai', -1, 'general'],
+            ['faltu hai', -1, 'general'],
+            ['faltu', -1, 'general'],
+            ['nalaiq hai', -2, 'teaching'],
+            ['nalaiq', -2, 'teaching'],
+            ['pagal hai', -2, 'attitude'],
+            ['dimagh kharab', -2, 'attitude'],
+            ['ziddi hai', -1, 'attitude'],
+            ['ziddi', -1, 'attitude'],
+            ['nakhre', -1, 'attitude'],
+            ['takleef deta', -1, 'general'],
+            ['takleef deta hai', -1, 'general'],
+            ['padhata thk hai', -1, 'teaching'],
+            ['padhata thk', -1, 'teaching'],
+            ['ghalti hai', -1, 'general'],
+            ['koi faida ni', -1, 'general'],
+            ['koi faida nahi', -1, 'general'],
+            ['koi faida nhi', -1, 'general'],
+            ['severe hai', -1, 'attitude'],
+            ['severe', -1, 'attitude'],
+        ];
+
+        // Negation triggers that flip positive phrases to negative
+        const NEGATION_TRIGGERS = [
+            'bilkul ni', 'bilkul nahi', 'bilkul nhi', 'bilkul na',
+            'ni', 'nahi', 'nhi', 'na', 'mat', 'bina',
+            'ni karta', 'nahi karta', 'nhi karta',
+            'ni karunga', 'nahi karunga', 'nhi karunga',
+            'ni deta', 'nahi deta', 'nhi deta',
+            'ni hai', 'nahi hai', 'nhi hai',
+            'ka faida ni', 'ka faida nahi',
+            'no', 'not', 'never', 'without', 'dont', 'don t', 'doesn t', 'doesnt',
+        ];
+
+        // Check if any negation trigger appears before the keyword
+        const isNegated = (text, keywordIdx) => {
+            const preceding = text.slice(0, keywordIdx);
+            return NEGATION_TRIGGERS.some(trigger => {
+                const trigIdx = preceding.lastIndexOf(trigger);
+                if (trigIdx === -1) return false;
+                const wordsBetween = preceding.slice(trigIdx).trim().split(/\s+/).length;
+                return wordsBetween <= 5;
+            });
+        };
+
+        // --- Per-review, per-phrase analysis ---
+        let posCount = 0;
+        let negCount = 0;
+        const topicPosCounts = { grading: 0, teaching: 0, attitude: 0, recommendation: 0, general: 0 };
+        const topicNegCounts = { grading: 0, teaching: 0, attitude: 0, recommendation: 0, general: 0 };
         const pros = [];
         const cons = [];
+        const seenPros = new Set();
+        const seenCons = new Set();
 
         reviews.forEach((r) => {
-            const text = (r.comment || '').toLowerCase();
-            POSITIVE_BIGRAMS.forEach(bigram => {
-                if (text.includes(bigram) && !pros.includes(bigram)) pros.push(bigram);
-            });
-            NEGATIVE_BIGRAMS.forEach(bigram => {
-                if (text.includes(bigram) && !cons.includes(bigram)) cons.push(bigram);
-            });
-            POSITIVE_KEYWORDS.forEach(kw => {
-                if (text.includes(kw) && !pros.includes(kw)) pros.push(kw);
-            });
-            NEGATIVE_KEYWORDS.forEach(kw => {
-                if (text.includes(kw) && !cons.includes(kw)) cons.push(kw);
+            const text = (r.comment || '').toLowerCase().trim();
+            if (!text) return;
+
+            PHRASES.forEach(([phrase, score, topic]) => {
+                let searchFrom = 0;
+                while (true) {
+                    const idx = text.indexOf(phrase, searchFrom);
+                    if (idx === -1) break;
+                    searchFrom = idx + 1;
+
+                    let effectiveScore = score;
+
+                    // For positive phrases: check if negated -> flip to negative
+                    if (score > 0 && isNegated(text, idx)) {
+                        effectiveScore = score * -1;
+                    }
+
+                    if (effectiveScore > 0) {
+                        topicPosCounts[topic]++;
+                        posCount++;
+                        if (!seenPros.has(phrase)) {
+                            seenPros.add(phrase);
+                            pros.push({ phrase, topic, score: effectiveScore });
+                        }
+                    } else if (effectiveScore < 0) {
+                        topicNegCounts[topic]++;
+                        negCount++;
+                        if (!seenCons.has(phrase)) {
+                            seenCons.add(phrase);
+                            cons.push({ phrase, topic, score: effectiveScore });
+                        }
+                    }
+                }
             });
         });
+
+        // Sort by score strength, pick top
+        pros.sort((a, b) => b.score - a.score);
+        cons.sort((a, b) => a.score - b.score);
+
+        const topPros = pros.slice(0, 6).map(p => p.phrase);
+        const topCons = cons.slice(0, 6).map(p => p.phrase);
+
+        // Topic-level sentiment breakdown
+        const topicSentiment = {};
+        Object.keys(topicPosCounts).forEach(topic => {
+            const pos = topicPosCounts[topic];
+            const neg = topicNegCounts[topic];
+            if (pos > 0 || neg > 0) {
+                const net = pos - neg;
+                topicSentiment[topic] = {
+                    positive: pos,
+                    negative: neg,
+                    label: net > 0 ? 'positive' : net < 0 ? 'negative' : 'mixed'
+                };
+            }
+        });
+
+        // Overall sentiment score: -1 (all negative) to +1 (all positive)
+        const totalSignals = posCount + negCount;
+        const sentimentScore = totalSignals === 0
+            ? 0
+            : Math.round(((posCount - negCount) / totalSignals) * 100) / 100;
+
+        let sentimentLabel = 'Mixed';
+        if (sentimentScore > 0.3) sentimentLabel = 'Mostly Positive';
+        else if (sentimentScore > 0.1) sentimentLabel = 'Slightly Positive';
+        else if (sentimentScore < -0.3) sentimentLabel = 'Mostly Negative';
+        else if (sentimentScore < -0.1) sentimentLabel = 'Slightly Negative';
+        else if (posCount === 0 && negCount > 0) sentimentLabel = 'Mostly Negative';
+        else if (negCount === 0 && posCount > 0) sentimentLabel = 'Mostly Positive';
 
         // Sort tags by frequency and get top 5
         const topTraits = Object.entries(tagCounts)
@@ -496,10 +745,13 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
         res.set('Cache-Control', 'public, max-age=120');
         res.json({
             total: reviews.length,
-            pros: pros.slice(0, 6),
-            cons: cons.slice(0, 6),
+            pros: topPros,
+            cons: topCons,
             tagCounts,
-            topTraits
+            topTraits,
+            sentimentScore,
+            sentimentLabel,
+            topicSentiment
         });
     } catch (error) {
         console.error('Error generating summary:', error);
