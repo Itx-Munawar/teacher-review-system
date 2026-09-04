@@ -877,7 +877,7 @@ app.get('/api/teachers/:id/summary', async (req, res) => {
 });
 
 // POST /api/admin/clean-entities - Clean HTML entities from existing reviews (admin only)
-app.post('/api/admin/clean-entities', adminAuth, async (req, res) => {
+app.post('/api/admin/clean-entities', verifyAdmin, async (req, res) => {
     try {
         const entityMap = {
             '&#x27;': "'",
