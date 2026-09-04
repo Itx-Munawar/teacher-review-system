@@ -150,6 +150,10 @@ export const deleteReview = (id: number) => {
     return api.delete(`/admin/reviews/${id}`);
 };
 
+export const updateReview = (id: number, data: { comment: string; user_name?: string }) => {
+    return api.put(`/admin/reviews/${id}`, data);
+};
+
 export type { AdminQuestion } from '../types';
 
 export const getAdminQuestions = (page: number = 1, limit: number = 50) => {

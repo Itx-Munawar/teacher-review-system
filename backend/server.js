@@ -815,6 +815,36 @@ app.delete('/api/admin/reviews/:id', verifyAdmin, csrfValidate, async (req, res)
     }
 });
 
+// PUT /api/admin/reviews/:id - edit a review (admin only)
+app.put('/api/admin/reviews/:id', verifyAdmin, csrfValidate, [
+    body('comment').isLength({ min: 3, max: 1000 }).withMessage('Comment must be 3-1000 characters'),
+    body('user_name').optional().isLength({ max: 100 }).withMessage('Name too long')
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
+    try {
+        const reviewId = req.params.id;
+        const { comment, user_name } = req.body;
+        const sanitizedComment = comment.trim().slice(0, 1000);
+        const sanitizedName = user_name ? user_name.trim().slice(0, 100) : undefined;
+
+        // Check if review exists
+        const [existing] = await db.query('SELECT id FROM reviews WHERE id = ?', [reviewId]);
+        if (existing.length === 0) return res.status(404).json({ error: 'Review not found' });
+
+        if (sanitizedName !== undefined) {
+            await db.query('UPDATE reviews SET comment = ?, user_name = ? WHERE id = ?', [sanitizedComment, sanitizedName, reviewId]);
+        } else {
+            await db.query('UPDATE reviews SET comment = ? WHERE id = ?', [sanitizedComment, reviewId]);
+        }
+        await createAuditLog(req.admin.id, 'EDIT_REVIEW', `Edited review ID: ${reviewId}`, req.ip);
+        res.json({ success: true, message: 'Review updated successfully' });
+    } catch (error) {
+        console.error('Error editing review:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
 // GET /api/admin/questions - list questions (admin only)
 app.get('/api/admin/questions', verifyAdmin, async (req, res) => {
     try {

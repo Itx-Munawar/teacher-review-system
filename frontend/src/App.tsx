@@ -13,6 +13,7 @@ import {
     updateTeacher,
     deleteTeacher,
     deleteReview,
+    updateReview,
     getAdminReviews,
     getAdminQuestions,
     getAdminStats,
@@ -624,6 +625,8 @@ const App: React.FC = () => {
         }
     }, [selectedTeacher, loadAdminData, showToast]);
 
+
+
     const handleDeleteQuestion = useCallback(async (id: number) => {
         if (window.confirm('Are you sure you want to delete this question and all its answers?')) {
             setAdminMutationLoading(true);
@@ -640,8 +643,26 @@ const App: React.FC = () => {
             } finally {
                 setAdminMutationLoading(false);
             }
+        }    }, [selectedTeacher, loadAdminData, showToast]);
+
+    const handleUpdateReview = useCallback(async (id: number, data: { comment: string; user_name?: string }) => {
+        setAdminMutationLoading(true);
+        try {
+            await updateReview(id, data);
+            showToast('Review updated successfully!', 'success');
+            await loadAdminData();
+            if (selectedTeacher) {
+                const response = await getTeacherDetail(selectedTeacher.id);
+                setSelectedTeacher(mapTeacherDetail(response.data, selectedTeacher));
+            }
+        } catch (error) {
+            showToast('Failed to update review', 'error');
+        } finally {
+            setAdminMutationLoading(false);
         }
     }, [selectedTeacher, loadAdminData, showToast]);
+
+
 
     const handleSubmitReview = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
@@ -957,6 +978,7 @@ const App: React.FC = () => {
                         onUpdateTeacher={handleUpdateTeacher}
                         onDeleteTeacher={handleDeleteTeacher}
                         onDeleteReview={handleDeleteReview}
+                        onUpdateReview={handleUpdateReview}
                         onLogout={handleAdminLogout}
                         showAddTeacherForm={showAddTeacherForm}
                         setShowAddTeacherForm={setShowAddTeacherForm}

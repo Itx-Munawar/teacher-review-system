@@ -12,6 +12,7 @@ export interface AdminPanelProps {
     onDeleteTeacher: (id: number) => void;
     onUpdateTeacher: (id: number, data: { name: string; department: string; image_url?: string }) => void;
     onDeleteReview: (id: number) => void;
+    onUpdateReview: (id: number, data: { comment: string; user_name?: string }) => void;
     onLogout: () => void;
     showAddTeacherForm: boolean;
     setShowAddTeacherForm: (v: boolean) => void;
@@ -49,6 +50,7 @@ const AdminPanel = memo(({
     onDeleteTeacher,
     onUpdateTeacher,
     onDeleteReview,
+    onUpdateReview,
     onLogout,
     showAddTeacherForm,
     setShowAddTeacherForm,
@@ -84,11 +86,16 @@ const AdminPanel = memo(({
     // Tab state
     const [activeTab, setActiveTab] = useState<AdminTab>('teachers');
 
-    // Edit state
+    // Edit state (teachers)
     const [editingTeacherId, setEditingTeacherId] = useState<number | null>(null);
     const [editName, setEditName] = useState('');
     const [editDepartment, setEditDepartment] = useState('');
     const [editImageUrl, setEditImageUrl] = useState('');
+
+    // Edit state (reviews)
+    const [editingReviewId, setEditingReviewId] = useState<number | null>(null);
+    const [editReviewComment, setEditReviewComment] = useState('');
+    const [editReviewUserName, setEditReviewUserName] = useState('');
     // Edit handlers
     const startEdit = (teacher: Teacher) => {
         setEditingTeacherId(teacher.id);
@@ -111,6 +118,27 @@ const AdminPanel = memo(({
             image_url: editImageUrl || undefined
         });
         cancelEdit();
+    };
+
+    // Review edit handlers
+    const startEditReview = (review: AdminReview) => {
+        setEditingReviewId(review.id);
+        setEditReviewComment(review.comment);
+        setEditReviewUserName(review.user_name || '');
+    };
+
+    const cancelEditReview = () => {
+        setEditingReviewId(null);
+        setEditReviewComment('');
+        setEditReviewUserName('');
+    };
+
+    const handleUpdateReview = async (id: number) => {
+        await onUpdateReview(id, {
+            comment: editReviewComment,
+            user_name: editReviewUserName || undefined
+        });
+        cancelEditReview();
     };
 
     return (
@@ -272,18 +300,54 @@ const AdminPanel = memo(({
                     {totalReviews === 0 ? (
                         <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>No reviews yet.</p>
                     ) : (
-                        reviewsForModeration.map((review: AdminReview) => (
+                        reviewsForModeration.map((review: AdminReview) => {
+                            const isReviewEditing = editingReviewId === review.id;
+                            return (
                             <div key={review.id} className="admin-item">
-                                <div className="review-info">
-                                    <strong>{review.teacher_name}</strong>
-                                    <p style={{ marginTop: '8px', marginBottom: '5px' }}>"{review.comment}"</p>
-                                    <small>
-                                        <Icon name="user" size={12} /> {review.user_name || 'Anonymous'} | <Icon name="calendar" size={12} /> {new Date(review.created_at).toLocaleDateString()}
-                                    </small>
-                                </div>
-                                <button onClick={() => onDeleteReview(review.id)} className="delete-btn" disabled={adminMutationLoading}>Delete</button>
+                                {isReviewEditing ? (
+                                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        <textarea
+                                            value={editReviewComment}
+                                            onChange={(e) => setEditReviewComment(e.target.value)}
+                                            placeholder="Review comment"
+                                            aria-label="Edit review comment"
+                                            className="search-input"
+                                            style={{ margin: 0, minHeight: '60px', resize: 'vertical' }}
+                                        />
+                                        <input
+                                            type="text"
+                                            value={editReviewUserName}
+                                            onChange={(e) => setEditReviewUserName(e.target.value)}
+                                            placeholder="Reviewer name"
+                                            aria-label="Edit reviewer name"
+                                            className="search-input"
+                                            style={{ margin: 0 }}
+                                        />
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button onClick={() => handleUpdateReview(review.id)} className="btn-submit" style={{ padding: '4px 12px' }} disabled={adminMutationLoading}>Save</button>
+                                            <button onClick={cancelEditReview} className="btn-cancel" style={{ padding: '4px 12px' }}>Cancel</button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                <>
+                                    <div className="review-info">
+                                        <strong>{review.teacher_name}</strong>
+                                        <p style={{ marginTop: '8px', marginBottom: '5px' }}>"{review.comment}"</p>
+                                        <small>
+                                            <Icon name="user" size={12} /> {review.user_name || 'Anonymous'} | <Icon name="calendar" size={12} /> {new Date(review.created_at).toLocaleDateString()}
+                                        </small>
+                                    </div>
+                                    <div>
+                                        <button onClick={() => startEditReview(review)} className="edit-btn" style={{ marginRight: '8px' }} aria-label="Edit review" disabled={adminMutationLoading}>
+                                            <Icon name="edit" size={14} />
+                                        </button>
+                                        <button onClick={() => onDeleteReview(review.id)} className="delete-btn" disabled={adminMutationLoading}>Delete</button>
+                                    </div>
+                                </>
+                                )}
                             </div>
-                        ))
+                            );
+                        })
                     )}
                 </div>
                 {!adminLoadingMoreReviews && adminReviewsPage < adminReviewsTotalPages && (
