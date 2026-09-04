@@ -112,9 +112,6 @@ export const submitReview = (data: {
     return api.post('/reviews', reviewData);
 };
 
-export const getTeacherSummary = (id: number) => {
-    return api.get(`/teachers/${id}/summary`);
-};
 
 // ========== ADMIN APIs ==========
 

@@ -1,27 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import Icon from './Icon';
 import Avatar from './Avatar';
 import EmptyState from './EmptyState';
 import LazySection from './LazySection';
 import QASection from './QASection';
-import { getTeacherSummary } from '../services/api';
 import type { Teacher, TeacherDetail, Review } from '../types';
-
-interface TeacherSummary {
-    total: number;
-    pros: string[];
-    cons: string[];
-    tagCounts: Record<string, number>;
-    topTraits: { tag: string; count: number }[];
-    sentimentScore: number;
-    sentimentLabel: string;
-    topicSentiment: Record<string, { positive: number; negative: number; label: string }>;
-    summary: string;
-    recommendation: { text: string; type: 'positive' | 'negative' | 'mixed' } | null;
-    positiveExcerpts: string[];
-    negativeExcerpts: string[];
-}
 
 interface TeacherDetailViewProps {
     selectedTeacher: TeacherDetail;
@@ -44,20 +28,10 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
     onTeacherClick,
     showToast,
 }) => {
-    const [summary, setSummary] = useState<TeacherSummary | null>(null);
     const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
 
-    // Load summary
-    useEffect(() => {
-        if (selectedTeacher.reviews && selectedTeacher.reviews.length > 0) {
-            getTeacherSummary(selectedTeacher.id)
-                .then(res => setSummary(res.data))
-                .catch(() => {});
-        }
-    }, [selectedTeacher.id, selectedTeacher.reviews]);
-
     // Sort reviews by newest first, optionally filter by tag
-    const sortedReviews = React.useMemo(() => {
+    const sortedReviews = useMemo(() => {
         if (!selectedTeacher.reviews) return [];
         let reviews = [...selectedTeacher.reviews].sort(
             (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -69,7 +43,7 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
     }, [selectedTeacher.reviews, activeTagFilter]);
 
     // Collect all unique tags from reviews
-    const allTags = React.useMemo(() => {
+    const allTags = useMemo(() => {
         if (!selectedTeacher.reviews) return [];
         const tagSet = new Set<string>();
         selectedTeacher.reviews.forEach(r => r.tags?.forEach(t => tagSet.add(t)));
@@ -121,105 +95,6 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
         <button onClick={onShowReviewForm} className="btn-write-review">
             <Icon name="edit" size={18} /> Write a Review for {selectedTeacher.name}
         </button>
-
-        {/* AI Review Summary */}
-        {summary && summary.total > 0 && (
-            <LazySection
-                className="review-summary-section"
-                placeholder={<div className="review-summary-card" style={{ minHeight: '120px' }} />}
-            >
-                <div className="review-summary-card">
-                    <h3><Icon name="star" size={18} /> AI Review Summary</h3>
-                    <p className="summary-count">{summary.total} review{summary.total !== 1 ? 's' : ''} analyzed</p>
-
-                    {/* Sentiment indicator */}
-                    <div className="summary-sentiment">
-                        <span className={`sentiment-badge sentiment-${summary.sentimentScore > 0.1 ? 'positive' : summary.sentimentScore < -0.1 ? 'negative' : 'mixed'}`}>
-                            {summary.sentimentScore > 0.1 ? '😊' : summary.sentimentScore < -0.1 ? '😟' : '😐'} {summary.sentimentLabel}
-                        </span>
-                    </div>
-
-                    {/* Recommendation verdict */}
-                    {summary.recommendation && (
-                        <div className={`recommendation-verdict verdict-${summary.recommendation.type}`}>
-                            <Icon name={summary.recommendation.type === 'positive' ? 'thumbs-up' : summary.recommendation.type === 'negative' ? 'thumbs-down' : 'star'} size={16} />
-                            <span>{summary.recommendation.text}</span>
-                        </div>
-                    )}
-
-                    {/* AI-generated summary paragraph */}
-                    <div className="ai-summary-text">
-                        <p>{summary.summary}</p>
-                    </div>
-
-                    {summary.topTraits.length > 0 && (
-                        <div className="summary-traits">
-                            <span className="summary-label">Top Traits:</span>
-                            <div className="summary-trait-chips">
-                                {summary.topTraits.map(({ tag, count }) => (
-                                    <span key={tag} className="summary-trait-chip">
-                                        {tag} <span className="trait-count">({count})</span>
-                                    </span>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="summary-columns">
-                        {summary.pros.length > 0 && (
-                            <div className="summary-pros">
-                                <span className="summary-label pros-label"><Icon name="thumbs-up" size={14} /> Common Positives</span>
-                                <ul>
-                                    {summary.pros.map(p => <li key={p}>{p}</li>)}
-                                </ul>
-                            </div>
-                        )}
-                        {summary.cons.length > 0 && (
-                            <div className="summary-cons">
-                                <span className="summary-label cons-label"><Icon name="thumbs-down" size={14} /> Common Negatives</span>
-                                <ul>
-                                    {summary.cons.map(c => <li key={c}>{c}</li>)}
-                                </ul>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Excerpts from real reviews */}
-                    {summary.positiveExcerpts && summary.positiveExcerpts.length > 0 && (
-                        <div className="summary-excerpts positive-excerpts">
-                            <span className="summary-label pros-label">What students say (positive):</span>
-                            {summary.positiveExcerpts.map((excerpt, i) => (
-                                <blockquote key={i} className="review-excerpt positive">"{excerpt}"</blockquote>
-                            ))}
-                        </div>
-                    )}
-                    {summary.negativeExcerpts && summary.negativeExcerpts.length > 0 && (
-                        <div className="summary-excerpts negative-excerpts">
-                            <span className="summary-label cons-label">What students say (negative):</span>
-                            {summary.negativeExcerpts.map((excerpt, i) => (
-                                <blockquote key={i} className="review-excerpt negative">"{excerpt}"</blockquote>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* Topic breakdown */}
-                    {summary.topicSentiment && Object.keys(summary.topicSentiment).length > 0 && (
-                        <div className="topic-sentiment">
-                            <span className="summary-label">By Topic:</span>
-                            <div className="topic-chips">
-                                {Object.entries(summary.topicSentiment).map(([topic, data]) => (
-                                    <span key={topic} className={`topic-chip topic-${data.label}`}>
-                                        {topic === 'grading' ? '📊' : topic === 'teaching' ? '📖' : topic === 'attitude' ? '💬' : topic === 'recommendation' ? '👍' : '📌'}{' '}
-                                        {topic.charAt(0).toUpperCase() + topic.slice(1)}
-                                        <span className="topic-score"> {data.label}</span>
-                                    </span>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </LazySection>
-        )}
 
         <LazySection
             className="reviews-section"
