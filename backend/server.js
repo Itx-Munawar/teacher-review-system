@@ -566,7 +566,7 @@ app.post('/api/questions', questionLimiter, [
     if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
     try {
         const { teacher_id, question } = req.body;
-        const sanitizedQuestion = validator.escape(question.trim());
+        const sanitizedQuestion = question.trim().slice(0, 1000);
 
         const [teachers] = await db.query('SELECT id FROM teachers WHERE id = ?', [teacher_id]);
         if (teachers.length === 0) return res.status(404).json({ error: 'Teacher not found' });
@@ -593,7 +593,7 @@ app.post('/api/questions/:id/answers', questionLimiter, [
     try {
         const questionId = parseInt(req.params.id);
         const { answer } = req.body;
-        const sanitizedAnswer = validator.escape(answer.trim());
+        const sanitizedAnswer = answer.trim().slice(0, 1000);
 
         const [questions] = await db.query('SELECT id FROM questions WHERE id = ?', [questionId]);
         if (questions.length === 0) return res.status(404).json({ error: 'Question not found' });
@@ -624,8 +624,10 @@ app.post('/api/reviews', reviewLimiter, [
     
     try {
         const { teacher_id, comment, user_name, tags } = req.body;
-        const sanitizedComment = validator.escape(comment.trim());
-        const sanitizedName = user_name ? validator.escape(user_name.trim()) : 'Anonymous';
+        // Trim only — React escapes text in JSX, so validator.escape() is not needed
+        // and would convert ' to &#x27; etc., which looks broken in the UI
+        const sanitizedComment = comment.trim().slice(0, 1000);
+        const sanitizedName = user_name ? user_name.trim().slice(0, 100) : 'Anonymous';
         
         // Validate and sanitize tags (max 3 tags from predefined list)
         const VALID_TAGS = ['Clear Lectures', 'Strict Grading', 'Engaging', 'Patient', 'Unresponsive', 'Fair', 'Interesting', 'Helpful', 'Boring', 'Organized'];
@@ -768,9 +770,9 @@ app.post('/api/admin/teachers', verifyAdmin, csrfValidate, [
     if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
     try {
         const { name, department, image_url } = req.body;
-        const sanitizedName = validator.escape(name.trim());
-        const sanitizedDept = validator.escape(department.trim());
-        const sanitizedImageUrl = image_url ? validator.escape(image_url.trim()) : null;
+        const sanitizedName = name.trim().slice(0, 200);
+        const sanitizedDept = department.trim().slice(0, 200);
+        const sanitizedImageUrl = image_url ? image_url.trim().slice(0, 500) : null;
         const [result] = await db.query('INSERT INTO teachers (name, department, image_url) VALUES (?, ?, ?)', [sanitizedName, sanitizedDept, sanitizedImageUrl]);
         await createAuditLog(req.admin.id, 'ADD_TEACHER', `Added teacher: ${sanitizedName}`, req.ip);
         invalidateCache('teachers');
@@ -811,9 +813,9 @@ app.put('/api/admin/teachers/:id', verifyAdmin, csrfValidate, [
     try {
         const teacherId = req.params.id;
         const { name, department, image_url } = req.body;
-        const sanitizedName = validator.escape(name.trim());
-        const sanitizedDept = validator.escape(department.trim());
-        const sanitizedImageUrl = image_url ? validator.escape(image_url.trim()) : null;
+        const sanitizedName = name.trim().slice(0, 200);
+        const sanitizedDept = department.trim().slice(0, 200);
+        const sanitizedImageUrl = image_url ? image_url.trim().slice(0, 500) : null;
 
         // Check if teacher exists
         const [existing] = await db.query('SELECT id FROM teachers WHERE id = ?', [teacherId]);
