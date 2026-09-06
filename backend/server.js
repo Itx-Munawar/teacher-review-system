@@ -892,6 +892,61 @@ app.get('/api/admin/stats', verifyAdmin, async (req, res) => {
     }
 });
 
+// ========== DYNAMIC SITEMAP.XML ==========
+app.get('/sitemap.xml', async (req, res) => {
+    try {
+        const [teachers] = await db.query('SELECT id, name, department FROM teachers ORDER BY name');
+        const [departments] = await db.query('SELECT DISTINCT department FROM teachers ORDER BY department');
+        const today = new Date().toISOString().split('T')[0];
+        const baseUrl = 'https://teacher-review-system-zeta.vercel.app';
+
+        let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+        xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
+
+        // Homepage
+        xml += `  <url>\n    <loc>${baseUrl}/</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n`;
+
+        // Static pages
+        const staticPages = ['privacy', 'terms', 'dmca', 'about', 'contact'];
+        staticPages.forEach(page => {
+            xml += `  <url>\n    <loc>${baseUrl}/${page}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>yearly</changefreq>\n    <priority>0.3</priority>\n  </url>\n`;
+        });
+
+        // Department pages
+        departments.forEach(dept => {
+            const encoded = encodeURIComponent(dept.department);
+            xml += `  <url>\n    <loc>${baseUrl}/department/${encoded}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
+        });
+
+        // Teacher pages
+        teachers.forEach(teacher => {
+            xml += `  <url>\n    <loc>${baseUrl}/teacher/${teacher.id}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n  </url>\n`;
+        });
+
+        xml += '</urlset>';
+
+        res.set('Content-Type', 'application/xml');
+        res.send(xml);
+    } catch (error) {
+        console.error('Error generating sitemap:', error);
+        res.status(500).send('Error generating sitemap');
+    }
+});
+
+// ========== DYNAMIC ROBOTS.TXT ==========
+app.get('/robots.txt', (req, res) => {
+    const baseUrl = 'https://teacher-review-system-zeta.vercel.app';
+    const robots = `User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api/
+
+Sitemap: ${baseUrl}/sitemap.xml
+`;
+    res.set('Content-Type', 'text/plain');
+    res.send(robots);
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });

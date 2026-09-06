@@ -430,33 +430,66 @@ const App: React.FC = () => {
         }).catch(() => setRelatedTeachers([]));
     }, [selectedTeacher?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Dynamic page title for SEO (teacher detail / search / default)
+    // Dynamic page title + Open Graph + Twitter + canonical + JSON-LD for SEO
     useEffect(() => {
+        const baseUrl = 'https://teacher-review-system-zeta.vercel.app';
         const metaDescription = document.querySelector('meta[name="description"]');
+        const ogTitle = document.querySelector('meta[property="og:title"]');
+        const ogDesc = document.querySelector('meta[property="og:description"]');
+        const ogUrl = document.querySelector('meta[property="og:url"]');
+        const twTitle = document.querySelector('meta[name="twitter:title"]');
+        const twDesc = document.querySelector('meta[name="twitter:description"]');
+        const canonical = document.querySelector('link[rel="canonical"]');
+
+        let title = 'UMT Teacher Reviews – Anonymous Reviews for UMT Professors';
+        let description = 'Read and write anonymous reviews for UMT teachers. Find the best professors at University of Management and Technology, Lahore.';
+        let url = baseUrl + '/';
+        let jsonLd: any = null;
+
         if (selectedTeacher) {
-            document.title = `${selectedTeacher.name} - ${selectedTeacher.department} | UMT Teacher Reviews`;
-            if (metaDescription) {
-                metaDescription.setAttribute(
-                    'content',
-                    `Read anonymous student reviews for ${selectedTeacher.name} (${selectedTeacher.department}) at UMT Lahore. See how ${selectedTeacher.review_count || 0} students rated their teaching experience.`
-                );
-            }
+            title = `${selectedTeacher.name} - ${selectedTeacher.department} | UMT Teacher Reviews`;
+            description = `Read anonymous student reviews for ${selectedTeacher.name} (${selectedTeacher.department}) at UMT Lahore. See how ${selectedTeacher.review_count || 0} students rated their teaching experience.`;
+            url = `${baseUrl}/teacher/${selectedTeacher.id}`;
+            jsonLd = {
+                '@context': 'https://schema.org',
+                '@type': 'Person',
+                'name': selectedTeacher.name,
+                'jobTitle': 'Professor',
+                'worksFor': {
+                    '@type': 'EducationalOrganization',
+                    'name': 'University of Management and Technology',
+                    'address': { '@type': 'PostalAddress', 'addressLocality': 'Lahore', 'addressCountry': 'PK' }
+                },
+                'url': url,
+                'description': description
+            };
         } else if (searchTerm) {
-            document.title = `Search "${searchTerm}" | UMT Teacher Reviews`;
-            if (metaDescription) {
-                metaDescription.setAttribute(
-                    'content',
-                    `Search results for "${searchTerm}" among UMT teachers. Read anonymous student reviews at UMT Teacher Reviews.`
-                );
+            title = `Search "${searchTerm}" | UMT Teacher Reviews`;
+            description = `Search results for "${searchTerm}" among UMT teachers. Read anonymous student reviews at UMT Teacher Reviews.`;
+            url = `${baseUrl}/?search=${encodeURIComponent(searchTerm)}`;
+        }
+
+        document.title = title;
+        if (metaDescription) metaDescription.setAttribute('content', description);
+        if (ogTitle) ogTitle.setAttribute('content', title);
+        if (ogDesc) ogDesc.setAttribute('content', description);
+        if (ogUrl) ogUrl.setAttribute('content', url);
+        if (twTitle) twTitle.setAttribute('content', title);
+        if (twDesc) twDesc.setAttribute('content', description);
+        if (canonical) canonical.setAttribute('href', url);
+
+        // Inject / update JSON-LD for teacher pages
+        let existingLd = document.getElementById('teacher-jsonld') as HTMLScriptElement | null;
+        if (jsonLd) {
+            if (!existingLd) {
+                existingLd = document.createElement('script');
+                existingLd.id = 'teacher-jsonld';
+                existingLd.type = 'application/ld+json';
+                document.head.appendChild(existingLd);
             }
-        } else {
-            document.title = 'UMT Teacher Reviews – Anonymous Reviews for UMT Professors';
-            if (metaDescription) {
-                metaDescription.setAttribute(
-                    'content',
-                    'Read and write anonymous reviews for UMT teachers. Find the best professors at University of Management and Technology, Lahore.'
-                );
-            }
+            existingLd.textContent = JSON.stringify(jsonLd);
+        } else if (existingLd) {
+            existingLd.remove();
         }
     }, [selectedTeacher, searchTerm]);
 

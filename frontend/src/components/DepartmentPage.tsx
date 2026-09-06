@@ -19,7 +19,23 @@ const DepartmentPage: React.FC = () => {
     const [total, setTotal] = useState(0);
 
     useEffect(() => {
-        document.title = `${department} Teachers | UMT Teacher Reviews`;
+        const baseUrl = 'https://teacher-review-system-zeta.vercel.app';
+        const title = `${department} Teachers | UMT Teacher Reviews`;
+        const description = `Browse ${department} teachers at UMT Lahore. Read anonymous student reviews and find the best professors.`;
+        const url = `${baseUrl}/department/${encodeURIComponent(department)}`;
+
+        document.title = title;
+        const metaDesc = document.querySelector('meta[name="description"]');
+        const ogTitle = document.querySelector('meta[property="og:title"]');
+        const ogDesc = document.querySelector('meta[property="og:description"]');
+        const ogUrl = document.querySelector('meta[property="og:url"]');
+        const canonical = document.querySelector('link[rel="canonical"]');
+        if (metaDesc) metaDesc.setAttribute('content', description);
+        if (ogTitle) ogTitle.setAttribute('content', title);
+        if (ogDesc) ogDesc.setAttribute('content', description);
+        if (ogUrl) ogUrl.setAttribute('content', url);
+        if (canonical) canonical.setAttribute('href', url);
+
         let cancelled = false;
         setLoading(true);
         getTeachers(1, 'name', department).then((res) => {
