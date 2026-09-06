@@ -1,5 +1,7 @@
 {
   "rewrites": [
+    { "source": "/sitemap.xml", "destination": "https://teacher-review-system.onrender.com/sitemap.xml" },
+    { "source": "/robots.txt", "destination": "https://teacher-review-system.onrender.com/robots.txt" },
     { "source": "/api/:path*", "destination": "https://teacher-review-system.onrender.com/api/:path*" },
     { "source": "/teacher/:id", "destination": "/index.html" },
     { "source": "/department/:name", "destination": "/index.html" },
