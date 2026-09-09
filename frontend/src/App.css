@@ -3552,6 +3552,16 @@ body {
         animation: sheetUp 0.35s cubic-bezier(0.22, 1, 0.36, 1);
         padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
     }
+
+    .review-sheet .form-buttons {
+        position: sticky;
+        bottom: 0;
+        background: white;
+        margin: 1rem -1.25rem 0;
+        padding: 1rem 1.25rem calc(1rem + env(safe-area-inset-bottom, 0px));
+        border-top: 1px solid #f3f0ff;
+        z-index: 10;
+    }
 }
 
 @keyframes sheetUp {
@@ -4669,6 +4679,50 @@ select:focus-visible {
 /* Disable GPU-heavy effects on mobile to prevent lag and jank */
 
 @media (pointer: coarse) and (max-width: 768px) {
+    /* ========== SEARCHABLE DROPDOWN MOBILE ========== */
+    .searchable-dropdown-display {
+        min-height: 48px;
+        padding: 0.75rem 1rem;
+        font-size: 16px;
+    }
+
+    .searchable-dropdown-panel {
+        max-height: 50vh;
+    }
+
+    .searchable-dropdown-input {
+        padding: 0.7rem 0.8rem;
+        font-size: 16px;
+        min-height: 44px;
+    }
+
+    .searchable-dropdown-list {
+        max-height: 35vh;
+    }
+
+    .searchable-dropdown-item {
+        padding: 0.75rem 1rem;
+        min-height: 44px;
+        font-size: 0.95rem;
+    }
+
+    /* Ensure form buttons are tall enough for touch */
+    .btn-cancel,
+    .btn-submit,
+    .modal-close-btn {
+        min-height: 48px;
+    }
+
+    /* Back button: full-width for easy tap */
+    .back-button {
+        min-height: 44px;
+    }
+
+    /* Share button: full-width on mobile */
+    .share-btn {
+        min-height: 44px;
+    }
+
     /* Freeze body gradient animation (constant repaints) */
     body {
         animation: none !important;
