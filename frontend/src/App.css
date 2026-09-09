@@ -362,9 +362,10 @@ body {
     font-weight: 700;
 }
 
-/* ========== SEARCHABLE DROPDOWN ========== */
+/* ========== SEARCHABLE DROPDOWN (country-picker style) ========== */
 .searchable-dropdown {
     margin-bottom: 1rem;
+    position: relative;
 }
 
 .searchable-dropdown label {
@@ -374,38 +375,62 @@ body {
     color: #1e1b4b;
 }
 
-.searchable-dropdown-input-wrapper {
-    position: relative;
-}
-
-.searchable-dropdown-input {
+/* Clickable display bar */
+.searchable-dropdown-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     width: 100%;
-    padding: 0.8rem 2.5rem 0.8rem 1rem;
+    padding: 0.8rem 1rem;
     border: 2px solid rgba(225, 215, 245, 0.9);
     border-radius: 12px;
     font-size: 1rem;
     font-family: inherit;
     background: white;
+    cursor: pointer;
     transition: all 0.3s;
+    box-sizing: border-box;
 }
 
-.searchable-dropdown-input:focus {
+.searchable-dropdown-display:hover {
+    border-color: #c4b5fd;
+}
+
+.searchable-dropdown-display:focus {
     outline: none;
     border-color: transparent;
     box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.3);
 }
 
+.searchable-dropdown-value {
+    color: #1e1b4b;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+
+.searchable-dropdown-value.placeholder {
+    color: #9ca3af;
+    font-weight: 400;
+}
+
+.searchable-dropdown-arrows {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 8px;
+    flex-shrink: 0;
+}
+
 .searchable-dropdown-clear {
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
     background: none;
     border: none;
-    font-size: 1.4rem;
+    font-size: 1.3rem;
     color: #9ca3af;
     cursor: pointer;
-    padding: 0 4px;
+    padding: 0 2px;
     line-height: 1;
 }
 
@@ -413,27 +438,90 @@ body {
     color: #ef4444;
 }
 
-.searchable-dropdown-list {
+.searchable-dropdown-chevron {
+    font-size: 1.1rem;
+    color: #6b7280;
+    transition: transform 0.2s;
+    display: inline-block;
+}
+
+.searchable-dropdown-chevron.open {
+    transform: rotate(180deg);
+}
+
+/* Dropdown panel */
+.searchable-dropdown-panel {
     position: absolute;
-    top: 100%;
+    top: calc(100% + 4px);
     left: 0;
     right: 0;
     background: white;
     border: 2px solid rgba(225, 215, 245, 0.9);
-    border-top: none;
-    border-radius: 0 0 12px 12px;
-    max-height: 220px;
-    overflow-y: auto;
+    border-radius: 12px;
     z-index: 100;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+    animation: dropdownSlide 0.15s ease-out;
+}
+
+@keyframes dropdownSlide {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.searchable-dropdown-search {
+    padding: 8px 10px;
+    border-bottom: 1px solid #f3f0ff;
+}
+
+.searchable-dropdown-input {
+    width: 100%;
+    padding: 0.55rem 0.8rem;
+    border: 2px solid #ede9fe;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    background: #faf8ff;
+    transition: all 0.2s;
+    box-sizing: border-box;
+}
+
+.searchable-dropdown-input:focus {
+    outline: none;
+    border-color: #a78bfa;
+    background: white;
+}
+
+.searchable-dropdown-list {
+    max-height: 240px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.searchable-dropdown-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.searchable-dropdown-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.searchable-dropdown-list::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 3px;
 }
 
 .searchable-dropdown-item {
-    padding: 0.65rem 1rem;
+    padding: 0.6rem 1rem;
     cursor: pointer;
     font-size: 0.95rem;
     color: #374151;
-    transition: background 0.15s;
+    transition: background 0.1s;
+    border-bottom: 1px solid #f9fafb;
+}
+
+.searchable-dropdown-item:last-child {
+    border-bottom: none;
 }
 
 .searchable-dropdown-item:hover {
@@ -445,6 +533,13 @@ body {
     background: #ede9fe;
     color: #6d28d9;
     font-weight: 600;
+}
+
+.searchable-dropdown-empty {
+    padding: 1rem;
+    text-align: center;
+    color: #9ca3af;
+    font-size: 0.9rem;
 }
 
 .form-group {
