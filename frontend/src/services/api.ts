@@ -97,16 +97,18 @@ export const submitReview = (data: {
     teacher_id: number; 
     comment: string; 
     user_name?: string;
+    course?: string;
 }) => {
     const teacherId = Number(data.teacher_id);
     if (isNaN(teacherId) || teacherId <= 0) {
         return Promise.reject({ response: { data: { error: 'Invalid teacher ID' } } });
     }
-    const reviewData = {
+    const reviewData: Record<string, any> = {
         teacher_id: teacherId,
         comment: data.comment,
         user_name: data.user_name || 'Anonymous'
     };
+    if (data.course) reviewData.course = data.course;
     return api.post('/reviews', reviewData);
 };
 

@@ -88,6 +88,7 @@ const App: React.FC = () => {
     const [showReviewForm, setShowReviewForm] = useState(false);
     const [reviewComment, setReviewComment] = useState('');
     const [reviewUserName, setReviewUserName] = useState('');
+    const [reviewCourse, setReviewCourse] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [reviewError, setReviewError] = useState('');
     const [reviewSuccess, setReviewSuccess] = useState('');
@@ -709,11 +710,13 @@ const App: React.FC = () => {
         setSubmitting(true);
         setReviewError('');
         try {
-            await submitReview({
+            const reviewPayload: any = {
                 teacher_id: selectedTeacher.id,
                 comment: reviewComment.trim(),
                 user_name: reviewUserName.trim() || 'Anonymous',
-            });
+            };
+            if (reviewCourse.trim()) reviewPayload.course = reviewCourse.trim();
+            await submitReview(reviewPayload);
             showToast('Review submitted successfully!', 'success');
             haptic([12, 40, 12]);
             // Confetti
@@ -728,6 +731,7 @@ const App: React.FC = () => {
             setShowReviewForm(false);
             setReviewComment('');
             setReviewUserName('');
+            setReviewCourse('');
             setReviewError('');
             setReviewSuccess(`Your review for ${selectedTeacher.name} has been submitted. Thank you!`);
 
@@ -752,6 +756,7 @@ const App: React.FC = () => {
             setShowReviewForm(false);
             setReviewComment('');
             setReviewUserName('');
+            setReviewCourse('');
             setReviewError('');
             setReviewSuccess('');
 
@@ -1322,6 +1327,8 @@ const App: React.FC = () => {
                     setReviewComment={setReviewComment}
                     reviewUserName={reviewUserName}
                     setReviewUserName={setReviewUserName}
+                    reviewCourse={reviewCourse}
+                    setReviewCourse={setReviewCourse}
                     reviewError={reviewError}
                     submitting={submitting}
                     onSubmit={handleSubmitReview}

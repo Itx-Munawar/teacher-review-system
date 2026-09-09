@@ -334,7 +334,7 @@ const AdminPanel = memo(({
                                         <strong>{review.teacher_name}</strong>
                                         <p style={{ marginTop: '8px', marginBottom: '5px' }}>"{review.comment}"</p>
                                         <small>
-                                            <Icon name="user" size={12} /> {review.user_name || 'Anonymous'} | <Icon name="calendar" size={12} /> {new Date(review.created_at).toLocaleDateString()}
+                                            <Icon name="user" size={12} /> {review.user_name || 'Anonymous'} | {review.course && <><Icon name="book-open" size={12} /> {review.course} | </>}<Icon name="calendar" size={12} /> {new Date(review.created_at).toLocaleDateString()}
                                         </small>
                                     </div>
                                     <div>

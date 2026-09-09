@@ -362,6 +362,91 @@ body {
     font-weight: 700;
 }
 
+/* ========== SEARCHABLE DROPDOWN ========== */
+.searchable-dropdown {
+    margin-bottom: 1rem;
+}
+
+.searchable-dropdown label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: #1e1b4b;
+}
+
+.searchable-dropdown-input-wrapper {
+    position: relative;
+}
+
+.searchable-dropdown-input {
+    width: 100%;
+    padding: 0.8rem 2.5rem 0.8rem 1rem;
+    border: 2px solid rgba(225, 215, 245, 0.9);
+    border-radius: 12px;
+    font-size: 1rem;
+    font-family: inherit;
+    background: white;
+    transition: all 0.3s;
+}
+
+.searchable-dropdown-input:focus {
+    outline: none;
+    border-color: transparent;
+    box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.3);
+}
+
+.searchable-dropdown-clear {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    font-size: 1.4rem;
+    color: #9ca3af;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+}
+
+.searchable-dropdown-clear:hover {
+    color: #ef4444;
+}
+
+.searchable-dropdown-list {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 2px solid rgba(225, 215, 245, 0.9);
+    border-top: none;
+    border-radius: 0 0 12px 12px;
+    max-height: 220px;
+    overflow-y: auto;
+    z-index: 100;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.searchable-dropdown-item {
+    padding: 0.65rem 1rem;
+    cursor: pointer;
+    font-size: 0.95rem;
+    color: #374151;
+    transition: background 0.15s;
+}
+
+.searchable-dropdown-item:hover {
+    background: #f3f0ff;
+    color: #6d28d9;
+}
+
+.searchable-dropdown-item.selected {
+    background: #ede9fe;
+    color: #6d28d9;
+    font-weight: 600;
+}
+
 .form-group {
     margin-bottom: 1rem;
 }
@@ -491,6 +576,18 @@ body {
 
 .review-date {
     color: #6b7280;
+}
+
+.review-course {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: linear-gradient(135deg, #ede9fe, #f3e8ff);
+    color: #6d28d9;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
 }
 
 .review-comment {

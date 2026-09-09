@@ -12,6 +12,7 @@ export interface Review {
     teacher_id: number;
     comment: string;
     user_name: string;
+    course?: string;
     created_at: string;
 }
 
@@ -26,6 +27,7 @@ export interface AdminReview {
     teacher_name: string;
     comment: string;
     user_name: string;
+    course?: string;
     created_at: string;
 }
 
