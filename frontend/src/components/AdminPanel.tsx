@@ -336,20 +336,30 @@ const AdminPanel = memo(({
                                         <small>
                                             <Icon name="user" size={12} /> {review.user_name || 'Anonymous'} | <Icon name="calendar" size={12} /> {new Date(review.created_at).toLocaleDateString()}
                                         </small>
-                                        {review.courses && (() => {
+                                        {(() => {
+                                            const raw = (review as any).courses || (review as any).course;
+                                            if (!raw) return null;
                                             try {
-                                                const parsed = JSON.parse(review.courses);
-                                                if (Array.isArray(parsed) && parsed.length > 0) {
-                                                    return (
-                                                        <div style={{ marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                                            {parsed.map((c: string, i: number) => (
-                                                                <span key={i} style={{ fontSize: '0.75rem', background: '#ede9fe', color: '#6d28d9', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>{c}</span>
-                                                            ))}
-                                                        </div>
-                                                    );
+                                                const str = typeof raw === 'object' && raw.type === 'Buffer' ? Buffer.from(raw.data).toString('utf8') : String(raw);
+                                                if (!str || str === 'null' || str === '[]') return null;
+                                                const parsed = JSON.parse(str);
+                                                const list = Array.isArray(parsed) ? parsed : [parsed];
+                                                const filtered = list.map((c: any) => String(c).trim()).filter((c: string) => c.length > 0);
+                                                if (filtered.length === 0) return null;
+                                                return (
+                                                    <div style={{ marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                                        {filtered.map((c: string, i: number) => (
+                                                            <span key={i} style={{ fontSize: '0.75rem', background: '#ede9fe', color: '#6d28d9', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>{c}</span>
+                                                        ))}
+                                                    </div>
+                                                );
+                                            } catch {
+                                                const fallback = String(raw).trim();
+                                                if (fallback && fallback !== 'null') {
+                                                    return <span style={{ fontSize: '0.75rem', background: '#ede9fe', color: '#6d28d9', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>{fallback}</span>;
                                                 }
-                                            } catch {}
-                                            return null;
+                                                return null;
+                                            }
                                         })()}
                                     </div>
                                     <div>
