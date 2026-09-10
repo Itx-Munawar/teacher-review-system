@@ -78,7 +78,7 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                 {reviewSuccess && <div className="success-message">{reviewSuccess}</div>}
                 {reviewError && <div className="error-message">{reviewError}</div>}
 
-                <button className="write-review-btn" onClick={onShowReviewForm}>
+                <button className="btn-write-review" onClick={onShowReviewForm}>
                     <Icon name="edit" size={16} /> Write a Review
                 </button>
 
