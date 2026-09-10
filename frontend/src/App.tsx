@@ -88,7 +88,7 @@ const App: React.FC = () => {
     const [showReviewForm, setShowReviewForm] = useState(false);
     const [reviewComment, setReviewComment] = useState('');
     const [reviewUserName, setReviewUserName] = useState('');
-    const [reviewCourse, setReviewCourse] = useState('');
+    const [reviewCourses, setReviewCourses] = useState<string[]>([]);
     const [submitting, setSubmitting] = useState(false);
     const [reviewError, setReviewError] = useState('');
     const [reviewSuccess, setReviewSuccess] = useState('');
@@ -715,7 +715,7 @@ const App: React.FC = () => {
                 comment: reviewComment.trim(),
                 user_name: reviewUserName.trim() || 'Anonymous',
             };
-            if (reviewCourse.trim()) reviewPayload.course = reviewCourse.trim();
+            if (reviewCourses.length > 0) reviewPayload.courses = reviewCourses;
             await submitReview(reviewPayload);
             showToast('Review submitted successfully!', 'success');
             haptic([12, 40, 12]);
@@ -731,7 +731,7 @@ const App: React.FC = () => {
             setShowReviewForm(false);
             setReviewComment('');
             setReviewUserName('');
-            setReviewCourse('');
+            setReviewCourses([]);
             setReviewError('');
             setReviewSuccess(`Your review for ${selectedTeacher.name} has been submitted. Thank you!`);
 
@@ -756,7 +756,7 @@ const App: React.FC = () => {
             setShowReviewForm(false);
             setReviewComment('');
             setReviewUserName('');
-            setReviewCourse('');
+            setReviewCourses([]);
             setReviewError('');
             setReviewSuccess('');
 
@@ -1327,8 +1327,8 @@ const App: React.FC = () => {
                     setReviewComment={setReviewComment}
                     reviewUserName={reviewUserName}
                     setReviewUserName={setReviewUserName}
-                    reviewCourse={reviewCourse}
-                    setReviewCourse={setReviewCourse}
+                    reviewCourses={reviewCourses}
+                    setReviewCourses={setReviewCourses}
                     reviewError={reviewError}
                     submitting={submitting}
                     onSubmit={handleSubmitReview}

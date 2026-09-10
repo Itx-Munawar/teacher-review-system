@@ -97,7 +97,7 @@ export const submitReview = (data: {
     teacher_id: number; 
     comment: string; 
     user_name?: string;
-    course?: string;
+    courses?: string[];
 }) => {
     const teacherId = Number(data.teacher_id);
     if (isNaN(teacherId) || teacherId <= 0) {
@@ -108,7 +108,7 @@ export const submitReview = (data: {
         comment: data.comment,
         user_name: data.user_name || 'Anonymous'
     };
-    if (data.course) reviewData.course = data.course;
+    if (data.courses && data.courses.length > 0) reviewData.courses = data.courses;
     return api.post('/reviews', reviewData);
 };
 

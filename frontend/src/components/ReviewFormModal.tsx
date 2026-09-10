@@ -106,8 +106,8 @@ interface ReviewFormModalProps {
     setReviewComment: (v: string) => void;
     reviewUserName: string;
     setReviewUserName: (v: string) => void;
-    reviewCourse: string;
-    setReviewCourse: (v: string) => void;
+    reviewCourses: string[];
+    setReviewCourses: (v: string[]) => void;
     reviewError: string;
     submitting: boolean;
     onSubmit: (e: React.FormEvent) => void;
@@ -120,8 +120,8 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
     setReviewComment,
     reviewUserName,
     setReviewUserName,
-    reviewCourse,
-    setReviewCourse,
+    reviewCourses,
+    setReviewCourses,
     reviewError,
     submitting,
     onSubmit,
@@ -169,12 +169,12 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                         />
                     </div>
                     <SearchableDropdown
-                        label="Course"
-                        id="review-course"
-                        value={reviewCourse}
-                        onChange={setReviewCourse}
+                        label="Courses (select one or more)"
+                        id="review-courses"
+                        value={reviewCourses}
+                        onChange={setReviewCourses}
                         options={UMT_COURSES}
-                        placeholder="Search for a course..."
+                        placeholder="Search or scroll to select courses..."
                         required={false}
                     />
                     <div className="form-group">

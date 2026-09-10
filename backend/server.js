@@ -212,11 +212,15 @@ const runSchemaBootstrap = async () => {
         // Drop the old review_votes table (vote feature removed)
         await db.query('DROP TABLE IF EXISTS review_votes');
 
-        // Add course column to reviews if it doesn't exist
+        // Add courses column to reviews if it doesn't exist
+        const [coursesCol] = await db.query("SHOW COLUMNS FROM reviews LIKE 'courses'");
         const [courseCol] = await db.query("SHOW COLUMNS FROM reviews LIKE 'course'");
-        if (courseCol.length === 0) {
-            await db.query('ALTER TABLE reviews ADD COLUMN course VARCHAR(200) NULL AFTER user_name');
-            console.log('✅ Added course column to reviews table');
+        if (coursesCol.length === 0 && courseCol.length === 0) {
+            await db.query('ALTER TABLE reviews ADD COLUMN courses VARCHAR(2000) NULL AFTER user_name');
+            console.log('✅ Added courses column to reviews table');
+        } else if (courseCol.length > 0 && coursesCol.length === 0) {
+            await db.query('ALTER TABLE reviews CHANGE course courses VARCHAR(2000) NULL');
+            console.log('✅ Renamed course column to courses');
         }
         schemaBootstrapError = null;
         schemaBootstrapDone = true;
@@ -547,10 +551,14 @@ app.post('/api/reviews', reviewLimiter, [
     }
     
     try {
-        const { teacher_id, comment, user_name, course } = req.body;
+        const { teacher_id, comment, user_name, courses } = req.body;
         const sanitizedComment = comment.trim().slice(0, 1000);
         const sanitizedName = user_name ? user_name.trim().slice(0, 100) : 'Anonymous';
-        const sanitizedCourse = course ? course.trim().slice(0, 200) : null;
+        // Accept courses as array, store as JSON string
+        let sanitizedCourses = null;
+        if (Array.isArray(courses) && courses.length > 0) {
+            sanitizedCourses = JSON.stringify(courses.map(c => String(c).trim().slice(0, 200)).filter(Boolean));
+        }
         
         const [teachers] = await db.query('SELECT id FROM teachers WHERE id = ?', [teacher_id]);
         if (teachers.length === 0) {
@@ -558,9 +566,9 @@ app.post('/api/reviews', reviewLimiter, [
         }
         
         const [result] = await db.query(
-            `INSERT INTO reviews (teacher_id, comment, user_name, course, is_approved) 
+            `INSERT INTO reviews (teacher_id, comment, user_name, courses, is_approved) 
              VALUES (?, ?, ?, ?, 1)`,
-            [teacher_id, sanitizedComment, sanitizedName, sanitizedCourse]
+            [teacher_id, sanitizedComment, sanitizedName, sanitizedCourses]
         );
         
         invalidateCache('teachers');

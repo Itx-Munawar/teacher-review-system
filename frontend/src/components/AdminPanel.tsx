@@ -334,8 +334,23 @@ const AdminPanel = memo(({
                                         <strong>{review.teacher_name}</strong>
                                         <p style={{ marginTop: '8px', marginBottom: '5px' }}>"{review.comment}"</p>
                                         <small>
-                                            <Icon name="user" size={12} /> {review.user_name || 'Anonymous'} | {review.course && <><Icon name="book-open" size={12} /> {review.course} | </>}<Icon name="calendar" size={12} /> {new Date(review.created_at).toLocaleDateString()}
+                                            <Icon name="user" size={12} /> {review.user_name || 'Anonymous'} | <Icon name="calendar" size={12} /> {new Date(review.created_at).toLocaleDateString()}
                                         </small>
+                                        {review.courses && (() => {
+                                            try {
+                                                const parsed = JSON.parse(review.courses);
+                                                if (Array.isArray(parsed) && parsed.length > 0) {
+                                                    return (
+                                                        <div style={{ marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                                            {parsed.map((c: string, i: number) => (
+                                                                <span key={i} style={{ fontSize: '0.75rem', background: '#ede9fe', color: '#6d28d9', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>{c}</span>
+                                                            ))}
+                                                        </div>
+                                                    );
+                                                }
+                                            } catch {}
+                                            return null;
+                                        })()}
                                     </div>
                                     <div>
                                         <button onClick={() => startEditReview(review)} className="edit-btn" style={{ marginRight: '8px' }} aria-label="Edit review" disabled={adminMutationLoading}>

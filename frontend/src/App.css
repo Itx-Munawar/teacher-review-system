@@ -542,6 +542,153 @@ body {
     font-size: 0.9rem;
 }
 
+/* Multi-select chips */
+.searchable-dropdown-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.searchable-dropdown-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: linear-gradient(135deg, #ede9fe, #f3e8ff);
+    color: #6d28d9;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    animation: chipIn 0.2s ease-out;
+}
+
+@keyframes chipIn {
+    from { opacity: 0; transform: scale(0.8); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.searchable-dropdown-chip-remove {
+    background: none;
+    border: none;
+    color: #7c3aed;
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0 2px;
+    line-height: 1;
+    font-weight: 700;
+}
+
+.searchable-dropdown-chip-remove:hover {
+    color: #ef4444;
+}
+
+/* Checkmark for selected items */
+.searchable-dropdown-check {
+    display: inline-block;
+    width: 20px;
+    text-align: center;
+    color: #7c3aed;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+/* Other / custom option */
+.searchable-dropdown-other {
+    color: #6d28d9 !important;
+    font-weight: 600;
+    border-top: 1px dashed #e5e7eb;
+    background: #faf8ff;
+}
+
+.searchable-dropdown-other:hover {
+    background: #f3f0ff !important;
+}
+
+/* Custom input mode */
+.searchable-dropdown-custom {
+    padding: 12px;
+}
+
+.searchable-dropdown-custom-label {
+    font-size: 0.85rem;
+    color: #6b7280;
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.searchable-dropdown-custom-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.searchable-dropdown-custom-input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 2px solid #ede9fe;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-family: inherit;
+    min-height: 40px;
+}
+
+.searchable-dropdown-custom-input:focus {
+    outline: none;
+    border-color: #a78bfa;
+}
+
+.searchable-dropdown-custom-btn {
+    padding: 8px 16px;
+    background: linear-gradient(120deg, #a855f7, #6d28d9);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.9rem;
+    min-height: 40px;
+    white-space: nowrap;
+}
+
+.searchable-dropdown-custom-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.searchable-dropdown-custom-cancel {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    color: #9ca3af;
+    cursor: pointer;
+    padding: 4px 8px;
+}
+
+.searchable-dropdown-custom-cancel:hover {
+    color: #ef4444;
+}
+
+/* Review courses display */
+.review-courses {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 6px;
+}
+
+.review-course {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    background: linear-gradient(135deg, #ede9fe, #f3e8ff);
+    color: #6d28d9;
+    padding: 2px 8px;
+    border-radius: 14px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
 .form-group {
     margin-bottom: 1rem;
 }

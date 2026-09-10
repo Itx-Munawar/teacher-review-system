@@ -106,9 +106,23 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                     <div key={review.id} className="review-card">
                         <div className="review-header">
                             <span className="reviewer-name"><Icon name="user" size={13} /> {review.user_name || 'Anonymous'}</span>
-                            {review.course && <span className="review-course"><Icon name="book-open" size={12} /> {review.course}</span>}
                             <span className="review-date"><Icon name="calendar" size={13} /> {new Date(review.created_at).toLocaleDateString()}</span>
                         </div>
+                        {review.courses && (() => {
+                            try {
+                                const parsed = JSON.parse(review.courses);
+                                if (Array.isArray(parsed) && parsed.length > 0) {
+                                    return (
+                                        <div className="review-courses">
+                                            {parsed.map((c: string, i: number) => (
+                                                <span key={i} className="review-course"><Icon name="book-open" size={11} /> {c}</span>
+                                            ))}
+                                        </div>
+                                    );
+                                }
+                            } catch {}
+                            return null;
+                        })()}
                         <p className="review-comment">"{review.comment}"</p>
                     </div>
                 ))
