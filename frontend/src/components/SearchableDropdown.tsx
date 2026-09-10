@@ -214,21 +214,7 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
                             </div>
                         ) : (
                             <>
-                                {filtered.map((option, idx) => (
-                                    <div
-                                        key={idx}
-                                        className={`searchable-dropdown-item ${value.includes(option) ? 'selected' : ''}`}
-                                        onClick={() => handleToggleSelect(option)}
-                                        role="option"
-                                        aria-selected={value.includes(option)}
-                                    >
-                                        <span className="searchable-dropdown-check">
-                                            {value.includes(option) ? '✓' : ''}
-                                        </span>
-                                        {option}
-                                    </div>
-                                ))}
-                                {filtered.length === 0 && searchTerm && (
+                                {filtered.length === 0 && searchTerm ? (
                                     <div
                                         className="searchable-dropdown-item searchable-dropdown-other"
                                         onClick={handleOtherClick}
@@ -236,15 +222,30 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
                                         <span className="searchable-dropdown-check">✏️</span>
                                         Other — type "{searchTerm}" as custom course
                                     </div>
-                                )}
-                                {filtered.length > 0 && (
-                                    <div
-                                        className="searchable-dropdown-item searchable-dropdown-other"
-                                        onClick={handleOtherClick}
-                                    >
-                                        <span className="searchable-dropdown-check">✏️</span>
-                                        Other (type a custom course name)
-                                    </div>
+                                ) : (
+                                    <>
+                                        <div
+                                            className="searchable-dropdown-item searchable-dropdown-other"
+                                            onClick={handleOtherClick}
+                                        >
+                                            <span className="searchable-dropdown-check">✏️</span>
+                                            Other (type a custom course name)
+                                        </div>
+                                        {filtered.map((option, idx) => (
+                                            <div
+                                                key={idx}
+                                                className={`searchable-dropdown-item ${value.includes(option) ? 'selected' : ''}`}
+                                                onClick={() => handleToggleSelect(option)}
+                                                role="option"
+                                                aria-selected={value.includes(option)}
+                                            >
+                                                <span className="searchable-dropdown-check">
+                                                    {value.includes(option) ? '✓' : ''}
+                                                </span>
+                                                {option}
+                                            </div>
+                                        ))}
+                                    </>
                                 )}
                             </>
                         )}

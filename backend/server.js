@@ -212,15 +212,21 @@ const runSchemaBootstrap = async () => {
         // Drop the old review_votes table (vote feature removed)
         await db.query('DROP TABLE IF EXISTS review_votes');
 
-        // Add courses column to reviews if it doesn't exist
-        const [coursesCol] = await db.query("SHOW COLUMNS FROM reviews LIKE 'courses'");
-        const [courseCol] = await db.query("SHOW COLUMNS FROM reviews LIKE 'course'");
-        if (coursesCol.length === 0 && courseCol.length === 0) {
-            await db.query('ALTER TABLE reviews ADD COLUMN courses VARCHAR(2000) NULL AFTER user_name');
-            console.log('✅ Added courses column to reviews table');
-        } else if (courseCol.length > 0 && coursesCol.length === 0) {
-            await db.query('ALTER TABLE reviews CHANGE course courses VARCHAR(2000) NULL');
-            console.log('✅ Renamed course column to courses');
+        // Add courses column to reviews if it doesn't exist (standalone try-catch)
+        try {
+            const [coursesCol] = await db.query("SHOW COLUMNS FROM reviews LIKE 'courses'");
+            const [courseCol] = await db.query("SHOW COLUMNS FROM reviews LIKE 'course'");
+            if (coursesCol.length === 0 && courseCol.length === 0) {
+                await db.query('ALTER TABLE reviews ADD COLUMN courses VARCHAR(2000) NULL AFTER user_name');
+                console.log('✅ Added courses column to reviews table');
+            } else if (courseCol.length > 0 && coursesCol.length === 0) {
+                await db.query('ALTER TABLE reviews CHANGE course courses VARCHAR(2000) NULL');
+                console.log('✅ Renamed course column to courses');
+            } else {
+                console.log('✅ Courses column already exists');
+            }
+        } catch (colErr) {
+            console.error('⚠️ Could not ensure courses column:', colErr.message);
         }
         schemaBootstrapError = null;
         schemaBootstrapDone = true;
@@ -375,6 +381,15 @@ app.get('/api/teachers/search', searchLimiter, async (req, res) => {
 app.get('/api/teachers/:id', async (req, res) => {
     try {
         const teacherId = req.params.id;
+
+        // Ensure courses column exists (cold-start safety net)
+        try {
+            const [coursesCol] = await db.query("SHOW COLUMNS FROM reviews LIKE 'courses'");
+            if (coursesCol.length === 0) {
+                await db.query('ALTER TABLE reviews ADD COLUMN courses VARCHAR(2000) NULL AFTER user_name');
+                console.log('✅ Added courses column to reviews table (via teacher detail)');
+            }
+        } catch (e) { /* non-critical */ }
 
         // Get teacher
         const [teachers] = await db.query(
@@ -968,19 +983,38 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// Schema status – diagnostic for the Q&A tables
+// Schema status – diagnostic for the Q&A tables and courses column
 app.get('/api/schema-status', async (req, res) => {
     try {
         const [questions] = await db.query("SHOW TABLES LIKE 'questions'");
         const [answers] = await db.query("SHOW TABLES LIKE 'question_answers'");
+        const [coursesCol] = await db.query("SHOW COLUMNS FROM reviews LIKE 'courses'");
         res.json({
             questions_table: questions.length > 0,
             question_answers_table: answers.length > 0,
+            courses_column: coursesCol.length > 0,
             bootstrap_error: schemaBootstrapError,
             bootstrap_done: schemaBootstrapDone
         });
     } catch (error) {
         res.status(500).json({ error: error.message, bootstrap_error: schemaBootstrapError });
+    }
+});
+
+// Public endpoint to ensure courses column exists (Render cold-start safety net)
+app.get('/api/ensure-courses', async (req, res) => {
+    try {
+        const [coursesCol] = await db.query("SHOW COLUMNS FROM reviews LIKE 'courses'");
+        if (coursesCol.length === 0) {
+            await db.query('ALTER TABLE reviews ADD COLUMN courses VARCHAR(2000) NULL AFTER user_name');
+            console.log('✅ Added courses column to reviews table (via ensure-courses)');
+            res.json({ success: true, message: 'Courses column added' });
+        } else {
+            res.json({ success: true, message: 'Courses column already exists' });
+        }
+    } catch (error) {
+        console.error('⚠️ ensure-courses error:', error.message);
+        res.status(500).json({ error: error.message });
     }
 });
 
