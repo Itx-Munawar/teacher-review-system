@@ -67,6 +67,10 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                     <Icon name="chevron-left" size={16} /> Back to Teachers
                 </button>
 
+                {selectedTeacher.image_url && (
+                    <img src={selectedTeacher.image_url} alt={selectedTeacher.name} className="teacher-detail-image" />
+                )}
+
                 <div className="teacher-detail-header">
                     <h1>{selectedTeacher.name}</h1>
                     <p className="department-name">{selectedTeacher.department}</p>

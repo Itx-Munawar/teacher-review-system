@@ -19,14 +19,13 @@ const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS) || 10;
 // ========== ENV VALIDATION ==========
 const missingVars = [];
 if (!JWT_SECRET) missingVars.push('JWT_SECRET');
+if (!process.env.FRONTEND_URL) missingVars.push('FRONTEND_URL');
 if (!process.env.DB_HOST || !process.env.DB_USER || !process.env.DB_PASSWORD || !process.env.DB_NAME) missingVars.push('DB_*');
+if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) missingVars.push('EMAIL_USER/EMAIL_PASS');
 if (missingVars.length > 0) {
     console.error(`❌ Missing required environment variables: ${missingVars.join(', ')}`);
     console.error('Server will not start. Fix the environment configuration and retry.');
     process.exit(1);
-}
-if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn('⚠️ EMAIL_USER/EMAIL_PASS not set. Password reset emails will fail.');
 }
 
 // ========== COOKIE HELPERS (no extra dependency) ==========
@@ -651,7 +650,7 @@ app.post('/api/admin/forgot-password', resetLimiter, csrfValidate, async (req, r
         const resetToken = crypto.randomBytes(32).toString('hex');
         const tokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
         await db.query('UPDATE admins SET reset_token = ?, reset_token_expires = ? WHERE id = ?', [resetToken, tokenExpiry, admin.id]);
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+        const frontendUrl = process.env.FRONTEND_URL;
         const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
         await sendEmail(email, 'Password Reset Request', `<p>Click <a href="${resetLink}">here</a> to reset your password. Link expires in 1 hour.</p>`);
         res.json({ success: true, message: 'Reset link sent to email.' });
@@ -678,10 +677,20 @@ app.post('/api/admin/reset-password', csrfValidate, async (req, res) => {
 });
 
 app.post('/api/admin/setup', csrfValidate, async (req, res) => {
-    // Only usable when ADMIN_SETUP_SECRET is configured and provided via x-setup-secret header
-    const setupSecret = process.env.ADMIN_SETUP_SECRET;
-    if (!setupSecret || req.headers['x-setup-secret'] !== setupSecret) {
-        return res.status(403).json({ error: 'Setup is disabled. Configure ADMIN_SETUP_SECRET to enable it.' });
+    // Require ADMIN_SETUP_KEY env var + x-setup-secret header (constant-time comparison)
+    const setupKey = process.env.ADMIN_SETUP_KEY;
+    const providedHeader = req.headers['x-setup-secret'];
+    if (!setupKey) {
+        // Return 404 so the endpoint doesn't even register as existing when the key is unset
+        return res.status(404).json({ error: 'Not found' });
+    }
+    if (!providedHeader || typeof providedHeader !== 'string') {
+        return res.status(401).json({ error: 'Setup token required' });
+    }
+    const keyBuffer = Buffer.from(setupKey, 'utf8');
+    const headerBuffer = Buffer.from(providedHeader, 'utf8');
+    if (keyBuffer.length !== headerBuffer.length || !crypto.timingSafeEqual(keyBuffer, headerBuffer)) {
+        return res.status(401).json({ error: 'Invalid setup token' });
     }
     try {
         const { username, password, email } = req.body;
