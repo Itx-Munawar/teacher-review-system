@@ -1325,23 +1325,19 @@ body {
     100% { transform: rotate(360deg); }
 }
 
-/* Teacher card image */
+/* Teacher card image — className is applied directly to the <img> or fallback <div> */
 .teacher-card-image {
     flex-shrink: 0;
     width: 60px;
     height: 60px;
     border-radius: 50%;
-    overflow: hidden;
-    background: linear-gradient(135deg, #ff5e9c, #a855f7);
-    padding: 2px;
-}
-
-.teacher-card-image img {
-    width: 100%;
-    height: 100%;
     object-fit: cover;
-    border-radius: 50%;
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: #fff;
+    background: linear-gradient(135deg, #ff5e9c, #a855f7);
 }
 
 .teacher-card-info {
@@ -3473,26 +3469,8 @@ body {
 }
 
 /* ========== AVATAR ========== */
-.avatar-container {
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.avatar-img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-}
-
+/* Avatar fallback (no image) — className applied directly to the <div> */
 .avatar-fallback {
-    width: 100%;
-    height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;

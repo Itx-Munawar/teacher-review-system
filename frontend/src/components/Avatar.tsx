@@ -12,14 +12,10 @@ interface AvatarProps {
 
 const Avatar: React.FC<AvatarProps> = ({ name, imageUrl, className = '', alt }) => {
     if (imageUrl) {
-        return (
-            <div className={`avatar-container ${className}`}>
-                <img src={imageUrl} alt={alt || name} className="avatar-img" loading="lazy" />
-            </div>
-        );
+        return <img src={imageUrl} alt={alt || name} className={`${className}`} loading="lazy" />;
     }
     return (
-        <div className={`avatar-container avatar-fallback ${className}`} aria-hidden="true">
+        <div className={`${className}`} aria-hidden="true">
             {getInitials(name)}
         </div>
     );
