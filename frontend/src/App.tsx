@@ -746,7 +746,7 @@ const App: React.FC = () => {
         } finally {
             setSubmitting(false);
         }
-    }, [selectedTeacher, reviewComment, reviewUserName, loadTeachers, loadAdminData, showToast]);
+    }, [selectedTeacher, reviewComment, reviewUserName, reviewCourses, loadTeachers, loadAdminData, showToast]);
 
     const handleTeacherClick = useCallback(async (teacher: Teacher) => {
         searchInputRef.current?.blur();
