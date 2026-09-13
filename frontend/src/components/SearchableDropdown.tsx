@@ -101,6 +101,17 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
         if (!isOpen) setIsOpen(true);
     };
 
+    // Close the list and move focus to the review textarea (keyboard opens there)
+    const handleDone = () => {
+        setIsOpen(false);
+        setSearchTerm('');
+        setIsCustomMode(false);
+        setCustomInput('');
+        setTimeout(() => {
+            document.getElementById('review-comment')?.focus();
+        }, 0);
+    };
+
     const handleOtherClick = () => {
         setIsCustomMode(true);
         setTimeout(() => customInputRef.current?.focus(), 0);
@@ -116,6 +127,13 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
         setSearchTerm('');
     };
 
+    const handleSearchKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && searchTerm.trim() && filtered.length === 0) {
+            e.preventDefault();
+            handleQuickAdd(searchTerm);
+        }
+    };
+
     // Quick-add: when no results match, add the search term directly as a custom course
     const handleQuickAdd = (term: string) => {
         const trimmed = term.trim();
@@ -124,13 +142,6 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
         }
         setSearchTerm('');
         setIsCustomMode(false);
-    };
-
-    const handleSearchKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter' && searchTerm.trim() && filtered.length === 0) {
-            e.preventDefault();
-            handleQuickAdd(searchTerm);
-        }
     };
 
     const handleCustomKeyDown = (e: React.KeyboardEvent) => {
@@ -183,20 +194,30 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
             {isOpen && (
                 <div className="searchable-dropdown-panel">
                     <div className="searchable-dropdown-search">
-                        <input
-                            ref={inputRef}
-                            id={id}
-                            type="text"
-                            className="searchable-dropdown-input"
-                            value={searchTerm}
-                            onChange={handleInputChange}
-                            onKeyDown={handleSearchKeyDown}
-                            placeholder="Type to filter..."
-                            autoComplete="off"
-                            role="combobox"
-                            aria-expanded={isOpen}
-                            aria-haspopup="listbox"
-                        />
+                        <div className="searchable-dropdown-search-row">
+                            <input
+                                ref={inputRef}
+                                id={id}
+                                type="text"
+                                className="searchable-dropdown-input"
+                                value={searchTerm}
+                                onChange={handleInputChange}
+                                onKeyDown={handleSearchKeyDown}
+                                placeholder="Type to filter..."
+                                autoComplete="off"
+                                role="combobox"
+                                aria-expanded={isOpen}
+                                aria-haspopup="listbox"
+                            />
+                            <button
+                                type="button"
+                                className="searchable-dropdown-done-btn"
+                                onClick={handleDone}
+                                aria-label="Done selecting courses"
+                            >
+                                Done
+                            </button>
+                        </div>
                     </div>
                     <div ref={listRef} className="searchable-dropdown-list" role="listbox">
                         {isCustomMode ? (

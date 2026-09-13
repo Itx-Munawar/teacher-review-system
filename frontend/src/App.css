@@ -485,6 +485,42 @@ body {
     border-bottom: 1px solid #f3f0ff;
 }
 
+.searchable-dropdown-search-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.searchable-dropdown-search-row .searchable-dropdown-input {
+    flex: 1 1 0%;
+    min-width: 0; /* let the input shrink so Done stays visible on narrow screens */
+}
+
+.searchable-dropdown-done-btn {
+    flex-shrink: 0;
+    padding: 0 16px;
+    min-height: 40px;
+    border: none;
+    border-radius: 50px;
+    background: linear-gradient(120deg, #10b981, #34d399);
+    color: #fff;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.searchable-dropdown-done-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.45);
+}
+
+.searchable-dropdown-done-btn:active {
+    transform: scale(0.96);
+}
+
 .searchable-dropdown-input {
     width: 100%;
     padding: 0.55rem 0.8rem;
@@ -1220,6 +1256,70 @@ body {
 
 .review-info {
     flex: 1;
+}
+
+/* Compact Approve/Reject buttons for the custom-courses list */
+.admin-item-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+    align-items: center;
+}
+
+.admin-mini-btn {
+    padding: 5px 12px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    border: none;
+    border-radius: 50px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.admin-mini-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.admin-mini-approve {
+    background: linear-gradient(120deg, #10b981, #34d399);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+}
+
+.admin-mini-approve:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.45);
+}
+
+.admin-mini-reject {
+    background: #f3f4f6;
+    color: #ef4444;
+    border: 1px solid #fecaca;
+    box-shadow: none;
+}
+
+.admin-mini-reject:hover:not(:disabled) {
+    background: #fee2e2;
+}
+
+@media (max-width: 600px) {
+    /* Stack actions under the course name but keep buttons side by side and tappable */
+    .admin-item:has(.admin-item-actions) {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    .admin-item-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .admin-mini-btn {
+        min-height: 36px;
+    }
 }
 
 .review-info p {

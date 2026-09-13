@@ -85,6 +85,7 @@ const AdminPanel = memo(({
 }: AdminPanelProps) => {
     const totalReviews = totalReviewsCount || reviewsForModeration?.length || 0;
     const pendingCoursesCount = customCourses.filter(c => c.status === 'pending').length;
+    const visibleCourses = customCourses.filter(c => c.status !== 'rejected');
 
     const displayTeachers = searchTerm ? searchResults : teachers;
 
@@ -433,15 +434,15 @@ const AdminPanel = memo(({
 
             {activeTab === 'courses' && (
             <div className="admin-section">
-                <h3>Custom Courses ({customCourses.length})</h3>
+                <h3>Custom Courses ({visibleCourses.length})</h3>
                 <p style={{ color: '#64748b', fontSize: '0.85rem', margin: '0 0 12px' }}>
-                    Courses added by students. Approved courses appear in the review form dropdown for everyone.
+                    Courses added by students. Approved courses appear in the review form dropdown for everyone. Rejected courses are removed from this list.
                 </p>
                 <div className="admin-list">
-                    {customCourses.length === 0 ? (
+                    {visibleCourses.length === 0 ? (
                         <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>No custom courses suggested yet.</p>
                     ) : (
-                        customCourses.map((course: CustomCourse) => (
+                        visibleCourses.map((course: CustomCourse) => (
                             <div key={course.id} className="admin-item">
                                 <div className="review-info">
                                     <strong>{course.name}</strong>
@@ -462,12 +463,11 @@ const AdminPanel = memo(({
                                         {course.reviewed_at && <> | <Icon name="calendar" size={12} /> {new Date(course.reviewed_at).toLocaleDateString()}</>}
                                     </small>
                                 </div>
-                                <div style={{ display: 'flex', gap: '8px' }}>
+                                <div className="admin-item-actions">
                                     {course.status !== 'approved' && (
                                         <button
                                             onClick={() => onReviewCourse(course.id, 'approve')}
-                                            className="btn-submit"
-                                            style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                                            className="admin-mini-btn admin-mini-approve"
                                             disabled={adminMutationLoading}
                                         >
                                             Approve
@@ -476,11 +476,10 @@ const AdminPanel = memo(({
                                     {course.status !== 'rejected' && (
                                         <button
                                             onClick={() => onReviewCourse(course.id, 'reject')}
-                                            className="delete-btn"
-                                            style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                                            className="admin-mini-btn admin-mini-reject"
                                             disabled={adminMutationLoading}
                                         >
-                                            Reject
+                                            {course.status === 'approved' ? 'Undo' : 'Reject'}
                                         </button>
                                     )}
                                 </div>
