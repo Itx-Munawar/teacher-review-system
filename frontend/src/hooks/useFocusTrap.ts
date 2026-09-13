@@ -31,14 +31,12 @@ export function useFocusTrap(isActive: boolean) {
         // Store the element that had focus before the trap
         previousFocusRef.current = document.activeElement as HTMLElement;
 
-        // Focus the first focusable element in the container
+        // Focus the container itself, NOT the first input. Auto-focusing an
+        // input pops open the mobile keyboard before the user has chosen a
+        // field. With the container focused, the keyboard stays hidden until
+        // the user taps a field. (Container needs tabIndex={-1} to be focusable.)
         const timer = setTimeout(() => {
-            if (containerRef.current) {
-                const focusable = containerRef.current.querySelectorAll(FOCUSABLE_SELECTORS);
-                if (focusable.length > 0) {
-                    (focusable[0] as HTMLElement).focus();
-                }
-            }
+            containerRef.current?.focus();
         }, 50);
 
         return () => {

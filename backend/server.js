@@ -943,9 +943,14 @@ app.post('/api/custom-courses', questionLimiter, [
         const name = req.body.name.trim().replace(/\s+/g, ' ');
         const nameKey = name.toLowerCase();
 
-        // Already a built-in course in the static list? Then it needs no approval.
-        if (BUILTIN_COURSES.some(c => c.toLowerCase() === nameKey)) {
-            return res.json({ success: true, status: 'builtin' });
+        // Already approved as a custom course? Just bump its usage counter.
+        const [approved] = await db.query(
+            "SELECT id FROM custom_courses WHERE name_key = ? AND status = 'approved'",
+            [nameKey]
+        );
+        if (approved.length > 0) {
+            await db.query('UPDATE custom_courses SET times_used = times_used + 1 WHERE id = ?', [approved[0].id]);
+            return res.json({ success: true, status: 'approved' });
         }
 
         // Upsert by case-insensitive key: first use -> pending, reuse -> bump counter

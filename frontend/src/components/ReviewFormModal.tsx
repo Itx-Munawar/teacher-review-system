@@ -179,6 +179,7 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
             <div
                 ref={trapRef}
                 className="modal-content review-sheet"
+                tabIndex={-1}
                 onClick={(e) => e.stopPropagation()}
                 role="dialog"
                 aria-modal="true"
