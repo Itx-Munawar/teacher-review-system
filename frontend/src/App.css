@@ -432,6 +432,12 @@ body {
     cursor: pointer;
     padding: 0 2px;
     line-height: 1;
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: -10px -8px -10px 0;
 }
 
 .searchable-dropdown-clear:hover {
@@ -462,6 +468,11 @@ body {
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
     overflow: hidden;
     animation: dropdownSlide 0.15s ease-out;
+}
+
+/* Inside modals/sheets, keep the panel above sticky form-button rows (z-index 10) */
+.modal-content .searchable-dropdown-panel {
+    z-index: 110;
 }
 
 @keyframes dropdownSlide {
@@ -577,6 +588,12 @@ body {
     padding: 0 2px;
     line-height: 1;
     font-weight: 700;
+    min-width: 32px;
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: -6px -8px -6px 0;
 }
 
 .searchable-dropdown-chip-remove:hover {
@@ -628,9 +645,9 @@ body {
     padding: 8px 12px;
     border: 2px solid #ede9fe;
     border-radius: 8px;
-    font-size: 0.95rem;
+    font-size: 16px; /* 16px prevents iOS zoom-on-focus */
     font-family: inherit;
-    min-height: 40px;
+    min-height: 44px;
 }
 
 .searchable-dropdown-custom-input:focus {
@@ -663,6 +680,11 @@ body {
     color: #9ca3af;
     cursor: pointer;
     padding: 4px 8px;
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .searchable-dropdown-custom-cancel:hover {
@@ -3701,6 +3723,12 @@ body {
         border-top: 1px solid #f3f0ff;
         z-index: 10;
     }
+
+    /* Dropdown panel opens upward-friendly within bottom sheet and stays above sticky buttons */
+    .review-sheet .searchable-dropdown-panel {
+        z-index: 110;
+        max-height: min(45vh, 320px);
+    }
 }
 
 @keyframes sheetUp {
@@ -4832,6 +4860,20 @@ select:focus-visible {
     .searchable-dropdown-input {
         padding: 0.7rem 0.8rem;
         font-size: 16px;
+        min-height: 44px;
+    }
+
+    /* Prevent iOS zoom-on-focus for the custom-course input too */
+    .searchable-dropdown-custom-input {
+        font-size: 16px;
+        min-height: 44px;
+    }
+
+    /* Enlarge small icon buttons (clear/chip-remove/cancel) for touch */
+    .searchable-dropdown-clear,
+    .searchable-dropdown-chip-remove,
+    .searchable-dropdown-custom-cancel {
+        min-width: 44px;
         min-height: 44px;
     }
 

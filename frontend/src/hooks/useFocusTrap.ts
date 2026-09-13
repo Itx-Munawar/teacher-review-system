@@ -16,6 +16,18 @@ export function useFocusTrap(isActive: boolean) {
     useEffect(() => {
         if (!isActive) return;
 
+        // Lock body scroll while modal is open (prevents background scrolling on mobile)
+        document.body.style.overflow = 'hidden';
+        document.body.style.touchAction = 'none';
+        return () => {
+            document.body.style.overflow = '';
+            document.body.style.touchAction = '';
+        };
+    }, [isActive]);
+
+    useEffect(() => {
+        if (!isActive) return;
+
         // Store the element that had focus before the trap
         previousFocusRef.current = document.activeElement as HTMLElement;
 
