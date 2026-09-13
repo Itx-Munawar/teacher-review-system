@@ -20,7 +20,8 @@ import {
     deleteQuestion,
     submitReview,
     getAdminCustomCourses,
-    reviewCustomCourse
+    reviewCustomCourse,
+    getAdminTeacherDetail
 } from './services/api';
 import { debounce } from './utils/debounce';
 import TiltCard from './components/TiltCard';
@@ -43,7 +44,7 @@ import { TeacherCardSkeleton } from './components/Skeleton';
 import { ToastHost } from './components/Toast';
 import { haptic } from './utils/haptics';
 import { timeAgo } from './utils/timeAgo';
-import type { Teacher, Review, TeacherDetail, AdminReview, AdminQuestion, CustomCourse, Toast } from './types';
+import type { Teacher, Review, TeacherDetail, AdminReview, AdminQuestion, CustomCourse, AdminTeacherDetail, Toast } from './types';
 import './App.css';
 
 // ========== HELPER: Map API response to TeacherDetail ==========
@@ -371,6 +372,17 @@ const App: React.FC = () => {
         } catch (error) {
             console.error(`Error ${action}ing custom course:`, error);
             showToast(`Failed to ${action} course`, 'error');
+        }
+    }, [showToast]);
+
+    const handleLoadTeacherDetail = useCallback(async (id: number): Promise<AdminTeacherDetail | null> => {
+        try {
+            const response = await getAdminTeacherDetail(id);
+            return response.data as AdminTeacherDetail;
+        } catch (error) {
+            console.error('Error loading teacher detail for admin:', error);
+            showToast('Failed to load teacher details', 'error');
+            return null;
         }
     }, [showToast]);
 
@@ -1063,6 +1075,7 @@ const App: React.FC = () => {
                         onLoadMoreQuestions={handleLoadMoreQuestions}
                         customCourses={customCourses}
                         onReviewCourse={handleReviewCustomCourse}
+                        onLoadTeacherDetail={handleLoadTeacherDetail}
                     />
                     </ErrorBoundary>
                 </div>

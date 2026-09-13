@@ -1,6 +1,6 @@
 import React, { useState, memo } from 'react';
 import Icon from './Icon';
-import type { Teacher, AdminReview, AdminQuestion, CustomCourse } from '../types';
+import type { Teacher, AdminReview, AdminQuestion, CustomCourse, AdminTeacherDetail } from '../types';
 
 type AdminTab = 'teachers' | 'reviews' | 'qa' | 'courses';
 
@@ -42,6 +42,7 @@ export interface AdminPanelProps {
     onLoadMoreQuestions: () => void;
     customCourses: CustomCourse[];
     onReviewCourse: (id: number, action: 'approve' | 'reject') => void;
+    onLoadTeacherDetail: (id: number) => Promise<AdminTeacherDetail | null>;
 }
 
 const AdminPanel = memo(({
@@ -81,7 +82,8 @@ const AdminPanel = memo(({
     adminQuestionsTotalPages,
     onLoadMoreQuestions,
     customCourses,
-    onReviewCourse
+    onReviewCourse,
+    onLoadTeacherDetail
 }: AdminPanelProps) => {
     const totalReviews = totalReviewsCount || reviewsForModeration?.length || 0;
     const pendingCoursesCount = customCourses.filter(c => c.status === 'pending').length;
@@ -102,6 +104,11 @@ const AdminPanel = memo(({
     const [editingReviewId, setEditingReviewId] = useState<number | null>(null);
     const [editReviewComment, setEditReviewComment] = useState('');
     const [editReviewUserName, setEditReviewUserName] = useState('');
+
+    // Teacher detail view state
+    const [detailTeacherId, setDetailTeacherId] = useState<number | null>(null);
+    const [teacherDetail, setTeacherDetail] = useState<AdminTeacherDetail | null>(null);
+    const [detailLoading, setDetailLoading] = useState(false);
     // Edit handlers
     const startEdit = (teacher: Teacher) => {
         setEditingTeacherId(teacher.id);
@@ -145,6 +152,20 @@ const AdminPanel = memo(({
             user_name: editReviewUserName || undefined
         });
         cancelEditReview();
+    };
+
+    const toggleTeacherDetail = async (id: number) => {
+        if (detailTeacherId === id) {
+            setDetailTeacherId(null);
+            setTeacherDetail(null);
+            return;
+        }
+        setDetailTeacherId(id);
+        setDetailLoading(true);
+        setTeacherDetail(null);
+        const detail = await onLoadTeacherDetail(id);
+        setTeacherDetail(detail);
+        setDetailLoading(false);
     };
 
     return (
@@ -275,12 +296,87 @@ const AdminPanel = memo(({
                                         <>
                                             <span><strong>{teacher.name}</strong> - {teacher.department}</span>
                                             <div>
+                                                <button
+                                                    onClick={() => toggleTeacherDetail(teacher.id)}
+                                                    className="admin-mini-btn admin-mini-btn-info"
+                                                    aria-label={`View details for ${teacher.name}`}
+                                                    aria-expanded={detailTeacherId === teacher.id}
+                                                >
+                                                    {detailTeacherId === teacher.id ? 'Hide' : 'Details'}
+                                                </button>
                                                 <button onClick={() => startEdit(teacher)} className="edit-btn" style={{ marginRight: '8px' }} aria-label={`Edit ${teacher.name}`}>
                                                     <Icon name="edit" size={14} />
                                                 </button>
                                                 <button onClick={() => onDeleteTeacher(teacher.id)} className="delete-btn" disabled={adminMutationLoading}>Delete</button>
                                             </div>
                                         </>
+                                    )}
+                                    {detailTeacherId === teacher.id && (
+                                        <div className="admin-teacher-detail">
+                                            {detailLoading ? (
+                                                <div className="loading">Loading details...</div>
+                                            ) : teacherDetail ? (
+                                                <>
+                                                    <div className="admin-detail-header">
+                                                        {teacherDetail.teacher.image_url ? (
+                                                            <img src={teacherDetail.teacher.image_url} alt={teacherDetail.teacher.name} className="admin-detail-photo" loading="lazy" />
+                                                        ) : (
+                                                            <div className="admin-detail-photo admin-detail-photo-fallback">
+                                                                {teacherDetail.teacher.name.charAt(0)}
+                                                            </div>
+                                                        )}
+                                                        <div className="admin-detail-title">
+                                                            <strong>{teacherDetail.teacher.name}</strong>
+                                                            <span>{teacherDetail.teacher.department}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="admin-detail-stats">
+                                                        <div className="admin-stat-pill">
+                                                            <span className="admin-stat-num">{teacherDetail.stats.total_reviews}</span>
+                                                            <span className="admin-stat-label">Total</span>
+                                                        </div>
+                                                        <div className="admin-stat-pill admin-stat-approved">
+                                                            <span className="admin-stat-num">{teacherDetail.stats.approved_reviews}</span>
+                                                            <span className="admin-stat-label">Approved</span>
+                                                        </div>
+                                                        <div className="admin-stat-pill admin-stat-pending">
+                                                            <span className="admin-stat-num">{teacherDetail.stats.pending_reviews}</span>
+                                                            <span className="admin-stat-label">Pending</span>
+                                                        </div>
+                                                        <div className="admin-stat-pill admin-stat-questions">
+                                                            <span className="admin-stat-num">{teacherDetail.stats.questions}</span>
+                                                            <span className="admin-stat-label">Questions</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="admin-detail-reviews">
+                                                        <h4>All Reviews ({teacherDetail.stats.total_reviews})</h4>
+                                                        {teacherDetail.reviews.length === 0 ? (
+                                                            <p className="admin-detail-empty">No reviews for this teacher yet.</p>
+                                                        ) : (
+                                                            teacherDetail.reviews.map((review) => (
+                                                                <div key={review.id} className={`admin-detail-review ${review.is_approved === 0 ? 'admin-detail-review-pending' : ''}`}>
+                                                                    <div className="admin-detail-review-head">
+                                                                        <strong>{review.user_name || 'Anonymous'}</strong>
+                                                                        <span className="admin-detail-review-date">
+                                                                            {new Date(review.created_at).toLocaleDateString()}
+                                                                        </span>
+                                                                        {review.is_approved === 0 && (
+                                                                            <span className="admin-pending-badge">Pending</span>
+                                                                        )}
+                                                                    </div>
+                                                                    {review.courses && (
+                                                                        <div className="admin-detail-review-courses">📖 {review.courses}</div>
+                                                                    )}
+                                                                    <p>{review.comment}</p>
+                                                                </div>
+                                                            ))
+                                                        )}
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <div className="loading">Failed to load details.</div>
+                                            )}
+                                        </div>
                                     )}
                                 </div>
                             );

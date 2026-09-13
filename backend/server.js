@@ -761,6 +761,55 @@ app.delete('/api/admin/teachers/:id', verifyAdmin, csrfValidate, async (req, res
     }
 });
 
+// ========== GET TEACHER DETAILS (admin only) — full info + ALL reviews ==========
+app.get('/api/admin/teachers/:id', verifyAdmin, async (req, res) => {
+    try {
+        const teacherId = req.params.id;
+
+        const [teachers] = await db.query('SELECT * FROM teachers WHERE id = ?', [teacherId]);
+        if (teachers.length === 0) {
+            return res.status(404).json({ error: 'Teacher not found' });
+        }
+
+        // ALL reviews (approved + pending) — admins see everything
+        const [reviews] = await db.query(
+            `SELECT r.*, t.name as teacher_name
+             FROM reviews r
+             JOIN teachers t ON r.teacher_id = t.id
+             WHERE r.teacher_id = ?
+             ORDER BY r.created_at DESC`,
+            [teacherId]
+        );
+
+        const approved = reviews.filter(r => r.is_approved === 1).length;
+        const pending = reviews.filter(r => r.is_approved === 0).length;
+
+        // Q&A stats for this teacher
+        let questionCount = 0;
+        try {
+            const [qRows] = await db.query(
+                'SELECT COUNT(*) as total FROM questions WHERE teacher_id = ? AND is_approved = 1',
+                [teacherId]
+            );
+            questionCount = qRows[0].total || 0;
+        } catch (e) { /* table may not exist yet */ }
+
+        res.json({
+            teacher: teachers[0],
+            reviews: reviews,
+            stats: {
+                total_reviews: reviews.length,
+                approved_reviews: approved,
+                pending_reviews: pending,
+                questions: questionCount
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching admin teacher details:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
 // ========== UPDATE TEACHER (admin only) ==========
 app.put('/api/admin/teachers/:id', verifyAdmin, csrfValidate, [
     body('name').isLength({ min: 2, max: 100 }).withMessage('Name must be 2-100 characters'),

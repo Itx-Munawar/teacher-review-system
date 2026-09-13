@@ -40,6 +40,22 @@ export interface AdminQuestion {
     created_at: string;
 }
 
+export interface AdminTeacherReview extends Review {
+    teacher_name: string;
+    is_approved: number;
+}
+
+export interface AdminTeacherDetail {
+    teacher: Teacher;
+    reviews: AdminTeacherReview[];
+    stats: {
+        total_reviews: number;
+        approved_reviews: number;
+        pending_reviews: number;
+        questions: number;
+    };
+}
+
 export interface CustomCourse {
     id: number;
     name: string;

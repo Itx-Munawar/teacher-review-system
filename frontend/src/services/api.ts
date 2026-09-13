@@ -160,6 +160,13 @@ export const updateTeacher = (id: number, data: { name: string; department: stri
     return api.put(`/admin/teachers/${id}`, data);
 };
 
+/**
+ * Get full teacher details for admin (all reviews incl. pending + stats)
+ */
+export const getAdminTeacherDetail = (id: number) => {
+    return api.get(`/admin/teachers/${id}`);
+};
+
 export const getAdminReviews = (page: number = 1, limit: number = 50) => {
     return api.get(`/admin/reviews?page=${page}&limit=${limit}`);
 };

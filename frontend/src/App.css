@@ -1305,10 +1305,208 @@ body {
     background: #fee2e2;
 }
 
+/* Details button on teacher rows */
+.admin-mini-btn-info {
+    background: #eef2ff;
+    color: #4f46e5;
+    border: 1px solid #c7d2fe;
+}
+
+.admin-mini-btn-info:hover:not(:disabled) {
+    background: #e0e7ff;
+}
+
+/* ===== Admin teacher detail (expandable panel inside a teacher row) ===== */
+.admin-teacher-detail {
+    flex-basis: 100%;
+    width: 100%;
+    margin-top: 0.75rem;
+    padding: 1rem;
+    background: #f8fafc;
+    border: 1px solid rgba(225, 215, 245, 0.8);
+    border-radius: 12px;
+    animation: adminDetailIn 0.2s ease;
+}
+
+@keyframes adminDetailIn {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.admin-detail-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.9rem;
+}
+
+.admin-detail-photo {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 2px solid rgba(168, 85, 247, 0.3);
+}
+
+.admin-detail-photo-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(120deg, #a855f7, #6366f1);
+    color: white;
+    font-size: 1.4rem;
+    font-weight: 700;
+}
+
+.admin-detail-title {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.admin-detail-title strong {
+    font-size: 1rem;
+    color: #1e293b;
+    overflow-wrap: break-word;
+}
+
+.admin-detail-title span {
+    font-size: 0.82rem;
+    color: #64748b;
+}
+
+.admin-detail-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 0.9rem;
+}
+
+.admin-stat-pill {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 6px 14px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    min-width: 64px;
+}
+
+.admin-stat-num {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #1e293b;
+    line-height: 1.2;
+}
+
+.admin-stat-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.admin-stat-approved .admin-stat-num {
+    color: #059669;
+}
+
+.admin-stat-pending .admin-stat-num {
+    color: #d97706;
+}
+
+.admin-stat-questions .admin-stat-num {
+    color: #4f46e5;
+}
+
+.admin-detail-reviews h4 {
+    margin: 0 0 0.6rem;
+    font-size: 0.9rem;
+    color: #334155;
+}
+
+.admin-detail-review {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 0.65rem 0.85rem;
+    margin-bottom: 0.5rem;
+}
+
+.admin-detail-review-pending {
+    border-color: #fcd34d;
+    background: #fffbeb;
+}
+
+.admin-detail-review-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 0.3rem;
+}
+
+.admin-detail-review-head strong {
+    font-size: 0.82rem;
+    color: #1e293b;
+}
+
+.admin-detail-review-date {
+    font-size: 0.72rem;
+    color: #94a3b8;
+}
+
+.admin-pending-badge {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #92400e;
+    background: #fde68a;
+    padding: 2px 8px;
+    border-radius: 50px;
+}
+
+.admin-detail-review-courses {
+    font-size: 0.75rem;
+    color: #6d28d9;
+    background: #f5f3ff;
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 50px;
+    margin-bottom: 0.3rem;
+}
+
+.admin-detail-review p {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #475569;
+    line-height: 1.5;
+    overflow-wrap: break-word;
+}
+
+.admin-detail-empty {
+    text-align: center;
+    color: #94a3b8;
+    font-size: 0.85rem;
+    padding: 12px;
+    margin: 0;
+}
+
 @media (max-width: 600px) {
     /* Stack actions under the course name but keep buttons side by side and tappable */
     .admin-item:has(.admin-item-actions) {
         flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    .admin-item:has(.admin-teacher-detail) {
         flex-wrap: wrap;
     }
 
@@ -1319,6 +1517,16 @@ body {
 
     .admin-mini-btn {
         min-height: 36px;
+    }
+
+    .admin-detail-photo {
+        width: 44px;
+        height: 44px;
+    }
+
+    .admin-stat-pill {
+        flex: 1 1 40%;
+        min-width: 0;
     }
 }
 
