@@ -116,6 +116,23 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
         setSearchTerm('');
     };
 
+    // Quick-add: when no results match, add the search term directly as a custom course
+    const handleQuickAdd = (term: string) => {
+        const trimmed = term.trim();
+        if (trimmed && !value.includes(trimmed)) {
+            onChange([...value, trimmed]);
+        }
+        setSearchTerm('');
+        setIsCustomMode(false);
+    };
+
+    const handleSearchKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && searchTerm.trim() && filtered.length === 0) {
+            e.preventDefault();
+            handleQuickAdd(searchTerm);
+        }
+    };
+
     const handleCustomKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -173,6 +190,7 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
                             className="searchable-dropdown-input"
                             value={searchTerm}
                             onChange={handleInputChange}
+                            onKeyDown={handleSearchKeyDown}
                             placeholder="Type to filter..."
                             autoComplete="off"
                             role="combobox"
@@ -217,10 +235,10 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
                                 {filtered.length === 0 && searchTerm ? (
                                     <div
                                         className="searchable-dropdown-item searchable-dropdown-other"
-                                        onClick={handleOtherClick}
+                                        onClick={() => handleQuickAdd(searchTerm)}
                                     >
-                                        <span className="searchable-dropdown-check">✏️</span>
-                                        Other — type "{searchTerm}" as custom course
+                                        <span className="searchable-dropdown-check">➕</span>
+                                        Add "{searchTerm}" as custom course
                                     </div>
                                 ) : (
                                     <>
