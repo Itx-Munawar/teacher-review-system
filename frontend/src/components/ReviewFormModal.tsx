@@ -153,9 +153,13 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
     const suggestedRef = useRef<Set<string>>(new Set());
     const buttonsRef = useRef<HTMLDivElement>(null);
 
-    // When the user taps the review box, bring the action buttons into view
-    // (they live in the form flow at the end — no floating bar needed).
+    // Action buttons stay hidden until the user engages with the review box —
+    // no clutter while picking courses or reading the form.
+    const [showActions, setShowActions] = useState(false);
+
+    // When the user taps the review box, reveal the buttons and bring them into view
     const scrollButtonsIntoView = () => {
+        setShowActions(true);
         if (window.innerWidth > 768) return;
         // Wait for the keyboard/sheet resize to settle, then reveal the buttons
         setTimeout(() => {
@@ -239,7 +243,7 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                             aria-required="true"
                         />
                     </div>
-                    <div className="form-buttons" ref={buttonsRef}>
+                    <div className={`form-buttons${showActions ? ' form-buttons-visible' : ''}`} ref={buttonsRef}>
                         <button type="button" onClick={onClose} className="btn-cancel">
                             Cancel
                         </button>
