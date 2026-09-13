@@ -151,6 +151,17 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
 
     // Auto-suggest newly added custom courses for admin approval (fire & forget)
     const suggestedRef = useRef<Set<string>>(new Set());
+    const buttonsRef = useRef<HTMLDivElement>(null);
+
+    // When the user taps the review box, bring the action buttons into view
+    // (they live in the form flow at the end — no floating bar needed).
+    const scrollButtonsIntoView = () => {
+        if (window.innerWidth > 768) return;
+        // Wait for the keyboard/sheet resize to settle, then reveal the buttons
+        setTimeout(() => {
+            buttonsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 250);
+    };
     const handleCoursesChange = (next: string[]) => {
         const known = new Set(allCourses.map(c => c.toLowerCase()));
         next.forEach(course => {
@@ -222,13 +233,13 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                             rows={4}
                             value={reviewComment}
                             onChange={(e) => setReviewComment(e.target.value)}
+                            onFocus={scrollButtonsIntoView}
                             placeholder="Share your experience with this teacher..."
                             required
                             aria-required="true"
                         />
                     </div>
-                    </div>
-                    <div className="form-buttons">
+                    <div className="form-buttons" ref={buttonsRef}>
                         <button type="button" onClick={onClose} className="btn-cancel">
                             Cancel
                         </button>
@@ -242,6 +253,7 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                                 'Submit Review'
                             )}
                         </button>
+                    </div>
                     </div>
                 </form>
             </div>
