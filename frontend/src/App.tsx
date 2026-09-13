@@ -1051,7 +1051,7 @@ const App: React.FC = () => {
         <div className="app">
             <a href="#main-content" className="skip-link">Skip to main content</a>
             <ToastHost toasts={toasts} onDismiss={dismissToast} />
-            {compareList.length === 0 && <InstallPrompt />}
+            {compareList.length === 0 && !isComparing && <InstallPrompt />}
             <PullToRefresh onRefresh={handlePullRefresh}>
                 <header className="header" role="banner">
                     <div className="header-top">
