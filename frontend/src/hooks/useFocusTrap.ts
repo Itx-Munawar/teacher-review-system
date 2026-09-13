@@ -79,5 +79,26 @@ export function useFocusTrap(isActive: boolean) {
         return () => document.removeEventListener('keydown', handleKeyDown);
     }, [isActive]);
 
+    // Track the mobile keyboard via visualViewport and expose its height as a
+    // CSS variable (--kb-height). Sticky bottom buttons use it to sit exactly
+    // above the keyboard instead of being covered or floating mid-screen.
+    useEffect(() => {
+        if (!isActive || !window.visualViewport) return;
+        const vv = window.visualViewport;
+        const root = document.documentElement;
+        const update = () => {
+            const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+            root.style.setProperty('--kb-height', `${Math.round(kb)}px`);
+        };
+        update();
+        vv.addEventListener('resize', update);
+        vv.addEventListener('scroll', update);
+        return () => {
+            vv.removeEventListener('resize', update);
+            vv.removeEventListener('scroll', update);
+            root.style.setProperty('--kb-height', '0px');
+        };
+    }, [isActive]);
+
     return containerRef;
 }

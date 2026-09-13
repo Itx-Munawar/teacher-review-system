@@ -2983,7 +2983,7 @@ body {
         border-radius: 22px 22px 0 0;
         padding: 1.5rem 1.25rem calc(5rem + env(safe-area-inset-bottom, 0px));
         max-height: calc(100vh - 100px);
-        max-height: calc(100dvh - 100px);
+        max-height: calc(100dvh - 100px - var(--kb-height, 0px));
         overflow-y: auto;
         animation: fadeInUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
     }
@@ -4044,12 +4044,14 @@ body {
 
     .review-sheet .form-buttons {
         position: sticky;
-        bottom: 0;
+        /* Lift above the mobile keyboard (--kb-height is set by visualViewport listener; 0 when closed) */
+        bottom: var(--kb-height, 0px);
         background: white;
         margin: 1rem -1.25rem 0;
         padding: 1rem 1.25rem calc(1rem + env(safe-area-inset-bottom, 0px));
         border-top: 1px solid #f3f0ff;
         z-index: 10;
+        transition: bottom 0.15s ease-out;
     }
 
     /* Dropdown panel opens upward-friendly within bottom sheet and stays above sticky buttons */
