@@ -193,7 +193,8 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                         {reviewError}
                     </div>
                 )}
-                <form onSubmit={onSubmit} aria-labelledby="review-modal-title">
+                <form className="review-form" onSubmit={onSubmit} aria-labelledby="review-modal-title">
+                    <div className="review-form-body">
                     <div className="form-group">
                         <label htmlFor="review-user-name">Your Name (optional)</label>
                         <input
@@ -225,6 +226,7 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                             required
                             aria-required="true"
                         />
+                    </div>
                     </div>
                     <div className="form-buttons">
                         <button type="button" onClick={onClose} className="btn-cancel">

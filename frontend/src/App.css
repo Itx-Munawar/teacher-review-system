@@ -4033,31 +4033,63 @@ body {
         bottom: calc(72px + env(safe-area-inset-bottom, 0px));
     }
 
+    /* Bottom-sheet layout: header+footer fixed, fields scroll in the middle.
+       The sheet height shrinks with the keyboard via --kb-height, so the buttons
+       sit at the sheet's bottom edge directly above the keyboard — without the
+       row floating over the form when the keyboard is closed. */
     .review-sheet {
         width: 100%;
         max-width: 100%;
+        max-height: none;
         border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-        margin: auto 0 0 0;
+        /* Anchor above the keyboard: on iOS fixed elements don't move when the
+           keyboard opens, so lift the sheet by the measured keyboard height. */
+        margin: 0 0 var(--kb-height, 0px) 0;
         animation: sheetUp 0.35s cubic-bezier(0.22, 1, 0.36, 1);
-        padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+        display: flex;
+        flex-direction: column;
+        height: calc(100dvh - var(--kb-height, 0px));
+        padding-bottom: 0;
+        overflow: hidden;
+        transition: margin-bottom 0.15s ease-out;
+    }
+
+    .review-sheet .review-form {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .review-sheet .review-form-body {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+        padding-bottom: 1rem;
     }
 
     .review-sheet .form-buttons {
-        position: sticky;
-        /* Lift above the mobile keyboard (--kb-height is set by visualViewport listener; 0 when closed) */
-        bottom: var(--kb-height, 0px);
+        flex-shrink: 0;
         background: white;
-        margin: 1rem -1.25rem 0;
+        margin: 0 -1.25rem;
         padding: 1rem 1.25rem calc(1rem + env(safe-area-inset-bottom, 0px));
         border-top: 1px solid #f3f0ff;
-        z-index: 10;
-        transition: bottom 0.15s ease-out;
     }
 
     /* Dropdown panel opens upward-friendly within bottom sheet and stays above sticky buttons */
+    /* Inside the scrollable form body, absolutely-positioned panels get clipped
+       by overflow-y: auto — render the course list in normal flow instead. */
     .review-sheet .searchable-dropdown-panel {
-        z-index: 110;
-        max-height: min(45vh, 320px);
+        position: static;
+        max-height: 45vh;
+        overflow-y: auto;
+        box-shadow: none;
+        border-top: none;
+        border-radius: 0 0 12px 12px;
+        margin-top: -2px;
     }
 }
 
