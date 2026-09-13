@@ -2485,6 +2485,12 @@ body {
         position: static;
     }
 
+    /* When a teacher detail or compare view is open, the list is hidden so the
+       detail fills the whole screen like a dedicated page (not scrolled-to content). */
+    .sidebar-hidden-mobile {
+        display: none;
+    }
+
     .teacher-list {
         max-height: 400px;
     }

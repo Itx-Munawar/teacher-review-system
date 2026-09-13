@@ -85,6 +85,7 @@ const App: React.FC = () => {
     const [relatedTeachers, setRelatedTeachers] = useState<Teacher[]>([]);
     const [compareList, setCompareList] = useState<Teacher[]>([]);
     const [isComparing, setIsComparing] = useState(false);
+    const [isMobileViewport, setIsMobileViewport] = useState(() => window.innerWidth <= 768);
     const [compareDetails, setCompareDetails] = useState<TeacherDetail[]>([]);
     const [compareLoading, setCompareLoading] = useState(false);
     const [compareSearchTerm, setCompareSearchTerm] = useState('');
@@ -385,6 +386,13 @@ const App: React.FC = () => {
             return null;
         }
     }, [showToast]);
+
+    // Track mobile viewport for hiding the list when a detail page is open
+    useEffect(() => {
+        const onResize = () => setIsMobileViewport(window.innerWidth <= 768);
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
 
     // Effects
     useEffect(() => {
@@ -793,12 +801,11 @@ const App: React.FC = () => {
             setReviewError('');
             setReviewSuccess('');
 
-            // Auto-scroll on mobile
-            if (window.innerWidth <= 768 && mainContentRef.current) {
+            // On mobile the detail opens as its own page (list is hidden):
+            // remember list scroll position, then jump to the top of the page.
+            if (window.innerWidth <= 768) {
                 listScrollPosRef.current = window.scrollY;
-                setTimeout(() => {
-                    mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }, 100);
+                window.scrollTo({ top: 0, behavior: 'auto' });
             }
 
             navigate(`/teacher/${teacher.id}`);
@@ -880,12 +887,10 @@ const App: React.FC = () => {
         setIsComparing(true);
         setSelectedTeacher(null);
         navigate('/');
-        // Auto-scroll to compare view on mobile
-        if (window.innerWidth <= 768 && mainContentRef.current) {
+        // On mobile compare is its own page (list hidden): save scroll, go to top
+        if (window.innerWidth <= 768) {
             listScrollPosRef.current = window.scrollY;
-            setTimeout(() => {
-                mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 150);
+            window.scrollTo({ top: 0, behavior: 'auto' });
         }
     }, [compareList, fetchCompareDetails, navigate, showToast]);
 
@@ -926,7 +931,13 @@ const App: React.FC = () => {
         if (next.length >= 2) {
             await fetchCompareDetails(next);
         }
-        setTimeout(() => mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+        // Compare is a page on mobile (list hidden); on desktop just scroll to the panel
+        if (window.innerWidth <= 768) {
+            listScrollPosRef.current = window.scrollY;
+            window.scrollTo({ top: 0, behavior: 'auto' });
+        } else {
+            setTimeout(() => mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+        }
     }, [compareList, fetchCompareDetails, navigate, showToast]);
 
     const displayTeachers = isSearching ? searchResults : teachers;
@@ -987,10 +998,15 @@ const App: React.FC = () => {
                 runCompare();
             }
         }
-        setTimeout(() => {
-            mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            compareSearchInputRef.current?.focus();
-        }, 140);
+        // Compare is a page on mobile (list hidden): go to top; desktop scrolls to panel
+        if (window.innerWidth <= 768) {
+            window.scrollTo({ top: 0, behavior: 'auto' });
+        } else {
+            setTimeout(() => {
+                mainContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                compareSearchInputRef.current?.focus();
+            }, 140);
+        }
     }, [isComparing, compareList.length, runCompare, navigate]);
 
     const handleTabAdmin = useCallback(() => {
@@ -1130,7 +1146,7 @@ const App: React.FC = () => {
                 </header>
 
                 <div className="container">
-                <div className="sidebar">
+                <div className={`sidebar${(selectedTeacher || isComparing) && isMobileViewport ? ' sidebar-hidden-mobile' : ''}`}>
                     <div className="search-box">
                         <TeacherAutocomplete
                             value={searchTerm}
