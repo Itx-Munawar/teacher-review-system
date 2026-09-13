@@ -1676,6 +1676,19 @@ body {
     background: linear-gradient(135deg, #ff5e9c, #a855f7);
 }
 
+/* Department page hero title — long school names must wrap, not overflow */
+.dept-page-title {
+    max-width: 100%;
+    overflow-wrap: break-word;
+    hyphens: auto;
+}
+
+@media (max-width: 600px) {
+    .dept-page-title {
+        font-size: 1.15rem;
+    }
+}
+
 .teacher-card-info {
     flex: 1;
     padding-right: 32px;

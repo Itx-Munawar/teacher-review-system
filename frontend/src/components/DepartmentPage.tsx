@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getTeachers } from '../services/api';
 import TiltCard from './TiltCard';
+import Avatar from './Avatar';
+import { TeacherCardSkeleton } from './Skeleton';
 
 interface Teacher {
     id: number;
@@ -55,28 +57,34 @@ const DepartmentPage: React.FC = () => {
             <header className="header">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', flexWrap: 'wrap' }}>
                     <img src="https://www.umt.edu.pk/images/umt-logo.png" alt="UMT Logo" style={{ height: '60px', width: 'auto' }} />
-                    <h1 style={{ margin: 0 }}>{department} Teachers</h1>
+                    <h1 style={{ margin: 0 }} className="dept-page-title">{department} Teachers</h1>
                 </div>
-                <p>{total} teachers in this department at UMT</p>
+                <p>{total} teacher{total !== 1 ? 's' : ''} in this department at UMT</p>
                 <Link to="/" className="admin-login-btn">← Back to Home</Link>
             </header>
             <div className="container">
                 <div className="teacher-list" style={{ maxWidth: '720px', margin: '0 auto', width: '100%' }}>
                     {loading ? (
-                        <div className="loading">Loading teachers...</div>
+                        <>
+                            {Array.from({ length: 6 }).map((_, i) => <TeacherCardSkeleton key={i} />)}
+                        </>
                     ) : teachers.length === 0 ? (
                         <div className="no-results">No teachers found in this department.</div>
                     ) : (
                         <>
-                            {teachers.map((teacher: Teacher) => (
-                                <div key={teacher.id} className="teacher-card-enter">
+                            {teachers.map((teacher: Teacher, index: number) => (
+                                <div
+                                    key={teacher.id}
+                                    className="teacher-card-enter"
+                                    style={{ animationDelay: `${Math.min(index * 0.06, 0.6)}s` }}
+                                >
                                     <TiltCard className="teacher-card">
-                                        <Link to={`/teacher/${teacher.id}`} style={{ display: 'flex', alignItems: 'center', gap: '15px', textDecoration: 'none', color: 'inherit', padding: '10px' }}>
-                                            {teacher.image_url && (
-                                                <div className="teacher-card-image">
-                                                    <img src={teacher.image_url} alt={teacher.name} loading="lazy" />
-                                                </div>
-                                            )}
+                                        <Link
+                                            to={`/teacher/${teacher.id}`}
+                                            style={{ display: 'contents' }}
+                                            aria-label={`View reviews for ${teacher.name}`}
+                                        >
+                                            <Avatar name={teacher.name} imageUrl={teacher.image_url} className="teacher-card-image" />
                                             <div className="teacher-card-info">
                                                 <h3>{teacher.name}</h3>
                                                 <p className="department">{teacher.department}</p>
