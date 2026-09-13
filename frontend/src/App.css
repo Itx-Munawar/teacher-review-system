@@ -4200,6 +4200,17 @@ body {
     .compare-table-wrap {
         display: none;
     }
+
+    /* Keep dots + arrows above the card so they're visible without scrolling
+       (card can be tall with 3 reviews, pushing the nav below the fold) */
+    .swipe-indicators {
+        order: -2;
+    }
+
+    .swipe-nav {
+        order: -1;
+        margin-bottom: 0.25rem;
+    }
 }
 
 .swipe-indicators {
