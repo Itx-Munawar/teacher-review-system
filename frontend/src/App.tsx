@@ -18,7 +18,9 @@ import {
     getAdminQuestions,
     getAdminStats,
     deleteQuestion,
-    submitReview
+    submitReview,
+    getAdminCustomCourses,
+    reviewCustomCourse
 } from './services/api';
 import { debounce } from './utils/debounce';
 import TiltCard from './components/TiltCard';
@@ -41,7 +43,7 @@ import { TeacherCardSkeleton } from './components/Skeleton';
 import { ToastHost } from './components/Toast';
 import { haptic } from './utils/haptics';
 import { timeAgo } from './utils/timeAgo';
-import type { Teacher, Review, TeacherDetail, AdminReview, AdminQuestion, Toast } from './types';
+import type { Teacher, Review, TeacherDetail, AdminReview, AdminQuestion, CustomCourse, Toast } from './types';
 import './App.css';
 
 // ========== HELPER: Map API response to TeacherDetail ==========
@@ -266,11 +268,13 @@ const App: React.FC = () => {
     const [adminQuestionsPage, setAdminQuestionsPage] = useState(1);
     const [adminQuestionsTotalPages, setAdminQuestionsTotalPages] = useState(1);
     const [adminLoadingMoreQuestions, setAdminLoadingMoreQuestions] = useState(false);
+    const [customCourses, setCustomCourses] = useState<CustomCourse[]>([]);
 
     const loadAdminData = useCallback(async () => {
-        const [reviewsResult, questionsResult] = await Promise.allSettled([
+        const [reviewsResult, questionsResult, coursesResult] = await Promise.allSettled([
             getAdminReviews(1, 50),
-            getAdminQuestions(1, 50)
+            getAdminQuestions(1, 50),
+            getAdminCustomCourses()
         ]);
 
         let reviewsData: AdminReview[] = [];
@@ -301,6 +305,12 @@ const App: React.FC = () => {
             }
         } else {
             console.error('Error loading admin questions:', questionsResult.reason);
+        }
+
+        if (coursesResult.status === 'fulfilled') {
+            setCustomCourses(coursesResult.value.data?.courses || []);
+        } else {
+            console.error('Error loading custom courses:', coursesResult.reason);
         }
 
         setAdminReviewsTotalPages(totalPages);
@@ -352,6 +362,17 @@ const App: React.FC = () => {
             setAdminLoadingMoreQuestions(false);
         }
     }, [adminQuestionsPage, adminQuestionsTotalPages, adminLoadingMoreQuestions, showToast]);
+
+    const handleReviewCustomCourse = useCallback(async (id: number, action: 'approve' | 'reject') => {
+        try {
+            await reviewCustomCourse(id, action);
+            setCustomCourses(prev => prev.map((c): CustomCourse => c.id === id ? { ...c, status: (action === 'approve' ? 'approved' : 'rejected') as CustomCourse['status'], reviewed_at: new Date().toISOString() } : c));
+            showToast(`Course ${action}d`, 'success');
+        } catch (error) {
+            console.error(`Error ${action}ing custom course:`, error);
+            showToast(`Failed to ${action} course`, 'error');
+        }
+    }, [showToast]);
 
     // Effects
     useEffect(() => {
@@ -1040,6 +1061,8 @@ const App: React.FC = () => {
                         adminQuestionsPage={adminQuestionsPage}
                         adminQuestionsTotalPages={adminQuestionsTotalPages}
                         onLoadMoreQuestions={handleLoadMoreQuestions}
+                        customCourses={customCourses}
+                        onReviewCourse={handleReviewCustomCourse}
                     />
                     </ErrorBoundary>
                 </div>

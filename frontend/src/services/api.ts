@@ -113,6 +113,24 @@ export const submitReview = (data: {
 };
 
 
+// ========== CUSTOM COURSES (community-added, admin-approved) ==========
+
+export const getApprovedCustomCourses = () => {
+    return api.get('/custom-courses');
+};
+
+export const suggestCustomCourse = (name: string) => {
+    return api.post('/custom-courses', { name });
+};
+
+export const getAdminCustomCourses = () => {
+    return api.get('/admin/custom-courses');
+};
+
+export const reviewCustomCourse = (id: number, action: 'approve' | 'reject') => {
+    return api.put(`/admin/custom-courses/${id}`, { action });
+};
+
 // ========== ADMIN APIs ==========
 
 export const adminLogin = (username: string, password: string) => {

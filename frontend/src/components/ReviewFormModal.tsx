@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon';
 import SearchableDropdown from './SearchableDropdown';
 import { useFocusTrap } from '../hooks/useFocusTrap';
+import { getApprovedCustomCourses, suggestCustomCourse } from '../services/api';
 import type { TeacherDetail } from '../types';
 
 // All UMT course titles sorted alphabetically
@@ -129,6 +130,41 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
 }) => {
     const trapRef = useFocusTrap(true);
 
+    // Approved community-added courses, merged into the built-in list
+    const [customCourses, setCustomCourses] = useState<string[]>([]);
+    useEffect(() => {
+        let cancelled = false;
+        getApprovedCustomCourses()
+            .then(res => {
+                if (!cancelled) setCustomCourses(res.data?.courses || []);
+            })
+            .catch(() => {
+                // Silent failure – built-in list still works
+            });
+        return () => { cancelled = true; };
+    }, []);
+
+    const allCourses = useMemo(
+        () => Array.from(new Set([...UMT_COURSES, ...customCourses])).sort((a, b) => a.localeCompare(b)),
+        [customCourses]
+    );
+
+    // Auto-suggest newly added custom courses for admin approval (fire & forget)
+    const suggestedRef = useRef<Set<string>>(new Set());
+    const handleCoursesChange = (next: string[]) => {
+        const known = new Set(allCourses.map(c => c.toLowerCase()));
+        next.forEach(course => {
+            const key = course.trim().toLowerCase();
+            if (key && !known.has(key) && !suggestedRef.current.has(key)) {
+                suggestedRef.current.add(key);
+                suggestCustomCourse(course.trim()).catch(() => {
+                    suggestedRef.current.delete(key); // allow retry on next attempt
+                });
+            }
+        });
+        setReviewCourses(next);
+    };
+
     // Close on Escape key
     useEffect(() => {
         const handleEscape = (e: KeyboardEvent) => {
@@ -172,8 +208,8 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                         label="Courses (select one or more)"
                         id="review-courses"
                         value={reviewCourses}
-                        onChange={setReviewCourses}
-                        options={UMT_COURSES}
+                        onChange={handleCoursesChange}
+                        options={allCourses}
                         placeholder="Search or scroll to select courses..."
                         required={false}
                     />

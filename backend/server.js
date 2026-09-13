@@ -208,6 +208,21 @@ const runSchemaBootstrap = async () => {
                 KEY idx_answers_question (question_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         `);
+        // Custom courses: user-added course names awaiting admin approval
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS custom_courses (
+                id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                name VARCHAR(200) NOT NULL,
+                name_key VARCHAR(200) NOT NULL,
+                status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+                times_used INT UNSIGNED NOT NULL DEFAULT 1,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                reviewed_at TIMESTAMP NULL DEFAULT NULL,
+                PRIMARY KEY (id),
+                UNIQUE KEY uq_custom_course_key (name_key),
+                KEY idx_custom_courses_status (status)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
         // Drop the old review_votes table (vote feature removed)
         await db.query('DROP TABLE IF EXISTS review_votes');
 
@@ -229,7 +244,7 @@ const runSchemaBootstrap = async () => {
         }
         schemaBootstrapError = null;
         schemaBootstrapDone = true;
-        console.log('✅ Schema bootstrap complete (questions, question_answers, cleanup)');
+        console.log('✅ Schema bootstrap complete (questions, question_answers, custom_courses, cleanup)');
     } catch (error) {
         schemaBootstrapError = error.message;
         console.error('❌ Schema bootstrap failed:', error.message);
@@ -911,6 +926,86 @@ app.delete('/api/admin/questions/:id', verifyAdmin, csrfValidate, async (req, re
         res.json({ success: true, message: 'Question deleted successfully' });
     } catch (error) {
         console.error('Error deleting question:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// ========== CUSTOM COURSES (community-added, admin-approved) ==========
+// POST /api/custom-courses – student suggests a custom course for admin approval
+app.post('/api/custom-courses', questionLimiter, [
+    body('name').trim().isLength({ min: 2, max: 200 }).withMessage('Course name must be 2-200 characters')
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ error: errors.array()[0].msg });
+    }
+    try {
+        const name = req.body.name.trim().replace(/\s+/g, ' ');
+        const nameKey = name.toLowerCase();
+
+        // Already a built-in course in the static list? Then it needs no approval.
+        if (BUILTIN_COURSES.some(c => c.toLowerCase() === nameKey)) {
+            return res.json({ success: true, status: 'builtin' });
+        }
+
+        // Upsert by case-insensitive key: first use -> pending, reuse -> bump counter
+        await db.query(
+            `INSERT INTO custom_courses (name, name_key, status) VALUES (?, ?, 'pending')
+             ON DUPLICATE KEY UPDATE times_used = times_used + 1`,
+            [name, nameKey]
+        );
+        res.json({ success: true, status: 'pending' });
+    } catch (error) {
+        console.error('Error suggesting custom course:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// GET /api/custom-courses – approved custom courses (public, for review form dropdown)
+app.get('/api/custom-courses', async (req, res) => {
+    try {
+        const [rows] = await db.query(
+            "SELECT name FROM custom_courses WHERE status = 'approved' ORDER BY name ASC"
+        );
+        res.set('Cache-Control', 'public, max-age=300');
+        res.json({ courses: rows.map(r => r.name) });
+    } catch (error) {
+        console.error('Error fetching custom courses:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// GET /api/admin/custom-courses – full list for the admin dashboard
+app.get('/api/admin/custom-courses', verifyAdmin, async (req, res) => {
+    try {
+        const [rows] = await db.query(
+            'SELECT id, name, status, times_used, created_at, reviewed_at FROM custom_courses ORDER BY (status = \'pending\') DESC, times_used DESC, name ASC'
+    );
+        res.json({ courses: rows });
+    } catch (error) {
+        console.error('Error fetching admin custom courses:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// PUT /api/admin/custom-courses/:id – approve or reject (admin only)
+app.put('/api/admin/custom-courses/:id', verifyAdmin, csrfValidate, async (req, res) => {
+    try {
+        const courseId = req.params.id;
+        const action = req.body.action; // 'approve' | 'reject'
+        if (!['approve', 'reject'].includes(action)) {
+            return res.status(400).json({ error: 'Invalid action' });
+        }
+        const [result] = await db.query(
+            "UPDATE custom_courses SET status = ?, reviewed_at = NOW() WHERE id = ?",
+            [action === 'approve' ? 'approved' : 'rejected', courseId]
+        );
+        if (result.affectedRows === 0) return res.status(404).json({ error: 'Course not found' });
+        await createAuditLog(req.admin.id, action === 'approve' ? 'APPROVE_COURSE' : 'REJECT_COURSE', `Custom course ID: ${courseId}`, req.ip);
+        invalidateCache('courses');
+        res.json({ success: true, message: `Course ${action}d successfully` });
+    } catch (error) {
+        console.error('Error updating custom course:', error);
         res.status(500).json({ error: 'Database error' });
     }
 });

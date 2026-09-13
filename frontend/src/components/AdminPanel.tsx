@@ -1,8 +1,8 @@
 import React, { useState, memo } from 'react';
 import Icon from './Icon';
-import type { Teacher, AdminReview, AdminQuestion } from '../types';
+import type { Teacher, AdminReview, AdminQuestion, CustomCourse } from '../types';
 
-type AdminTab = 'teachers' | 'reviews' | 'qa';
+type AdminTab = 'teachers' | 'reviews' | 'qa' | 'courses';
 
 export interface AdminPanelProps {
     teachers: Teacher[];
@@ -40,6 +40,8 @@ export interface AdminPanelProps {
     adminQuestionsPage: number;
     adminQuestionsTotalPages: number;
     onLoadMoreQuestions: () => void;
+    customCourses: CustomCourse[];
+    onReviewCourse: (id: number, action: 'approve' | 'reject') => void;
 }
 
 const AdminPanel = memo(({
@@ -77,9 +79,12 @@ const AdminPanel = memo(({
     adminLoadingMoreQuestions,
     adminQuestionsPage,
     adminQuestionsTotalPages,
-    onLoadMoreQuestions
+    onLoadMoreQuestions,
+    customCourses,
+    onReviewCourse
 }: AdminPanelProps) => {
     const totalReviews = totalReviewsCount || reviewsForModeration?.length || 0;
+    const pendingCoursesCount = customCourses.filter(c => c.status === 'pending').length;
 
     const displayTeachers = searchTerm ? searchResults : teachers;
 
@@ -170,6 +175,12 @@ const AdminPanel = memo(({
                     onClick={() => setActiveTab('qa')}
                 >
                     <Icon name="message-square" size={15} /> Q&A
+                </button>
+                <button
+                    className={`admin-tab ${activeTab === 'courses' ? 'admin-tab-active' : ''}`}
+                    onClick={() => setActiveTab('courses')}
+                >
+                    <Icon name="book-open" size={15} /> Courses{pendingCoursesCount > 0 ? ` (${pendingCoursesCount})` : ''}
                 </button>
             </div>
 
@@ -417,6 +428,66 @@ const AdminPanel = memo(({
                     </button>
                 )}
                 {adminLoadingMoreQuestions && <div className="loading-more">Loading more questions...</div>}
+            </div>
+            )}
+
+            {activeTab === 'courses' && (
+            <div className="admin-section">
+                <h3>Custom Courses ({customCourses.length})</h3>
+                <p style={{ color: '#64748b', fontSize: '0.85rem', margin: '0 0 12px' }}>
+                    Courses added by students. Approved courses appear in the review form dropdown for everyone.
+                </p>
+                <div className="admin-list">
+                    {customCourses.length === 0 ? (
+                        <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>No custom courses suggested yet.</p>
+                    ) : (
+                        customCourses.map((course: CustomCourse) => (
+                            <div key={course.id} className="admin-item">
+                                <div className="review-info">
+                                    <strong>{course.name}</strong>
+                                    <small style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+                                        <span
+                                            style={{
+                                                fontWeight: 700,
+                                                fontSize: '0.7rem',
+                                                padding: '2px 8px',
+                                                borderRadius: '10px',
+                                                color: '#fff',
+                                                background: course.status === 'pending' ? '#f59e0b' : course.status === 'approved' ? '#10b981' : '#ef4444'
+                                            }}
+                                        >
+                                            {course.status.toUpperCase()}
+                                        </span>
+                                        | <Icon name="book-open" size={12} /> used {course.times_used} time{course.times_used !== 1 ? 's' : ''}
+                                        {course.reviewed_at && <> | <Icon name="calendar" size={12} /> {new Date(course.reviewed_at).toLocaleDateString()}</>}
+                                    </small>
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    {course.status !== 'approved' && (
+                                        <button
+                                            onClick={() => onReviewCourse(course.id, 'approve')}
+                                            className="btn-submit"
+                                            style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                                            disabled={adminMutationLoading}
+                                        >
+                                            Approve
+                                        </button>
+                                    )}
+                                    {course.status !== 'rejected' && (
+                                        <button
+                                            onClick={() => onReviewCourse(course.id, 'reject')}
+                                            className="delete-btn"
+                                            style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                                            disabled={adminMutationLoading}
+                                        >
+                                            Reject
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
             </div>
             )}
         </div>

@@ -40,6 +40,15 @@ export interface AdminQuestion {
     created_at: string;
 }
 
+export interface CustomCourse {
+    id: number;
+    name: string;
+    status: 'pending' | 'approved' | 'rejected';
+    times_used: number;
+    created_at: string;
+    reviewed_at: string | null;
+}
+
 export interface Toast {
     id: number;
     message: string;
