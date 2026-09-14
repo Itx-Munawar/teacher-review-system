@@ -96,10 +96,14 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
 
             {showAskForm && (
                 <form onSubmit={handleAsk} className="review-form-container qa-form">
-                    <label className="qa-label">Your Question</label>
-                    <div className="qa-input-row">
+                    <section className="form-section" aria-label="Your question">
+                        <div className="form-section-head">
+                            <span className="form-section-num">1</span>
+                            <h4 className="form-section-title">Your Question</h4>
+                            <span className="form-section-hint">required</span>
+                        </div>
                         <textarea
-                            rows={2}
+                            rows={3}
                             value={questionText}
                             onChange={(e) => setQuestionText(e.target.value)}
                             placeholder={`e.g. Is attendance strict in ${teacherName}'s class?`}
@@ -107,7 +111,9 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
                             aria-label="Your question"
                             className="qa-landscape-input"
                         />
-                        <button type="submit" disabled={submitting} className="btn-submit qa-submit">
+                    </section>
+                    <div className="form-buttons qa-form-buttons">
+                        <button type="submit" disabled={submitting} className="btn-submit qa-submit" aria-busy={submitting}>
                             {submitting ? 'Posting...' : 'Post Question'}
                         </button>
                     </div>
@@ -156,13 +162,20 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
                             )}
                             {openAnswerForms[q.id] ? (
                                 <div className="qa-answer-form">
-                                    <textarea
-                                        rows={2}
-                                        value={answerTexts[q.id] || ''}
-                                        onChange={(e) => setAnswerTexts(prev => ({ ...prev, [q.id]: e.target.value }))}
-                                        placeholder="Share what you know..."
-                                        aria-label="Your answer"
-                                    />
+                                    <section className="form-section" aria-label="Your answer">
+                                        <div className="form-section-head">
+                                            <span className="form-section-num">1</span>
+                                            <h4 className="form-section-title">Your Answer</h4>
+                                            <span className="form-section-hint">required</span>
+                                        </div>
+                                        <textarea
+                                            rows={3}
+                                            value={answerTexts[q.id] || ''}
+                                            onChange={(e) => setAnswerTexts(prev => ({ ...prev, [q.id]: e.target.value }))}
+                                            placeholder="Share what you know..."
+                                            aria-label="Your answer"
+                                        />
+                                    </section>
                                     <div className="qa-answer-form-actions">
                                         <button onClick={() => handleAnswer(q.id)} disabled={submitting} className="btn-submit">
                                             {submitting ? 'Posting...' : 'Post Answer'}

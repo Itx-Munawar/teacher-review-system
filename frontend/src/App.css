@@ -3412,6 +3412,23 @@ body {
     margin-bottom: 1rem;
 }
 
+/* Ask-question form: numbered section + action row (matches review form style) */
+.qa-form .form-section textarea {
+    width: 100%;
+}
+
+.qa-form-buttons {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.25rem;
+}
+
+.qa-form-buttons .qa-submit {
+    min-width: 150px;
+    min-height: 42px;
+    font-size: 0.9rem;
+}
+
 .qa-input-row {
     display: flex;
     gap: 10px;
@@ -4018,8 +4035,8 @@ body {
     border-radius: 6px;
 }
 
-/* ========== REVIEW FORM: NUMBERED SECTIONS ========== */
-.review-form-body .form-section {
+/* ========== FORM: NUMBERED SECTIONS (review form + Q&A forms) ========== */
+.form-section {
     background: #faf9ff;
     border: 1px solid #ece7fb;
     border-radius: 16px;
@@ -4065,8 +4082,8 @@ body {
 }
 
 /* Section inputs share the standard field look */
-.review-form-body .form-section input,
-.review-form-body .form-section textarea {
+.form-section input,
+.form-section textarea {
     width: 100%;
     padding: 0.8rem 1rem;
     border: 2px solid rgba(225, 215, 245, 0.9);
@@ -4079,7 +4096,9 @@ body {
 }
 
 .review-form-body .form-section input:focus,
-.review-form-body .form-section textarea:focus {
+.review-form-body .form-section textarea:focus,
+.form-section input:focus,
+.form-section textarea:focus {
     outline: none;
     border-color: transparent;
     box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.3);
