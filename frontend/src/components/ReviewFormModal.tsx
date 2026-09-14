@@ -157,6 +157,23 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
     // no clutter while picking courses or reading the form.
     const [showActions, setShowActions] = useState(false);
 
+    // Mobile: tapping the courses field opens a dedicated full-screen picker page
+    const [coursePageOpen, setCoursePageOpen] = useState(false);
+
+    // Track mobile viewport (course field routes to the full-screen page there)
+    const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 768px)').matches);
+    useEffect(() => {
+        const mq = window.matchMedia('(max-width: 768px)');
+        const onChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+        mq.addEventListener('change', onChange);
+        return () => mq.removeEventListener('change', onChange);
+    }, []);
+
+    const openCoursePage = () => {
+        setShowActions(false);
+        setCoursePageOpen(true);
+    };
+
     // When the user taps the review box, reveal the buttons and bring them into view
     const scrollButtonsIntoView = () => {
         setShowActions(true);
@@ -180,14 +197,20 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
         setReviewCourses(next);
     };
 
-    // Close on Escape key
+    // Close on Escape key — close the course picker first, then the sheet
     useEffect(() => {
         const handleEscape = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') onClose();
+            if (e.key === 'Escape') {
+                if (coursePageOpen) {
+                    setCoursePageOpen(false);
+                    return;
+                }
+                onClose();
+            }
         };
         document.addEventListener('keydown', handleEscape);
         return () => document.removeEventListener('keydown', handleEscape);
-    }, [onClose]);
+    }, [onClose, coursePageOpen]);
 
     return (
         <div className="modal-overlay" onClick={onClose} role="presentation">
@@ -200,18 +223,51 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                 aria-modal="true"
                 aria-label={`Write a review for ${selectedTeacher.name}`}
             >
-                <h3 className="review-form-title" id="review-modal-title">
-                    <Icon name="edit" size={20} /> Write a Review for {selectedTeacher.name}
-                </h3>
+                {!coursePageOpen && (
+                    <h3 className="review-form-title" id="review-modal-title">
+                        <Icon name="edit" size={20} /> Write a Review for {selectedTeacher.name}
+                    </h3>
+                )}
                 {reviewError && (
                     <div className="error-message" role="alert" aria-live="assertive">
                         {reviewError}
                     </div>
                 )}
+                {coursePageOpen ? (
+                    <div className="course-picker-page" role="dialog" aria-label="Select courses">
+                        <div className="course-picker-header">
+                            <button
+                                type="button"
+                                className="course-picker-back"
+                                onClick={() => setCoursePageOpen(false)}
+                                aria-label="Back to review form"
+                            >
+                                ‹ Back
+                            </button>
+                            <span className="course-picker-title">Select Courses</span>
+                            {reviewCourses.length > 0 && (
+                                <span className="course-picker-count">{reviewCourses.length}</span>
+                            )}
+                        </div>
+                        <SearchableDropdown
+                            label="Courses"
+                            id="review-courses-page"
+                            value={reviewCourses}
+                            onChange={handleCoursesChange}
+                            options={allCourses}
+                            variant="page"
+                            onDone={() => setCoursePageOpen(false)}
+                        />
+                    </div>
+                ) : (
                 <form className="review-form" onSubmit={onSubmit} aria-labelledby="review-modal-title">
                     <div className="review-form-body">
-                    <div className="form-group">
-                        <label htmlFor="review-user-name">Your Name (optional)</label>
+                    <section className="form-section" aria-label="Step 1: your name">
+                        <div className="form-section-head">
+                            <span className="form-section-num">1</span>
+                            <h4 className="form-section-title">Your Name</h4>
+                            <span className="form-section-hint">optional</span>
+                        </div>
                         <input
                             id="review-user-name"
                             type="text"
@@ -220,21 +276,49 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                             placeholder="Leave blank to post anonymously"
                             autoComplete="name"
                         />
-                    </div>
-                    <SearchableDropdown
-                        label="Courses (select one or more)"
-                        id="review-courses"
-                        value={reviewCourses}
-                        onChange={handleCoursesChange}
-                        options={allCourses}
-                        placeholder="Search or scroll to select courses..."
-                        required={false}
-                    />
-                    <div className="form-group">
-                        <label htmlFor="review-comment">Your Review *</label>
+                    </section>
+
+                    <section className="form-section" aria-label="Step 2: courses">
+                        <div className="form-section-head">
+                            <span className="form-section-num">2</span>
+                            <h4 className="form-section-title">Courses</h4>
+                        </div>
+                        {isMobile ? (
+                            <button
+                                type="button"
+                                className="course-field-link"
+                                onClick={openCoursePage}
+                                aria-haspopup="dialog"
+                            >
+                                <span className={`course-field-link-text ${reviewCourses.length === 0 ? 'placeholder' : ''}`}>
+                                    {reviewCourses.length === 0
+                                        ? 'Tap to choose courses...'
+                                        : reviewCourses.join(', ')}
+                                </span>
+                                <span className="course-field-link-arrow" aria-hidden="true">›</span>
+                            </button>
+                        ) : (
+                            <SearchableDropdown
+                                label="Select courses"
+                                id="review-courses"
+                                value={reviewCourses}
+                                onChange={handleCoursesChange}
+                                options={allCourses}
+                                placeholder="Search or scroll to select courses..."
+                                required={false}
+                            />
+                        )}
+                    </section>
+
+                    <section className="form-section" aria-label="Step 3: your review">
+                        <div className="form-section-head">
+                            <span className="form-section-num">3</span>
+                            <h4 className="form-section-title">Your Review</h4>
+                            <span className="form-section-hint">required</span>
+                        </div>
                         <textarea
                             id="review-comment"
-                            rows={4}
+                            rows={5}
                             value={reviewComment}
                             onChange={(e) => setReviewComment(e.target.value)}
                             onFocus={scrollButtonsIntoView}
@@ -242,7 +326,8 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                             required
                             aria-required="true"
                         />
-                    </div>
+                    </section>
+
                     <div className={`form-buttons${showActions ? ' form-buttons-visible' : ''}`} ref={buttonsRef}>
                         <button type="button" onClick={onClose} className="btn-cancel">
                             Cancel
@@ -260,6 +345,7 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                     </div>
                     </div>
                 </form>
+                )}
             </div>
         </div>
     );

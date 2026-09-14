@@ -4018,6 +4018,190 @@ body {
     border-radius: 6px;
 }
 
+/* ========== REVIEW FORM: NUMBERED SECTIONS ========== */
+.review-form-body .form-section {
+    background: #faf9ff;
+    border: 1px solid #ece7fb;
+    border-radius: 16px;
+    padding: 1rem;
+    margin-bottom: 0.9rem;
+}
+
+.form-section-head {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    margin-bottom: 0.7rem;
+}
+
+.form-section-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #a855f7, #ec4899);
+    color: #fff;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.form-section-title {
+    margin: 0;
+    font-size: 0.98rem;
+    font-weight: 700;
+    color: #1e1b4b;
+}
+
+.form-section-hint {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #8b8fa3;
+    margin-left: auto;
+}
+
+/* Section inputs share the standard field look */
+.review-form-body .form-section input,
+.review-form-body .form-section textarea {
+    width: 100%;
+    padding: 0.8rem 1rem;
+    border: 2px solid rgba(225, 215, 245, 0.9);
+    border-radius: 12px;
+    font-size: 1rem;
+    font-family: inherit;
+    background: white;
+    transition: all 0.3s;
+    resize: vertical;
+}
+
+.review-form-body .form-section input:focus,
+.review-form-body .form-section textarea:focus {
+    outline: none;
+    border-color: transparent;
+    box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.3);
+}
+
+/* Courses field on mobile — a tappable row that opens the full-screen picker */
+.course-field-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    width: 100%;
+    padding: 0.8rem 1rem;
+    background: white;
+    border: 2px solid rgba(225, 215, 245, 0.9);
+    border-radius: 12px;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.course-field-link:active {
+    border-color: rgba(168, 85, 247, 0.5);
+    box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.15);
+}
+
+.course-field-link-text {
+    flex: 1;
+    min-width: 0;
+    color: #1e1b4b;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.course-field-link-text.placeholder {
+    color: #9ca3af;
+    font-weight: 400;
+}
+
+.course-field-link-arrow {
+    flex: 0 0 auto;
+    font-size: 1.3rem;
+    line-height: 1;
+    color: #a855f7;
+}
+
+/* ========== FULL-SCREEN COURSE PICKER PAGE (mobile) ========== */
+.course-picker-page {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+.course-picker-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0 0 0.8rem;
+    border-bottom: 1px solid #ece7fb;
+}
+
+.course-picker-back {
+    background: none;
+    border: none;
+    padding: 0.35rem 0.5rem;
+    margin-left: -0.5rem;
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #a855f7;
+    cursor: pointer;
+    border-radius: 10px;
+}
+
+.course-picker-title {
+    flex: 1;
+    text-align: center;
+    font-size: 1.02rem;
+    font-weight: 700;
+    color: #1e1b4b;
+}
+
+.course-picker-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 26px;
+    height: 26px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #a855f7, #ec4899);
+    color: #fff;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+/* The picker fills the sheet; internal list scrolls */
+.searchable-dropdown-page {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+.searchable-dropdown-page .searchable-dropdown-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    border: 1px solid #ece7fb;
+    border-radius: 12px;
+    margin-top: 0.6rem;
+}
+
+
 /* ========== REDUCED MOTION ========== */
 @media (prefers-reduced-motion: reduce) {
     body {
@@ -4132,6 +4316,37 @@ body {
         border-top: none;
         border-radius: 0 0 12px 12px;
         margin-top: -2px;
+    }
+
+    /* Full-screen course picker page: fills the sheet above the keyboard.
+       Its own list scrolls; the page never scrolls horizontally. */
+    .course-picker-page {
+        flex: 1;
+        min-height: 0;
+        padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    }
+
+    .course-picker-page .searchable-dropdown-page {
+        flex: 1;
+        min-height: 0;
+    }
+
+    .course-picker-page .searchable-dropdown-page .searchable-dropdown-list {
+        max-height: none;
+    }
+
+    .course-picker-page .searchable-dropdown-item {
+        padding: 0.85rem 1rem;
+    }
+
+    /* The Done button inside the picker header search row */
+    .course-picker-page .searchable-dropdown-done-btn {
+        flex: 0 0 auto;
+    }
+
+    /* Bigger search input in the full-screen picker */
+    .course-picker-page .searchable-dropdown-input {
+        font-size: 1rem;
     }
 }
 
