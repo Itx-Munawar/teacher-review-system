@@ -151,37 +151,12 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
 
     // Auto-suggest newly added custom courses for admin approval (fire & forget)
     const suggestedRef = useRef<Set<string>>(new Set());
-    const buttonsRef = useRef<HTMLDivElement>(null);
-
-    // Action buttons stay hidden until the user engages with the review box —
-    // no clutter while picking courses or reading the form.
-    const [showActions, setShowActions] = useState(false);
 
     // Mobile: tapping the courses field opens a dedicated full-screen picker page
     const [coursePageOpen, setCoursePageOpen] = useState(false);
 
-    // Track mobile viewport (course field routes to the full-screen page there)
-    const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 768px)').matches);
-    useEffect(() => {
-        const mq = window.matchMedia('(max-width: 768px)');
-        const onChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-        mq.addEventListener('change', onChange);
-        return () => mq.removeEventListener('change', onChange);
-    }, []);
-
     const openCoursePage = () => {
-        setShowActions(false);
         setCoursePageOpen(true);
-    };
-
-    // When the user taps the review box, reveal the buttons and bring them into view
-    const scrollButtonsIntoView = () => {
-        setShowActions(true);
-        if (window.innerWidth > 768) return;
-        // Wait for the keyboard/sheet resize to settle, then reveal the buttons
-        setTimeout(() => {
-            buttonsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }, 250);
     };
     const handleCoursesChange = (next: string[]) => {
         const known = new Set(allCourses.map(c => c.toLowerCase()));
@@ -283,21 +258,23 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                             <span className="form-section-num">2</span>
                             <h4 className="form-section-title">Courses</h4>
                         </div>
-                        {isMobile ? (
-                            <button
-                                type="button"
-                                className="course-field-link"
-                                onClick={openCoursePage}
-                                aria-haspopup="dialog"
-                            >
-                                <span className={`course-field-link-text ${reviewCourses.length === 0 ? 'placeholder' : ''}`}>
-                                    {reviewCourses.length === 0
-                                        ? 'Tap to choose courses...'
-                                        : reviewCourses.join(', ')}
-                                </span>
-                                <span className="course-field-link-arrow" aria-hidden="true">›</span>
-                            </button>
-                        ) : (
+                        {/* Both variants are rendered; CSS picks per breakpoint
+                            (same 768px query as the sheet styles, so JS state and
+                            styling can never disagree). */}
+                        <button
+                            type="button"
+                            className="course-field-link course-mobile-trigger"
+                            onClick={openCoursePage}
+                            aria-haspopup="dialog"
+                        >
+                            <span className={`course-field-link-text ${reviewCourses.length === 0 ? 'placeholder' : ''}`}>
+                                {reviewCourses.length === 0
+                                    ? 'Tap to choose courses...'
+                                    : reviewCourses.join(', ')}
+                            </span>
+                            <span className="course-field-link-arrow" aria-hidden="true">›</span>
+                        </button>
+                        <div className="course-desktop-dropdown">
                             <SearchableDropdown
                                 label="Select courses"
                                 id="review-courses"
@@ -307,7 +284,7 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                                 placeholder="Search or scroll to select courses..."
                                 required={false}
                             />
-                        )}
+                        </div>
                     </section>
 
                     <section className="form-section" aria-label="Step 3: your review">
@@ -321,14 +298,16 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                             rows={5}
                             value={reviewComment}
                             onChange={(e) => setReviewComment(e.target.value)}
-                            onFocus={scrollButtonsIntoView}
                             placeholder="Share your experience with this teacher..."
                             required
                             aria-required="true"
                         />
                     </section>
 
-                    <div className={`form-buttons${showActions ? ' form-buttons-visible' : ''}`} ref={buttonsRef}>
+                    {/* Always visible — hidden/collapsing button rows kept failing on
+                        real phones (keyboard resize races), so the row is a plain,
+                        permanent part of the form flow now. */}
+                    <div className="form-buttons" role="group" aria-label="Review form actions">
                         <button type="button" onClick={onClose} className="btn-cancel">
                             Cancel
                         </button>

@@ -2722,6 +2722,8 @@ body {
         font-size: 1.2rem;
     }
 
+    /* review-sheet's own later rules override this inside the sheet; other
+       forms (Q&A) stack their buttons full-width on small screens */
     .form-buttons {
         flex-direction: column;
         gap: 0.75rem;
@@ -4201,6 +4203,14 @@ body {
 }
 
 /* Courses field on mobile — a tappable row that opens the full-screen picker */
+/* Desktop: hide the mobile trigger + show the inline dropdown.
+   The trigger rule must out-specify .course-field-link's display:flex below,
+   so the pair is decided purely by CSS (never JS state, which can go stale).
+   Paired with the 768px mobile block further down. */
+.course-field-link.course-mobile-trigger {
+    display: none;
+}
+
 .course-field-link {
     display: flex;
     align-items: center;
@@ -4383,30 +4393,28 @@ body {
         padding-bottom: 1rem;
     }
 
-    /* Buttons live in the form flow after the fields — no floating bar.
-       Hidden until the user engages the review box, then shown as compact pills. */
-    .review-sheet .form-buttons {
-        margin: 0 -1.25rem;
-        padding: 0 1.25rem;
-        max-height: 0;
-        opacity: 0;
-        overflow: hidden;
-        transform: translateY(4px);
-        transition: max-height 0.25s ease, opacity 0.2s ease, transform 0.25s ease, padding 0.25s ease;
-    }
-
-    .review-sheet .form-buttons-visible {
-        max-height: 80px;
-        opacity: 1;
-        transform: translateY(0);
-        padding: 0.75rem 1.25rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
-    }
-
-    /* Compact action pills — small, side by side, centered */
+    /* Buttons are a plain, always-visible row at the end of the form flow.
+       (A reveal-on-focus variant kept failing on real phones: the keyboard
+       resize finished after the scroll computed, leaving the buttons below
+       the fold.) Compact pills, side by side, centered. */
     .review-sheet .form-buttons {
         flex-direction: row;
         justify-content: center;
         gap: 0.6rem;
+        margin: 1.25rem -1.25rem 0;
+        padding: 0.75rem 1.25rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    }
+
+    /* Mobile: show the tap-to-open trigger, hide the inline dropdown.
+       Rendered pair is decided in CSS (not JS state) so the two can never
+       disagree about the viewport — the desktop dropdown escaping the sheet
+       (seen as ghost cards behind the overlay) came from exactly that. */
+    .review-sheet .course-field-link.course-mobile-trigger {
+        display: flex;
+    }
+
+    .review-sheet .course-desktop-dropdown {
+        display: none;
     }
 
     .review-sheet .btn-cancel,
