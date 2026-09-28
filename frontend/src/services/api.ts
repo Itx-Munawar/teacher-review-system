@@ -13,7 +13,7 @@ const api = axios.create({
 
 /** Read a cookie value by name (no library needed). */
 function getCookie(name: string): string | null {
-    const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[\.$?*|{}()\[\]\\]/g, '\\$&') + '=([^;]*)'));
+    const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[.$?*|{}()[\]\\]/g, '\\$&') + '=([^;]*)'));
     return match ? decodeURIComponent(match[1]) : null;
 }
 
@@ -191,6 +191,14 @@ export const deleteQuestion = (id: number) => {
 
 export const getAdminStats = () => {
     return api.get('/admin/stats');
+};
+
+/**
+ * Clear teacher photo URLs that aren't real images (e.g. a bare directory URL
+ * with no filename). Pass dryRun to preview without changing anything.
+ */
+export const cleanTeacherImages = (dryRun: boolean = false) => {
+    return api.post(`/admin/clean-teacher-images?dryRun=${dryRun ? 'true' : 'false'}`, {});
 };
 
 export default api;

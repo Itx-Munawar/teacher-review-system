@@ -1,5 +1,6 @@
 import React, { useState, memo } from 'react';
 import Icon from './Icon';
+import Avatar from './Avatar';
 import type { Teacher, AdminReview, AdminQuestion, CustomCourse, AdminTeacherDetail } from '../types';
 
 type AdminTab = 'teachers' | 'reviews' | 'qa' | 'courses';
@@ -43,6 +44,7 @@ export interface AdminPanelProps {
     customCourses: CustomCourse[];
     onReviewCourse: (id: number, action: 'approve' | 'reject') => void;
     onLoadTeacherDetail: (id: number) => Promise<AdminTeacherDetail | null>;
+    onCleanTeacherImages: (dryRun: boolean) => Promise<{ cleaned?: number; wouldClean?: number; broken?: number; blank?: number }>;
 }
 
 const AdminPanel = memo(({
@@ -83,8 +85,36 @@ const AdminPanel = memo(({
     onLoadMoreQuestions,
     customCourses,
     onReviewCourse,
-    onLoadTeacherDetail
+    onLoadTeacherDetail,
+    onCleanTeacherImages
 }: AdminPanelProps) => {
+    // Broken-photo cleanup: preview first, then confirm
+    const [photoCheck, setPhotoCheck] = useState<{ count: number; broken: number } | null>(null);
+    const [photoBusy, setPhotoBusy] = useState(false);
+    const [photoCleaned, setPhotoCleaned] = useState<number | null>(null);
+
+    const handleCheckPhotos = async () => {
+        setPhotoBusy(true);
+        try {
+            const res = await onCleanTeacherImages(true);
+            setPhotoCheck({ count: res.wouldClean || 0, broken: res.broken || 0 });
+            setPhotoCleaned(null);
+        } finally {
+            setPhotoBusy(false);
+        }
+    };
+
+    const handleCleanPhotos = async () => {
+        setPhotoBusy(true);
+        try {
+            const res = await onCleanTeacherImages(false);
+            setPhotoCleaned(res.cleaned || 0);
+            setPhotoCheck(null);
+        } finally {
+            setPhotoBusy(false);
+        }
+    };
+
     const totalReviews = totalReviewsCount || reviewsForModeration?.length || 0;
     const pendingCoursesCount = customCourses.filter(c => c.status === 'pending').length;
     const visibleCourses = customCourses.filter(c => c.status !== 'rejected');
@@ -230,6 +260,47 @@ const AdminPanel = memo(({
 
             <div className="admin-section">
                 <h3>Manage Teachers</h3>
+
+                {/* Broken photo URLs: preview then clean in one click */}
+                <div className="admin-photo-tools">
+                    {photoCleaned !== null ? (
+                        <p className="admin-photo-done">
+                            <Icon name="check" size={15} />
+                            Cleared {photoCleaned} broken photo URL{photoCleaned === 1 ? '' : 's'}. Those teachers now show an initial avatar instead of a broken image.
+                        </p>
+                    ) : photoCheck === null ? (
+                        <button
+                            type="button"
+                            className="admin-photo-btn"
+                            onClick={handleCheckPhotos}
+                            disabled={photoBusy}
+                        >
+                            <Icon name="search" size={15} />
+                            {photoBusy ? 'Checking...' : 'Check for broken photos'}
+                        </button>
+                    ) : photoCheck.count === 0 ? (
+                        <p className="admin-photo-done">
+                            <Icon name="check" size={15} /> All teacher photo URLs look valid.
+                        </p>
+                    ) : (
+                        <div className="admin-photo-warning" role="status">
+                            <span>
+                                <strong>{photoCheck.count}</strong> teacher{photoCheck.count === 1 ? '' : 's'} have a photo URL that isn't a real image file
+                                {photoCheck.broken > 0 ? ` (${photoCheck.broken} missing a filename)` : ''}.
+                                They show an initial avatar instead. Cleaning sets these URLs to empty.
+                            </span>
+                            <div className="admin-photo-actions">
+                                <button type="button" onClick={handleCleanPhotos} disabled={photoBusy}>
+                                    {photoBusy ? 'Cleaning...' : `Clean ${photoCheck.count} URL${photoCheck.count === 1 ? '' : 's'}`}
+                                </button>
+                                <button type="button" className="admin-photo-cancel" onClick={() => setPhotoCheck(null)} disabled={photoBusy}>
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
                 <div className="search-box" style={{ marginBottom: '1rem' }}>
                     <input
                         type="text"
@@ -318,13 +389,12 @@ const AdminPanel = memo(({
                                             ) : teacherDetail ? (
                                                 <>
                                                     <div className="admin-detail-header">
-                                                        {teacherDetail.teacher.image_url ? (
-                                                            <img src={teacherDetail.teacher.image_url} alt={teacherDetail.teacher.name} className="admin-detail-photo" loading="lazy" />
-                                                        ) : (
-                                                            <div className="admin-detail-photo admin-detail-photo-fallback">
-                                                                {teacherDetail.teacher.name.charAt(0)}
-                                                            </div>
-                                                        )}
+                                                        <Avatar
+                                                            name={teacherDetail.teacher.name}
+                                                            imageUrl={teacherDetail.teacher.image_url}
+                                                            className="admin-detail-photo"
+                                                            size={112}
+                                                        />
                                                         <div className="admin-detail-title">
                                                             <strong>{teacherDetail.teacher.name}</strong>
                                                             <span>{teacherDetail.teacher.department}</span>

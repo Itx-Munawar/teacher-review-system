@@ -80,12 +80,12 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
                     <span>Ask about {teacherName}</span>
                 </h3>
                 {!showAskForm ? (
-                    <button onClick={() => setShowAskForm(true)} className="btn-write-review qa-ask-btn">
+                    <button type="button" onClick={() => setShowAskForm(true)} className="btn-write-review qa-ask-btn">
                         <Icon name="plus" size={16} />
                         <span>Ask a Question</span>
                     </button>
                 ) : (
-                    <button onClick={() => setShowAskForm(false)} className="btn-cancel qa-ask-btn">
+                    <button type="button" onClick={() => setShowAskForm(false)} className="btn-cancel qa-ask-btn">
                         Cancel
                     </button>
                 )}
@@ -177,10 +177,11 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
                                         />
                                     </section>
                                     <div className="qa-answer-form-actions">
-                                        <button onClick={() => handleAnswer(q.id)} disabled={submitting} className="btn-submit">
+                                        <button type="button" onClick={() => handleAnswer(q.id)} disabled={submitting} className="btn-submit">
                                             {submitting ? 'Posting...' : 'Post Answer'}
                                         </button>
                                         <button
+                                            type="button"
                                             onClick={() => setOpenAnswerForms(prev => ({ ...prev, [q.id]: false }))}
                                             className="btn-cancel"
                                         >
@@ -190,6 +191,7 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
                                 </div>
                             ) : (
                                 <button
+                                    type="button"
                                     onClick={() => setOpenAnswerForms(prev => ({ ...prev, [q.id]: true }))}
                                     className="qa-reply-btn"
                                 >

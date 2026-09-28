@@ -21,18 +21,17 @@ import {
     submitReview,
     getAdminCustomCourses,
     reviewCustomCourse,
-    getAdminTeacherDetail
+    getAdminTeacherDetail,
+    cleanTeacherImages
 } from './services/api';
 import { debounce } from './utils/debounce';
+import { SITE_URL } from './utils/siteUrl';
 import TiltCard from './components/TiltCard';
-import LazySection from './components/LazySection';
 import TeacherAutocomplete from './components/TeacherAutocomplete';
-import QASection from './components/QASection';
 import InstallPrompt from './components/InstallPrompt';
 import PullToRefresh from './components/PullToRefresh';
 import Icon from './components/Icon';
 import Avatar from './components/Avatar';
-import EmptyState from './components/EmptyState';
 import BottomNav from './components/BottomNav';
 import AdminPanel from './components/AdminPanel';
 import LoginForm from './components/LoginForm';
@@ -43,8 +42,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { TeacherCardSkeleton } from './components/Skeleton';
 import { ToastHost } from './components/Toast';
 import { haptic } from './utils/haptics';
-import { timeAgo } from './utils/timeAgo';
-import type { Teacher, Review, TeacherDetail, AdminReview, AdminQuestion, CustomCourse, AdminTeacherDetail, Toast } from './types';
+import type { Teacher, TeacherDetail, AdminReview, AdminQuestion, CustomCourse, AdminTeacherDetail, Toast } from './types';
 import './App.css';
 
 // ========== HELPER: Map API response to TeacherDetail ==========
@@ -474,7 +472,7 @@ const App: React.FC = () => {
 
     // Dynamic page title + Open Graph + Twitter + canonical + JSON-LD for SEO
     useEffect(() => {
-        const baseUrl = 'https://teacher-review-system-zeta.vercel.app';
+        const baseUrl = SITE_URL;
         const metaDescription = document.querySelector('meta[name="description"]');
         const ogTitle = document.querySelector('meta[property="og:title"]');
         const ogDesc = document.querySelector('meta[property="og:description"]');
@@ -632,6 +630,22 @@ const App: React.FC = () => {
             setAdminMutationLoading(false);
         }
     }, [loadTeachers, loadAdminData, showToast]);
+
+    const handleCleanTeacherImages = useCallback(async (dryRun: boolean) => {
+        try {
+            const res = await cleanTeacherImages(dryRun);
+            if (!dryRun) {
+                const cleaned = res.data?.cleaned ?? 0;
+                showToast(`Cleared ${cleaned} broken photo URL${cleaned === 1 ? '' : 's'}`, 'success');
+                loadTeachers(1);
+            }
+            return res.data || {};
+        } catch (error) {
+            console.error('Clean teacher images error:', error);
+            showToast('Failed to check teacher photos', 'error');
+            return {};
+        }
+    }, [loadTeachers, showToast]);
 
     const handleAddTeacher = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
@@ -1092,6 +1106,7 @@ const App: React.FC = () => {
                         customCourses={customCourses}
                         onReviewCourse={handleReviewCustomCourse}
                         onLoadTeacherDetail={handleLoadTeacherDetail}
+                        onCleanTeacherImages={handleCleanTeacherImages}
                     />
                     </ErrorBoundary>
                 </div>
@@ -1109,9 +1124,12 @@ const App: React.FC = () => {
                     <div className="header-top">
                         <div className="header-brand">
                             <img
-                                src="https://www.umt.edu.pk/images/umt-logo.png"
+                                src={`${process.env.PUBLIC_URL}/umt-logo.png`}
                                 alt="UMT Logo"
                                 className="header-logo"
+                                width={60}
+                                height={57}
+                                decoding="async"
                             />
                             <h1 style={{ margin: 0 }}>UMT Teacher Reviews</h1>
                         </div>
@@ -1286,11 +1304,6 @@ const App: React.FC = () => {
                             setIsComparing={setIsComparing}
                             restoreListScroll={restoreListScroll}
                             handleTeacherClick={handleTeacherClick}
-                            handleTeacherClickDetail={(t) => {
-                                setIsComparing(false);
-                                setSelectedTeacher(t);
-                                navigate(`/teacher/${t.id}`);
-                            }}
                             setCompareList={setCompareList}
                             setCompareDetails={setCompareDetails}
                         />

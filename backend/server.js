@@ -157,6 +157,23 @@ const createAuditLog = async (adminId, action, details, ip = 'unknown') => {
     }
 };
 
+// Mirrors isUsableImageUrl() in frontend/src/utils/imageThumb.ts, so the DB is
+// cleaned using exactly the rule the UI uses to choose between a photo and an
+// initials avatar. A bare directory URL such as
+// "https://admin.umt.edu.pk/Media/UserProfile/" is not a usable image.
+const isUsableTeacherImageUrl = (url) => {
+    const trimmed = (url || '').trim();
+    if (!/^https?:\/\//i.test(trimmed)) return false;
+    try {
+        const { hostname, pathname } = new URL(trimmed);
+        if (!hostname) return false;
+        const filename = pathname.split('/').filter(Boolean).pop() || '';
+        return /\.(jpe?g|png|webp|gif|avif)$/i.test(filename);
+    } catch (error) {
+        return false;
+    }
+};
+
 // ========== IN-MEMORY CACHE ==========
 const { LRUCache } = require('lru-cache');
 const cache = new LRUCache({
@@ -848,6 +865,78 @@ app.put('/api/admin/teachers/:id', verifyAdmin, csrfValidate, [
         });
     } catch (error) {
         console.error('Error updating teacher:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// POST /api/admin/clean-teacher-images – clear unusable teacher photo URLs.
+// Some imported rows hold a bare directory URL with no filename, which renders
+// as a broken image instead of the initials avatar. Pass ?dryRun=true to
+// preview what would be cleared without changing anything.
+app.post('/api/admin/clean-teacher-images', verifyAdmin, csrfValidate, async (req, res) => {
+    try {
+        const dryRun = String(req.query.dryRun) === 'true' || (req.body && req.body.dryRun === true);
+
+        const [rows] = await db.query('SELECT id, image_url FROM teachers WHERE image_url IS NOT NULL');
+        const unusable = rows.filter((row) => !isUsableTeacherImageUrl(row.image_url));
+
+        const blank = unusable.filter((row) => !(row.image_url || '').trim()).length;
+        const broken = unusable.length - blank;
+
+        if (unusable.length === 0) {
+            return res.json({
+                success: true,
+                cleaned: 0,
+                broken: 0,
+                blank: 0,
+                message: 'No unusable image URLs found'
+            });
+        }
+
+        if (dryRun) {
+            return res.json({
+                success: true,
+                dryRun: true,
+                wouldClean: unusable.length,
+                broken,
+                blank,
+                sample: unusable.slice(0, 25).map((row) => ({ id: row.id, image_url: row.image_url }))
+            });
+        }
+
+        const ids = unusable.map((row) => row.id);
+
+        // Chunked + explicit placeholders so we never rely on driver-specific
+        // array expansion for `IN (?)`.
+        let updated = 0;
+        const CHUNK = 500;
+        for (let i = 0; i < ids.length; i += CHUNK) {
+            const chunk = ids.slice(i, i + CHUNK);
+            const placeholders = chunk.map(() => '?').join(',');
+            const [result] = await db.query(
+                `UPDATE teachers SET image_url = NULL WHERE id IN (${placeholders})`,
+                chunk
+            );
+            updated += result.affectedRows || 0;
+        }
+
+        await createAuditLog(
+            req.admin.id,
+            'CLEAN_TEACHER_IMAGES',
+            `Cleared ${ids.length} unusable image URLs (${broken} broken, ${blank} blank)`,
+            req.ip
+        );
+        invalidateCache('teachers');
+
+        res.json({
+            success: true,
+            cleaned: updated,
+            broken,
+            blank,
+            message: `Cleared ${updated} unusable teacher photo URL${updated === 1 ? '' : 's'}`
+        });
+    } catch (error) {
+        console.error('Error cleaning teacher image URLs:', error);
         res.status(500).json({ error: 'Database error' });
     }
 });

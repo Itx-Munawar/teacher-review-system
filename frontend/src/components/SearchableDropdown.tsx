@@ -29,6 +29,8 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
     onDone,
 }) => {
     const isPage = variant === 'page';
+    // id for the listbox so the combobox input can reference it (a11y)
+    const listId = id ? `${id}-listbox` : undefined;
     const [isOpen, setIsOpen] = useState(isPage);
     const [searchTerm, setSearchTerm] = useState('');
     const [isCustomMode, setIsCustomMode] = useState(false);
@@ -224,6 +226,7 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
                     autoComplete="off"
                     role="combobox"
                     aria-expanded={isOpen}
+                    aria-controls={listId}
                     aria-haspopup="listbox"
                 />
                 <button
@@ -239,7 +242,7 @@ const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
     );
 
     const listNode = (
-        <div ref={listRef} className="searchable-dropdown-list" role="listbox">
+        <div ref={listRef} id={listId} className="searchable-dropdown-list" role="listbox">
             {isCustomMode ? (
                 <div className="searchable-dropdown-custom">
                     <div className="searchable-dropdown-custom-label">Type your course name:</div>

@@ -4,6 +4,7 @@ import { getTeachers } from '../services/api';
 import TiltCard from './TiltCard';
 import Avatar from './Avatar';
 import { TeacherCardSkeleton } from './Skeleton';
+import { SITE_URL } from '../utils/siteUrl';
 
 interface Teacher {
     id: number;
@@ -21,7 +22,7 @@ const DepartmentPage: React.FC = () => {
     const [total, setTotal] = useState(0);
 
     useEffect(() => {
-        const baseUrl = 'https://teacher-review-system-zeta.vercel.app';
+        const baseUrl = SITE_URL;
         const title = `${department} Teachers | UMT Teacher Reviews`;
         const description = `Browse ${department} teachers at UMT Lahore. Read anonymous student reviews and find the best professors.`;
         const url = `${baseUrl}/department/${encodeURIComponent(department)}`;
@@ -56,7 +57,14 @@ const DepartmentPage: React.FC = () => {
         <div className="app">
             <header className="header">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', flexWrap: 'wrap' }}>
-                    <img src="https://www.umt.edu.pk/images/umt-logo.png" alt="UMT Logo" style={{ height: '60px', width: 'auto' }} />
+                    <img
+                        src={`${process.env.PUBLIC_URL}/umt-logo.png`}
+                        alt="UMT Logo"
+                        width={60}
+                        height={57}
+                        decoding="async"
+                        style={{ height: '60px', width: 'auto' }}
+                    />
                     <h1 style={{ margin: 0 }} className="dept-page-title">{department} Teachers</h1>
                 </div>
                 <p>{total} teacher{total !== 1 ? 's' : ''} in this department at UMT</p>

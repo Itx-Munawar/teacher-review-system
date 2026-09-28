@@ -89,8 +89,6 @@ const SwipeableCards: React.FC<SwipeableCardsProps> = ({
 
     if (teachers.length === 0) return null;
 
-    const currentTeacher = teachers[activeIndex];
-
     return (
         <div className="swipeable-cards">
             {/* Card indicators */}

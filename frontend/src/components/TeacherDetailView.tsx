@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import Icon from './Icon';
+import Avatar from './Avatar';
 import LazySection from './LazySection';
 import QASection from './QASection';
 import type { TeacherDetail, Teacher, Review } from '../types';
@@ -67,9 +68,13 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                     <Icon name="chevron-left" size={16} /> Back to Teachers
                 </button>
 
-                {selectedTeacher.image_url && (
-                    <img src={selectedTeacher.image_url} alt={selectedTeacher.name} className="teacher-detail-image" />
-                )}
+                {/* Always rendered: falls back to initials when there is no usable photo */}
+                <Avatar
+                    name={selectedTeacher.name}
+                    imageUrl={selectedTeacher.image_url}
+                    className="teacher-detail-image"
+                    size={260}
+                />
 
                 <div className="teacher-detail-header">
                     <h1>{selectedTeacher.name}</h1>

@@ -17,7 +17,6 @@ interface CompareViewProps {
     setIsComparing: (v: boolean) => void;
     restoreListScroll: () => void;
     handleTeacherClick: (teacher: Teacher) => void;
-    handleTeacherClickDetail: (teacher: TeacherDetail) => void;
     setCompareList: React.Dispatch<React.SetStateAction<Teacher[]>>;
     setCompareDetails: React.Dispatch<React.SetStateAction<TeacherDetail[]>>;
 }
@@ -32,7 +31,6 @@ const CompareView: React.FC<CompareViewProps> = ({
     setIsComparing,
     restoreListScroll,
     handleTeacherClick,
-    handleTeacherClickDetail,
     setCompareList,
     setCompareDetails,
 }) => {
@@ -73,13 +71,12 @@ const CompareView: React.FC<CompareViewProps> = ({
                                 <div key={teacher.id} className="compare-selected-card">
                                     <div className="compare-selected-header">
                                         <div className="compare-selected-avatar">
-                                            {teacher.image_url ? (
-                                                <img src={teacher.image_url} alt={teacher.name} />
-                                            ) : (
-                                                <span className="compare-selected-initials">
-                                                    {teacher.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
-                                                </span>
-                                            )}
+                                            <Avatar
+                                                name={teacher.name}
+                                                imageUrl={teacher.image_url}
+                                                className="compare-selected-photo"
+                                                size={112}
+                                            />
                                         </div>
                                         <div className="compare-selected-info">
                                             <span className="compare-selected-name">{teacher.name}</span>
@@ -117,7 +114,7 @@ const CompareView: React.FC<CompareViewProps> = ({
                                     {compareDetails.map((t) => (
                                         <th key={t.id} className="compare-teacher-cell">
                                             <div className="compare-table-teacher">
-                                                <Avatar name={t.name} imageUrl={t.image_url} className="compare-table-avatar" />
+                                                <Avatar name={t.name} imageUrl={t.image_url} className="compare-table-avatar" size={136} />
                                                 <div className="compare-table-teacher-info">
                                                     <span className="compare-table-name">{t.name}</span>
                                                     <span className="compare-table-dept">{t.department}</span>
@@ -201,7 +198,7 @@ const CompareView: React.FC<CompareViewProps> = ({
                         onRemove={handleRemove}
                         onTeacherClick={(t) => {
                             setIsComparing(false);
-                            handleTeacherClickDetail(t);
+                            handleTeacherClick(t);
                         }}
                     />
                 </>

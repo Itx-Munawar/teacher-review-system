@@ -28,23 +28,11 @@ const TeacherAutocomplete: React.FC<TeacherAutocompleteProps> = ({
     inputRef
 }) => {
     const [suggestions, setSuggestions] = useState<Teacher[]>([]);
-    const [trending, setTrending] = useState<Teacher[]>([]);
     const [open, setOpen] = useState(false);
     const [activeIndex, setActiveIndex] = useState(-1);
     const [showRecent, setShowRecent] = useState(false);
     const boxRef = useRef<HTMLDivElement>(null);
     const { recentSearches, addSearch, removeSearch, clearSearches } = useRecentSearches();
-
-    // Load trending teachers on mount
-    useEffect(() => {
-        searchAllTeachers('', 5).then((res) => {
-            // Sort by review_count descending for trending
-            const sorted = (res.data || [])
-                .sort((a: Teacher, b: Teacher) => (b.review_count || 0) - (a.review_count || 0))
-                .slice(0, 5);
-            setTrending(sorted);
-        }).catch(() => {});
-    }, []);
 
     const debouncedSuggest = useRef(debounce(async (query: string) => {
         try {
@@ -61,9 +49,10 @@ const TeacherAutocomplete: React.FC<TeacherAutocompleteProps> = ({
     useEffect(() => {
         const query = value.trim();
         if (!query) {
+            // Clearing the input closes the suggestion list; recent searches
+            // are opened separately on focus (see handleFocus).
             setSuggestions([]);
-            // Don't close if showing recent
-            if (!showRecent) setOpen(false);
+            setOpen(false);
             return;
         }
         setShowRecent(false);
