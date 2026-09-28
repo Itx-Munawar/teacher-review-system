@@ -4078,9 +4078,49 @@ body {
 }
 
 /* ========== BOTTOM SHEET (review form, mobile) ========== */
+/* Desktop: cap the sheet to the viewport and scroll only the field body, so
+   Cancel/Submit always stay on screen (it was vertically centered with no
+   height cap, so on short laptop screens the buttons landed below the fold). */
 .review-sheet {
     position: relative;
-    padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
+    display: flex;
+    flex-direction: column;
+    max-height: min(680px, calc(100vh - 40px));
+    max-height: min(680px, calc(100dvh - 40px));
+    padding: 1.4rem 1.5rem 1.25rem;
+    overflow: hidden;
+}
+
+.review-sheet .review-form-title {
+    flex-shrink: 0;
+}
+
+.review-sheet .review-form {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.review-sheet .review-form-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.review-sheet .form-buttons {
+    flex-shrink: 0;
+    margin-top: 0.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #f3f0ff;
+}
+
+/* Slightly tighter section cards so the whole sheet reads compact on desktop */
+.review-sheet .form-section {
+    padding: 0.85rem;
+    margin-bottom: 0.75rem;
 }
 
 .review-sheet::before {
@@ -4364,6 +4404,10 @@ body {
         max-width: 100%;
         max-height: none;
         border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+        /* Re-assert the mobile padding — the desktop base .review-sheet rule sits
+           later in the file than the mobile .modal-content rule, so without this
+           the desktop padding would win here too. */
+        padding: 1.5rem 1.25rem 0;
         /* Anchor above the keyboard: on iOS fixed elements don't move when the
            keyboard opens, so lift the sheet by the measured keyboard height. */
         margin: 0 0 var(--kb-height, 0px) 0;
@@ -4371,7 +4415,6 @@ body {
         display: flex;
         flex-direction: column;
         height: calc(100dvh - var(--kb-height, 0px));
-        padding-bottom: 0;
         overflow: hidden;
         transition: margin-bottom 0.15s ease-out;
     }
