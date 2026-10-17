@@ -195,6 +195,18 @@ const invalidateCache = (pattern) => {
     }
 };
 
+// Departments are free text on each teacher row, so normalise what an admin
+// types: collapse whitespace, and reuse the spelling/case of an existing
+// department (case-insensitive match) so "computer science" and
+// "Computer Science" never become two separate filters.
+const normalizeDepartment = (value) => String(value || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+const canonicalDepartment = async (value) => {
+    const cleaned = normalizeDepartment(value);
+    if (!cleaned) return cleaned;
+    const [rows] = await db.query('SELECT department FROM teachers WHERE LOWER(department) = LOWER(?) LIMIT 1', [cleaned]);
+    return rows.length > 0 ? rows[0].department : cleaned;
+};
+
 // ========== SCHEMA BOOTSTRAP ==========
 // Creates tables that may be added after the initial deployment, so the
 // server can auto-migrate on Render without manual SQL.
@@ -349,7 +361,9 @@ app.get('/api/departments', async (req, res) => {
             GROUP BY department
             ORDER BY department
         `);
-        res.set('Cache-Control', 'public, max-age=3600');
+        // Revalidate every time (cheap 304 via ETag) so a department an admin
+        // just added shows up in the site filter immediately, not an hour later.
+        res.set('Cache-Control', 'no-cache');
         res.json(rows);
     } catch (error) {
         console.error('Error fetching departments:', error);
@@ -755,7 +769,8 @@ app.post('/api/admin/teachers', verifyAdmin, csrfValidate, [
     try {
         const { name, department, image_url } = req.body;
         const sanitizedName = name.trim().slice(0, 200);
-        const sanitizedDept = department.trim().slice(0, 200);
+        const sanitizedDept = await canonicalDepartment(department);
+        if (sanitizedDept.length < 2) return res.status(400).json({ error: 'Department must be 2-100 characters' });
         const sanitizedImageUrl = image_url ? image_url.trim().slice(0, 500) : null;
         const [result] = await db.query('INSERT INTO teachers (name, department, image_url) VALUES (?, ?, ?)', [sanitizedName, sanitizedDept, sanitizedImageUrl]);
         await createAuditLog(req.admin.id, 'ADD_TEACHER', `Added teacher: ${sanitizedName}`, req.ip);
@@ -847,7 +862,8 @@ app.put('/api/admin/teachers/:id', verifyAdmin, csrfValidate, [
         const teacherId = req.params.id;
         const { name, department, image_url } = req.body;
         const sanitizedName = name.trim().slice(0, 200);
-        const sanitizedDept = department.trim().slice(0, 200);
+        const sanitizedDept = await canonicalDepartment(department);
+        if (sanitizedDept.length < 2) return res.status(400).json({ error: 'Department must be 2-100 characters' });
         const sanitizedImageUrl = image_url ? image_url.trim().slice(0, 500) : null;
 
         // Check if teacher exists

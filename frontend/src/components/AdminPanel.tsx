@@ -21,6 +21,8 @@ export interface AdminPanelProps {
     setNewTeacherName: (v: string) => void;
     newTeacherDepartment: string;
     setNewTeacherDepartment: (v: string) => void;
+    /** Existing department names, offered as suggestions when adding/editing a teacher */
+    departmentOptions: string[];
     newTeacherImage: string;
     setNewTeacherImage: (v: string) => void;
     totalTeachersCount: number;
@@ -63,6 +65,7 @@ const AdminPanel = memo(({
     setNewTeacherName,
     newTeacherDepartment,
     setNewTeacherDepartment,
+    departmentOptions,
     newTeacherImage,
     setNewTeacherImage,
     totalTeachersCount,
@@ -248,10 +251,16 @@ const AdminPanel = memo(({
                         </>
                     )}
                 </button>
+                {/* Shared by the add form and the inline edit field */}
+                <datalist id="admin-department-options">
+                    {departmentOptions.map((d) => (
+                        <option key={d} value={d} />
+                    ))}
+                </datalist>
                 {showAddTeacherForm && (
                     <form onSubmit={onAddTeacher} className="add-teacher-form">
                         <input type="text" placeholder="Teacher Name" aria-label="New teacher name" value={newTeacherName} onChange={(e) => setNewTeacherName(e.target.value)} required />
-                        <input type="text" placeholder="Department" aria-label="New teacher department" value={newTeacherDepartment} onChange={(e) => setNewTeacherDepartment(e.target.value)} required />
+                        <input type="text" list="admin-department-options" autoComplete="off" maxLength={100} placeholder="Department (pick existing or type new)" aria-label="New teacher department" value={newTeacherDepartment} onChange={(e) => setNewTeacherDepartment(e.target.value)} required />
                         <input type="url" placeholder="Image URL (optional)" aria-label="New teacher image URL" value={newTeacherImage} onChange={(e) => setNewTeacherImage(e.target.value)} />
                         <button type="submit">Save Teacher</button>
                     </form>
@@ -344,6 +353,9 @@ const AdminPanel = memo(({
                                                 type="text"
                                                 value={editDepartment}
                                                 onChange={(e) => setEditDepartment(e.target.value)}
+                                                list="admin-department-options"
+                                                autoComplete="off"
+                                                maxLength={100}
                                                 placeholder="Department"
                                                 aria-label="Edit teacher department"
                                                 className="search-input"

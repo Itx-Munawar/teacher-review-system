@@ -184,12 +184,17 @@ const App: React.FC = () => {
         }
     }, [sortBy, departmentFilter]);
 
-    // Load departments once for the filter dropdown
-    useEffect(() => {
+    // Load departments for the filter dropdown (and the admin department picker).
+    // Re-run after any teacher add/edit/delete so new departments show up site-wide.
+    const loadDepartments = useCallback(() => {
         getDepartments().then((res) => {
             if (res.data && Array.isArray(res.data)) setDepartments(res.data);
         }).catch(() => { /* ignore */ });
     }, []);
+
+    useEffect(() => {
+        loadDepartments();
+    }, [loadDepartments]);
 
     // Pull-to-refresh reloads the teacher list from page 1
     const handlePullRefresh = useCallback(() => loadTeachers(1), [loadTeachers]);
@@ -622,6 +627,7 @@ const App: React.FC = () => {
             await updateTeacher(id, data);
             showToast('Teacher updated successfully!', 'success');
             loadTeachers(1);
+            loadDepartments();
             await loadAdminData();
         } catch (error) {
             console.error('Update error:', error);
@@ -629,7 +635,7 @@ const App: React.FC = () => {
         } finally {
             setAdminMutationLoading(false);
         }
-    }, [loadTeachers, loadAdminData, showToast]);
+    }, [loadTeachers, loadDepartments, loadAdminData, showToast]);
 
     const handleCleanTeacherImages = useCallback(async (dryRun: boolean) => {
         try {
@@ -666,13 +672,14 @@ const App: React.FC = () => {
             setNewTeacherImage('');
             setShowAddTeacherForm(false);
             loadTeachers(1);
+            loadDepartments();
             await loadAdminData();
         } catch (error) {
             showToast('Failed to add teacher', 'error');
         } finally {
             setAdminMutationLoading(false);
         }
-    }, [newTeacherName, newTeacherDepartment, newTeacherImage, loadTeachers, loadAdminData, showToast]);
+    }, [newTeacherName, newTeacherDepartment, newTeacherImage, loadTeachers, loadDepartments, loadAdminData, showToast]);
 
     const handleDeleteTeacher = useCallback(async (id: number) => {
         if (window.confirm('Are you sure you want to delete this teacher? All reviews will also be deleted.')) {
@@ -681,6 +688,7 @@ const App: React.FC = () => {
                 await deleteTeacher(id);
                 showToast('Teacher deleted successfully!', 'success');
                 loadTeachers(1);
+                loadDepartments();
                 if (selectedTeacher?.id === id) {
                     setSelectedTeacher(null);
                     setShowReviewForm(false);
@@ -692,7 +700,7 @@ const App: React.FC = () => {
                 setAdminMutationLoading(false);
             }
         }
-    }, [selectedTeacher, loadTeachers, loadAdminData, showToast]);
+    }, [selectedTeacher, loadTeachers, loadDepartments, loadAdminData, showToast]);
 
     const handleDeleteReview = useCallback(async (id: number) => {
         if (window.confirm('Are you sure you want to delete this review?')) {
@@ -1083,6 +1091,7 @@ const App: React.FC = () => {
                         setNewTeacherName={setNewTeacherName}
                         newTeacherDepartment={newTeacherDepartment}
                         setNewTeacherDepartment={setNewTeacherDepartment}
+                        departmentOptions={departments.map((d) => d.department)}
                         newTeacherImage={newTeacherImage}
                         setNewTeacherImage={setNewTeacherImage}
                         totalTeachersCount={totalTeachersCount}
