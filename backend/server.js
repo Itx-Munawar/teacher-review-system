@@ -681,7 +681,9 @@ app.post('/api/admin/forgot-password', resetLimiter, csrfValidate, async (req, r
         const admin = admins[0];
         const resetToken = crypto.randomBytes(32).toString('hex');
         const tokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
-        await db.query('UPDATE admins SET reset_token = ?, reset_token_expires = ? WHERE id = ?', [resetToken, tokenExpiry, admin.id]);
+        // Store only a SHA-256 hash; the raw token exists only in the emailed link
+        const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+        await db.query('UPDATE admins SET reset_token = ?, reset_token_expires = ? WHERE id = ?', [resetTokenHash, tokenExpiry, admin.id]);
         const frontendUrl = process.env.FRONTEND_URL;
         const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
         await sendEmail(email, 'Password Reset Request', `<p>Click <a href="${resetLink}">here</a> to reset your password. Link expires in 1 hour.</p>`);
@@ -696,8 +698,11 @@ app.post('/api/admin/reset-password', csrfValidate, async (req, res) => {
     // ... (your existing reset password code) ...
     try {
         const { token, newPassword } = req.body;
-        if (!token || !newPassword || newPassword.length < 6) return res.status(400).json({ error: 'Token and new password (min 6 chars) required' });
-        const [admins] = await db.query('SELECT id FROM admins WHERE reset_token = ? AND reset_token_expires > NOW()', [token]);
+        if (!token || typeof token !== 'string' || !newPassword || typeof newPassword !== 'string' || newPassword.length < 10) {
+            return res.status(400).json({ error: 'Token and new password (min 10 chars) required' });
+        }
+        const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+        const [admins] = await db.query('SELECT id FROM admins WHERE reset_token = ? AND reset_token_expires > NOW()', [tokenHash]);
         if (admins.length === 0) return res.status(400).json({ error: 'Invalid or expired token' });
         const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
         await db.query('UPDATE admins SET password = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?', [hashedPassword, admins[0].id]);
@@ -735,7 +740,7 @@ app.post('/api/admin/setup', csrfValidate, async (req, res) => {
         res.json({ success: true, message: 'Admin created. Use new credentials to login.' });
     } catch (error) {
         console.error('Setup error:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Server error' });
     }
 });
 
@@ -944,12 +949,12 @@ app.post('/api/admin/clean-teacher-images', verifyAdmin, csrfValidate, async (re
 app.get('/api/admin/reviews', verifyAdmin, async (req, res) => {
     // ... (your existing get admin reviews code) ...
     try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+        const page = Math.max(parseInt(req.query.page) || 1, 1);
+        const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 100);
         const offset = (page - 1) * limit;
 
         const [reviews] = await db.query(`
-            SELECT r.*, t.name as teacher_name 
+            SELECT r.*, t.name as teacher_name
             FROM reviews r
             JOIN teachers t ON r.teacher_id = t.id
             ORDER BY r.created_at DESC
