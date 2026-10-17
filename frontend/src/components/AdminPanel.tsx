@@ -522,7 +522,7 @@ const AdminPanel = memo(({
                                                 if (!str || str === 'null' || str === '[]') return null;
                                                 const parsed = JSON.parse(str);
                                                 const list = Array.isArray(parsed) ? parsed : [parsed];
-                                                const filtered = list.map((c: any) => String(c).trim()).filter((c: string) => c.length > 0);
+                                                const filtered = list.map((c: unknown) => String(c).trim()).filter((c: string) => c.length > 0);
                                                 if (filtered.length === 0) return null;
                                                 return (
                                                     <div style={{ marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>

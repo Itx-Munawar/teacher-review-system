@@ -1235,50 +1235,6 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
-// Schema status – diagnostic for the Q&A tables and courses column
-app.get('/api/schema-status', async (req, res) => {
-    try {
-        const [questions] = await db.query("SHOW TABLES LIKE 'questions'");
-        const [answers] = await db.query("SHOW TABLES LIKE 'question_answers'");
-        const [coursesCol] = await db.query("SHOW COLUMNS FROM reviews LIKE 'courses'");
-        res.json({
-            questions_table: questions.length > 0,
-            question_answers_table: answers.length > 0,
-            courses_column: coursesCol.length > 0,
-            bootstrap_error: schemaBootstrapError,
-            bootstrap_done: schemaBootstrapDone
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message, bootstrap_error: schemaBootstrapError });
-    }
-});
-
-// Public endpoint to ensure courses column exists (Render cold-start safety net)
-app.get('/api/ensure-courses', async (req, res) => {
-    try {
-        const [coursesCol] = await db.query("SHOW COLUMNS FROM reviews LIKE 'courses'");
-        if (coursesCol.length === 0) {
-            await db.query('ALTER TABLE reviews ADD COLUMN courses VARCHAR(2000) NULL AFTER user_name');
-            console.log('✅ Added courses column to reviews table (via ensure-courses)');
-            res.json({ success: true, message: 'Courses column added' });
-        } else {
-            res.json({ success: true, message: 'Courses column already exists' });
-        }
-    } catch (error) {
-        console.error('⚠️ ensure-courses error:', error.message);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-app.get('/api/db-test', async (req, res) => {
-    try {
-        const [result] = await db.query('SELECT 1 as test');
-        res.json({ status: 'Connected to DB', result });
-    } catch (error) {
-        res.status(500).json({ status: 'DB connection failed', error: error.message });
-    }
-});
-
 // Start server
 app.listen(PORT, () => {
     console.log(`\n🚀 Server running on http://localhost:${PORT}`);
