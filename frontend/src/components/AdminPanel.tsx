@@ -12,10 +12,10 @@ export interface AdminPanelProps {
     onAddTeacher: (e: React.FormEvent) => void;
     onDeleteTeacher: (id: number) => void;
     onUpdateTeacher: (id: number, data: { name: string; department: string; image_url?: string }) => void;
-    onDeleteReview: (id: number) => void;
-    onUpdateReview: (id: number, data: { comment: string; user_name?: string; is_approved?: boolean }) => void;
-    onApproveReview: (id: number) => void;
-    onRejectReview: (id: number) => void;
+    onDeleteReview: (id: number) => void | Promise<void>;
+    onUpdateReview: (id: number, data: { comment: string; user_name?: string; is_approved?: boolean }) => void | Promise<void>;
+    onApproveReview: (id: number) => void | Promise<void>;
+    onRejectReview: (id: number) => void | Promise<void>;
     onLogout: () => void;
     showAddTeacherForm: boolean;
     setShowAddTeacherForm: (v: boolean) => void;
@@ -171,7 +171,7 @@ const AdminPanel = memo(({
     };
 
     // Review edit handlers
-    const startEditReview = (review: AdminReview) => {
+    const startEditReview = (review: { id: number; comment: string; user_name?: string }) => {
         setEditingReviewId(review.id);
         setEditReviewComment(review.comment);
         setEditReviewUserName(review.user_name || '');
@@ -183,6 +183,15 @@ const AdminPanel = memo(({
         setEditReviewUserName('');
     };
 
+    // Re-fetch the open teacher detail so edits/deletes/approvals show
+    // immediately in the teacher-section detail panel.
+    const refreshTeacherDetail = async () => {
+        if (detailTeacherId) {
+            const detail = await onLoadTeacherDetail(detailTeacherId);
+            setTeacherDetail(detail);
+        }
+    };
+
     const handleUpdateReview = async (id: number, approve?: boolean) => {
         await onUpdateReview(id, {
             comment: editReviewComment,
@@ -190,7 +199,61 @@ const AdminPanel = memo(({
             ...(approve ? { is_approved: true } : {})
         });
         cancelEditReview();
+        await refreshTeacherDetail();
     };
+
+    const handleDeleteReview = async (id: number) => {
+        await onDeleteReview(id);
+        await refreshTeacherDetail();
+    };
+
+    const handleApproveReview = async (id: number) => {
+        await onApproveReview(id);
+        await refreshTeacherDetail();
+    };
+
+    const handleRejectReview = async (id: number) => {
+        await onRejectReview(id);
+        await refreshTeacherDetail();
+    };
+
+    // Shared inline edit form, used by the reviews tab and the teacher
+    // detail panel so both offer edit + save-and-approve.
+    const renderReviewEditForm = (reviewId: number, isPending: boolean) => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+            <textarea
+                value={editReviewComment}
+                onChange={(e) => setEditReviewComment(e.target.value)}
+                placeholder="Review comment"
+                aria-label="Edit review comment"
+                className="search-input"
+                style={{ margin: 0, minHeight: '60px', resize: 'vertical' }}
+            />
+            <input
+                type="text"
+                value={editReviewUserName}
+                onChange={(e) => setEditReviewUserName(e.target.value)}
+                placeholder="Reviewer name"
+                aria-label="Edit reviewer name"
+                className="search-input"
+                style={{ margin: 0 }}
+            />
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button onClick={() => handleUpdateReview(reviewId)} className="btn-submit" style={{ padding: '4px 12px' }} disabled={adminMutationLoading}>Save</button>
+                {isPending && (
+                    <button
+                        onClick={() => handleUpdateReview(reviewId, true)}
+                        className="btn-submit"
+                        style={{ padding: '4px 12px', background: '#10b981', borderColor: '#10b981' }}
+                        disabled={adminMutationLoading}
+                    >
+                        Save &amp; Approve
+                    </button>
+                )}
+                <button onClick={cancelEditReview} className="btn-cancel" style={{ padding: '4px 12px' }}>Cancel</button>
+            </div>
+        </div>
+    );
 
     const toggleTeacherDetail = async (id: number) => {
         if (detailTeacherId === id) {
@@ -450,8 +513,8 @@ const AdminPanel = memo(({
                                                     <>
                                                         <span className="admin-pending-badge">Pending</span>
                                                         <span style={{ display: 'inline-flex', gap: '6px' }}>
-                                                            <button onClick={() => onApproveReview(review.id)} className="admin-mini-btn admin-mini-approve" disabled={adminMutationLoading}>Approve</button>
-                                                            <button onClick={() => onRejectReview(review.id)} className="admin-mini-btn admin-mini-reject" disabled={adminMutationLoading}>Reject</button>
+                                                            <button onClick={() => handleApproveReview(review.id)} className="admin-mini-btn admin-mini-approve" disabled={adminMutationLoading}>Approve</button>
+                                                            <button onClick={() => handleRejectReview(review.id)} className="admin-mini-btn admin-mini-reject" disabled={adminMutationLoading}>Reject</button>
                                                         </span>
                                                     </>
                                                 )}
@@ -459,7 +522,19 @@ const AdminPanel = memo(({
                                                                     {review.courses && (
                                                                         <div className="admin-detail-review-courses">📖 {review.courses}</div>
                                                                     )}
-                                                                    <p>{review.comment}</p>
+                                                                    {editingReviewId === review.id ? (
+                                                                        renderReviewEditForm(review.id, Number(review.is_approved) === 0)
+                                                                    ) : (
+                                                                        <>
+                                                                            <p>{review.comment}</p>
+                                                                            <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                                                                                <button onClick={() => startEditReview(review)} className="edit-btn" aria-label="Edit review" disabled={adminMutationLoading}>
+                                                                                    <Icon name="edit" size={14} /> Edit
+                                                                                </button>
+                                                                                <button onClick={() => handleDeleteReview(review.id)} className="delete-btn" disabled={adminMutationLoading}>Delete</button>
+                                                                            </div>
+                                                                        </>
+                                                                    )}
                                                                 </div>
                                                             ))
                                                         )}
@@ -507,39 +582,7 @@ const AdminPanel = memo(({
                             return (
                             <div key={review.id} className="admin-item">
                                 {isReviewEditing ? (
-                                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                        <textarea
-                                            value={editReviewComment}
-                                            onChange={(e) => setEditReviewComment(e.target.value)}
-                                            placeholder="Review comment"
-                                            aria-label="Edit review comment"
-                                            className="search-input"
-                                            style={{ margin: 0, minHeight: '60px', resize: 'vertical' }}
-                                        />
-                                        <input
-                                            type="text"
-                                            value={editReviewUserName}
-                                            onChange={(e) => setEditReviewUserName(e.target.value)}
-                                            placeholder="Reviewer name"
-                                            aria-label="Edit reviewer name"
-                                            className="search-input"
-                                            style={{ margin: 0 }}
-                                        />
-                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                            <button onClick={() => handleUpdateReview(review.id)} className="btn-submit" style={{ padding: '4px 12px' }} disabled={adminMutationLoading}>Save</button>
-                                            {isPending && (
-                                                <button
-                                                    onClick={() => handleUpdateReview(review.id, true)}
-                                                    className="btn-submit"
-                                                    style={{ padding: '4px 12px', background: '#10b981', borderColor: '#10b981' }}
-                                                    disabled={adminMutationLoading}
-                                                >
-                                                    Save &amp; Approve
-                                                </button>
-                                            )}
-                                            <button onClick={cancelEditReview} className="btn-cancel" style={{ padding: '4px 12px' }}>Cancel</button>
-                                        </div>
-                                    </div>
+                                    renderReviewEditForm(review.id, isPending)
                                 ) : (
                                 <>
                                     <div className="review-info">
@@ -583,11 +626,11 @@ const AdminPanel = memo(({
                                         </button>
                                         {isPending && (
                                             <>
-                                                <button onClick={() => onApproveReview(review.id)} className="admin-mini-btn admin-mini-approve" disabled={adminMutationLoading}>Approve</button>
-                                                <button onClick={() => onRejectReview(review.id)} className="admin-mini-btn admin-mini-reject" disabled={adminMutationLoading}>Reject</button>
+                                                <button onClick={() => handleApproveReview(review.id)} className="admin-mini-btn admin-mini-approve" disabled={adminMutationLoading}>Approve</button>
+                                                <button onClick={() => handleRejectReview(review.id)} className="admin-mini-btn admin-mini-reject" disabled={adminMutationLoading}>Reject</button>
                                             </>
                                         )}
-                                        <button onClick={() => onDeleteReview(review.id)} className="delete-btn" disabled={adminMutationLoading}>Delete</button>
+                                        <button onClick={() => handleDeleteReview(review.id)} className="delete-btn" disabled={adminMutationLoading}>Delete</button>
                                     </div>
                                 </>
                                 )}
