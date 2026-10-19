@@ -1404,18 +1404,6 @@ const App: React.FC = () => {
                         <h3 className="gradient-text modal-heading"><Icon name="book-open" size={22} /> About UMT Teacher Reviews</h3>
                         <p>This platform allows students to write and read reviews about their teachers anonymously.</p>
                         <hr />
-                        <p><strong>Developer:</strong> Munawar Hussain</p>
-                        <p><strong>Supporters &amp; Contributors:</strong></p>
-                        <ul style={{ textAlign: 'left', display: 'inline-block', margin: '0 auto', paddingLeft: '1.5rem' }}>
-                            <li>Ahtasham Bilal</li>
-                            <li>Amjad Ali Awan</li>
-                            <li>Muhammad Anas</li>
-                            <li>Muhamad Ahmad</li>
-                            <li>Muhammad Dawood</li>
-                            <li>Umair Hassan</li>
-                            <li>Muhammad Khaleel</li>
-                            <li>Farhan Sarwar</li>
-                        </ul>
                         <p><strong>Version:</strong> 2.0</p>
                         <button onClick={() => setShowAboutModal(false)} className="modal-close-btn">Close</button>
                     </div>
