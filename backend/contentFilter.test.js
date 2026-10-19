@@ -8,7 +8,7 @@
  */
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { detectFlaggedText } = require('./contentFilter');
+const { detectFlaggedText, sweepExistingReviews, parseCourseList } = require('./contentFilter');
 
 const isFlagged = (text) => detectFlaggedText(text).flagged;
 
@@ -143,4 +143,67 @@ test('matches carry kind and token context', () => {
     for (const m of r.matches) {
         assert.ok(m.entry && m.token && m.kind, 'match fields present');
     }
+});
+
+// ---------------------------------------------------------------------------
+// Retroactive sweep over existing reviews
+// ---------------------------------------------------------------------------
+
+const sweepRows = () => [
+    { id: 1, comment: 'fucking terrible course', user_name: 'A', courses: null, is_approved: 1 }, // flags -> queue
+    { id: 2, comment: 'clear explanations, helpful', user_name: 'B', courses: null, is_approved: 1 }, // clean -> untouched
+    { id: 3, comment: 'kutta teacher', user_name: 'C', courses: null, is_approved: 0 }, // flagged, already queued
+    { id: 4, comment: 'good lectures', user_name: 'D', courses: '["bhen chod"]', is_approved: 1 }, // flags via courses
+    { id: 5, comment: 'rejected earlier by admin', user_name: 'E', courses: null, is_approved: 0 } // clean, manually held
+];
+
+const makeDb = (rows, updates) => ({
+    query: async (sql) => {
+        if (sql.includes('FROM reviews')) return [rows, []];
+        updates.push(sql);
+        return [{ affectedRows: 0 }, []];
+    }
+});
+
+test('sweep queues flagged approved reviews and never loosens others', async () => {
+    const updates = [];
+    const result = await sweepExistingReviews(makeDb(sweepRows(), updates));
+
+    assert.strictEqual(result.scanned, 5);
+    assert.strictEqual(result.toQueue, 2);
+    assert.deepStrictEqual(result.flaggedIds, [1, 4]);
+    assert.strictEqual(result.alreadyQueued, 1); // id 3 only
+    assert.strictEqual(updates.length, 1, 'one chunked UPDATE');
+    assert.ok(updates[0].includes('SET is_approved = 0'), 'only tightens to 0');
+    assert.ok(!updates[0].includes('is_approved = 1'), 'never writes 1');
+});
+
+test('sweep dryRun previews without writing', async () => {
+    const updates = [];
+    const result = await sweepExistingReviews(makeDb(sweepRows(), updates), { dryRun: true });
+
+    assert.strictEqual(result.toQueue, 2);
+    assert.strictEqual(result.dryRun, true);
+    assert.strictEqual(updates.length, 0, 'no UPDATE on dry run');
+});
+
+test('sweep is idempotent once rows are queued', async () => {
+    const rows = [
+        { id: 1, comment: 'fucking terrible', user_name: 'A', courses: null, is_approved: 0 },
+        { id: 2, comment: 'still great', user_name: 'B', courses: null, is_approved: 1 }
+    ];
+    const updates = [];
+    const result = await sweepExistingReviews(makeDb(rows, updates));
+
+    assert.strictEqual(result.toQueue, 0, 'nothing new to queue');
+    assert.strictEqual(result.alreadyQueued, 1);
+    assert.strictEqual(updates.length, 0, 'no writes on second run');
+});
+
+test('parseCourseList handles JSON, legacy text, null and junk', () => {
+    assert.deepStrictEqual(parseCourseList('["Math", " Physics "]'), ['Math', 'Physics']);
+    assert.deepStrictEqual(parseCourseList('null'), []);
+    assert.deepStrictEqual(parseCourseList(null), []);
+    assert.deepStrictEqual(parseCourseList('["bhen chod"]'), ['bhen chod']);
+    assert.deepStrictEqual(parseCourseList('Legacy Course'), ['Legacy Course']);
 });

@@ -243,4 +243,75 @@ const detectFlaggedText = (text) => {
     return { flagged: matches.length > 0, matches };
 };
 
-module.exports = { detectFlaggedText };
+/**
+ * Parse a stored courses value (JSON string, legacy plain text, or Buffer)
+ * into a clean array of course names.
+ */
+const parseCourseList = (raw) => {
+    if (raw === null || raw === undefined) return [];
+    const str = Buffer.isBuffer(raw) ? raw.toString('utf8') : String(raw);
+    if (!str || str === 'null' || str === '[]') return [];
+    try {
+        const parsed = JSON.parse(str);
+        return (Array.isArray(parsed) ? parsed : [parsed]).map((c) => String(c).trim()).filter(Boolean);
+    } catch (error) {
+        const fallback = str.trim();
+        return fallback ? [fallback] : [];
+    }
+};
+
+/**
+ * Run the NLP content filter over every review already stored in the
+ * database (retroactive moderation for rows created before the filter
+ * existed).
+ *
+ * Only ever TIGHTENS moderation: an approved review that flags is queued
+ * (is_approved = 0). Clean rows are never touched, so manually rejected
+ * or pending reviews are never auto-approved, and re-running is safe.
+ *
+ * @param {{query: Function}} db mysql2 promise pool (or a compatible mock)
+ * @param {{dryRun?: boolean}} options preview without updating anything
+ * @returns {Promise<{scanned: number, toQueue: number, alreadyQueued: number,
+ *                    flaggedIds: number[], dryRun: boolean}>}
+ */
+const sweepExistingReviews = async (db, { dryRun = false } = {}) => {
+    const [rows] = await db.query(
+        'SELECT id, comment, user_name, courses, is_approved FROM reviews'
+    );
+
+    const toQueueIds = [];
+    let alreadyQueued = 0;
+
+    for (const row of rows) {
+        const fields = [row.comment, row.user_name, ...parseCourseList(row.courses)];
+        const flagged = fields.some((value) => detectFlaggedText(String(value)).flagged);
+        if (!flagged) continue;
+        if (Number(row.is_approved) === 0) {
+            alreadyQueued += 1;
+            continue;
+        }
+        toQueueIds.push(row.id);
+    }
+
+    if (!dryRun && toQueueIds.length > 0) {
+        const CHUNK = 500;
+        for (let i = 0; i < toQueueIds.length; i += CHUNK) {
+            const chunk = toQueueIds.slice(i, i + CHUNK);
+            const placeholders = chunk.map(() => '?').join(',');
+            await db.query(
+                `UPDATE reviews SET is_approved = 0 WHERE id IN (${placeholders})`,
+                chunk
+            );
+        }
+    }
+
+    return {
+        scanned: rows.length,
+        toQueue: toQueueIds.length,
+        alreadyQueued,
+        flaggedIds: toQueueIds,
+        dryRun
+    };
+};
+
+module.exports = { detectFlaggedText, sweepExistingReviews, parseCourseList };

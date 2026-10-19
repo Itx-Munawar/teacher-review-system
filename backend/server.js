@@ -10,7 +10,7 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const db = require('./db');
 const { csrfSetCookie, csrfValidate } = require('./csrf');
-const { detectFlaggedText } = require('./contentFilter');
+const { detectFlaggedText, sweepExistingReviews } = require('./contentFilter');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -208,6 +208,38 @@ const canonicalDepartment = async (value) => {
     return rows.length > 0 ? rows[0].department : cleaned;
 };
 
+// ========== ONE-TIME RETROACTIVE REVIEW FILTER SWEEP ==========
+// Runs the NLP content filter over reviews that existed before the filter
+// was added: flagged approved reviews are queued for admin moderation.
+// Gated by an audit_logs marker so it runs once (not on every boot); the
+// admin endpoint POST /api/admin/filter-reviews re-runs it explicitly.
+let reviewSweepAttempts = 0;
+let reviewSweepDone = false;
+
+const runReviewFilterSweep = async () => {
+    if (reviewSweepDone) return;
+    try {
+        const [marker] = await db.query("SELECT id FROM audit_logs WHERE action = 'SWEEP_REVIEWS' LIMIT 1");
+        if (marker.length > 0) {
+            reviewSweepDone = true;
+            return;
+        }
+        const result = await sweepExistingReviews(db);
+        if (result.toQueue > 0) invalidateCache('teachers');
+        reviewSweepDone = true;
+        await db.query(
+            "INSERT INTO audit_logs (action, details, ip_address) VALUES ('SWEEP_REVIEWS', ?, 'system')",
+            [JSON.stringify({ scanned: result.scanned, queued: result.toQueue, alreadyQueued: result.alreadyQueued })]
+        );
+        console.log(`🔎 Review filter sweep: scanned ${result.scanned}, queued ${result.toQueue} for admin review (${result.alreadyQueued} already queued)`);
+    } catch (error) {
+        reviewSweepAttempts += 1;
+        console.error('❌ Review filter sweep failed:', error.message);
+        // The DB may still be warming up (or schema.sql not applied yet).
+        if (reviewSweepAttempts < 10) setTimeout(runReviewFilterSweep, 30000);
+    }
+};
+
 // ========== SCHEMA BOOTSTRAP ==========
 // Creates tables that may be added after the initial deployment, so the
 // server can auto-migrate on Render without manual SQL.
@@ -275,6 +307,8 @@ const runSchemaBootstrap = async () => {
         schemaBootstrapError = null;
         schemaBootstrapDone = true;
         console.log('✅ Schema bootstrap complete (questions, question_answers, custom_courses, cleanup)');
+        // Schema is up: retroactively filter any pre-existing reviews.
+        runReviewFilterSweep();
     } catch (error) {
         schemaBootstrapError = error.message;
         console.error('❌ Schema bootstrap failed:', error.message);
@@ -1080,6 +1114,38 @@ app.put('/api/admin/reviews/:id', verifyAdmin, csrfValidate, [
         res.json({ success: true, message: is_approved !== undefined ? (is_approved ? 'Review approved' : 'Review rejected') : 'Review updated successfully' });
     } catch (error) {
         console.error('Error editing review:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// POST /api/admin/filter-reviews - run the NLP content filter over ALL
+// existing reviews (?dryRun=true previews without changing anything).
+// Flagged approved reviews are queued (is_approved = 0); nothing is ever
+// auto-approved, so manually held reviews stay held.
+app.post('/api/admin/filter-reviews', verifyAdmin, csrfValidate, async (req, res) => {
+    try {
+        const dryRun = String(req.query.dryRun) === 'true' || (req.body && req.body.dryRun === true);
+        const result = await sweepExistingReviews(db, { dryRun });
+        if (!dryRun) {
+            if (result.toQueue > 0) invalidateCache('teachers');
+            // An explicit run also satisfies the one-time boot sweep.
+            reviewSweepDone = true;
+            await createAuditLog(
+                req.admin.id,
+                'SWEEP_REVIEWS',
+                `Scanned ${result.scanned}, queued ${result.toQueue} (${result.alreadyQueued} already queued)`,
+                req.ip
+            );
+        }
+        const { flaggedIds, ...summary } = result;
+        res.json({
+            success: true,
+            ...summary,
+            flaggedIdCount: flaggedIds.length,
+            flaggedIds: flaggedIds.slice(0, 100)
+        });
+    } catch (error) {
+        console.error('Error filtering existing reviews:', error);
         res.status(500).json({ error: 'Database error' });
     }
 });
