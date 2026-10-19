@@ -14,6 +14,8 @@ import {
     deleteTeacher,
     deleteReview,
     updateReview,
+    approveReview,
+    rejectReview,
     getAdminReviews,
     getAdminQuestions,
     getAdminStats,
@@ -758,6 +760,40 @@ const App: React.FC = () => {
         }
     }, [selectedTeacher, loadAdminData, showToast]);
 
+    const handleApproveReview = useCallback(async (id: number) => {
+        setAdminMutationLoading(true);
+        try {
+            await approveReview(id);
+            showToast('Review approved!', 'success');
+            await loadAdminData();
+            if (selectedTeacher) {
+                const response = await getTeacherDetail(selectedTeacher.id);
+                setSelectedTeacher(mapTeacherDetail(response.data, selectedTeacher));
+            }
+        } catch (error) {
+            showToast('Failed to approve review', 'error');
+        } finally {
+            setAdminMutationLoading(false);
+        }
+    }, [selectedTeacher, loadAdminData, showToast]);
+
+    const handleRejectReview = useCallback(async (id: number) => {
+        setAdminMutationLoading(true);
+        try {
+            await rejectReview(id);
+            showToast('Review rejected!', 'success');
+            await loadAdminData();
+            if (selectedTeacher) {
+                const response = await getTeacherDetail(selectedTeacher.id);
+                setSelectedTeacher(mapTeacherDetail(response.data, selectedTeacher));
+            }
+        } catch (error) {
+            showToast('Failed to reject review', 'error');
+        } finally {
+            setAdminMutationLoading(false);
+        }
+    }, [selectedTeacher, loadAdminData, showToast]);
+
 
 
     const handleSubmitReview = useCallback(async (e: React.FormEvent) => {
@@ -1116,6 +1152,8 @@ const App: React.FC = () => {
                         onReviewCourse={handleReviewCustomCourse}
                         onLoadTeacherDetail={handleLoadTeacherDetail}
                         onCleanTeacherImages={handleCleanTeacherImages}
+                        onApproveReview={handleApproveReview}
+                        onRejectReview={handleRejectReview}
                     />
                     </ErrorBoundary>
                 </div>

@@ -557,7 +557,7 @@ const AdminPanel = memo(({
                                     <div>
                                         <button onClick={() => startEditReview(review)} className="edit-btn" style={{ marginRight: '8px' }} aria-label="Edit review" disabled={adminMutationLoading}>
                                             <Icon name="edit" size={14} />
-                                    {review.is_approved === 0 && (
+                                    {review.is_approved === false && (
                                         <>
 
                                             <button className="admin-mini-btn admin-mini-approve" disabled={adminMutationLoading}> Approve </button>
