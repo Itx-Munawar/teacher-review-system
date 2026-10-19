@@ -8,7 +8,7 @@
  */
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { detectFlaggedText, sweepExistingReviews, parseCourseList } = require('./contentFilter');
+const { detectFlaggedText, sweepExistingReviews, sweepExistingQa, parseCourseList } = require('./contentFilter');
 
 const isFlagged = (text) => detectFlaggedText(text).flagged;
 
@@ -206,4 +206,88 @@ test('parseCourseList handles JSON, legacy text, null and junk', () => {
     assert.deepStrictEqual(parseCourseList(null), []);
     assert.deepStrictEqual(parseCourseList('["bhen chod"]'), ['bhen chod']);
     assert.deepStrictEqual(parseCourseList('Legacy Course'), ['Legacy Course']);
+});
+
+// ---------------------------------------------------------------------------
+// Retroactive Q&A / custom-course sweep
+// ---------------------------------------------------------------------------
+
+const qaData = () => ({
+    questions: [
+        { id: 11, question: 'fucking impossible exam?', is_approved: 1 }, // flags -> queue
+        { id: 12, question: 'is the final cumulative?', is_approved: 1 }, // clean
+        { id: 13, question: 'kutta teacher?', is_approved: 0 } // flagged, already queued
+    ],
+    answers: [
+        { id: 21, answer: 'this guy is a bastard', is_approved: 1 }, // flags -> queue
+        { id: 22, answer: 'yes, week 6 onward', is_approved: 1 } // clean
+    ],
+    courses: [
+        { id: 31, name: 'bhen chod 101', status: 'approved' }, // flags -> demote
+        { id: 32, name: 'Calculus I', status: 'approved' }, // clean
+        { id: 33, name: 'bakwas course', status: 'pending' }, // flagged, already pending
+        { id: 34, name: 'gandu studies', status: 'rejected' } // flagged, rejected stays
+    ]
+});
+
+const makeQaDb = (data, updates) => ({
+    query: async (sql) => {
+        if (sql.startsWith('SELECT')) {
+            if (sql.includes('question_answers')) return [data.answers, []];
+            if (sql.includes('FROM questions')) return [data.questions, []];
+            if (sql.includes('custom_courses')) return [data.courses, []];
+        }
+        updates.push(sql);
+        return [{ affectedRows: 0 }, []];
+    }
+});
+
+test('Q&A sweep tightens only: queues flagged, keeps rejected, demotes approved courses', async () => {
+    const updates = [];
+    const result = await sweepExistingQa(makeQaDb(qaData(), updates));
+
+    assert.deepStrictEqual(
+        { toQueue: result.questions.toQueue, already: result.questions.alreadyQueued, ids: result.questions.flaggedIds },
+        { toQueue: 1, already: 1, ids: [11] }
+    );
+    assert.deepStrictEqual(
+        { toQueue: result.answers.toQueue, ids: result.answers.flaggedIds },
+        { toQueue: 1, ids: [21] }
+    );
+    assert.deepStrictEqual(
+        { demote: result.courses.toDemote, already: result.courses.alreadyPending, ids: result.courses.flaggedIds },
+        { demote: 1, already: 1, ids: [31] }
+    );
+
+    assert.strictEqual(updates.length, 3, 'one UPDATE per affected table');
+    assert.ok(updates[0].includes('UPDATE questions SET is_approved = 0'), 'questions tighten to 0');
+    assert.ok(updates[1].includes('UPDATE question_answers SET is_approved = 0'), 'answers tighten to 0');
+    assert.ok(updates[2].includes("UPDATE custom_courses SET status = 'pending'"), 'courses demote to pending');
+    assert.ok(!updates.some((u) => u.includes('= 1')), 'never writes 1');
+});
+
+test('Q&A sweep dryRun previews without writing', async () => {
+    const updates = [];
+    const result = await sweepExistingQa(makeQaDb(qaData(), updates), { dryRun: true });
+
+    assert.strictEqual(result.questions.toQueue, 1);
+    assert.strictEqual(result.answers.toQueue, 1);
+    assert.strictEqual(result.courses.toDemote, 1);
+    assert.strictEqual(result.dryRun, true);
+    assert.strictEqual(updates.length, 0, 'no UPDATE on dry run');
+});
+
+test('Q&A sweep is idempotent once rows are queued', async () => {
+    const data = {
+        questions: [{ id: 1, question: 'shit exam', is_approved: 0 }],
+        answers: [{ id: 2, answer: 'damn hard', is_approved: 0 }],
+        courses: [{ id: 3, name: 'chutiya course', status: 'pending' }]
+    };
+    const updates = [];
+    const result = await sweepExistingQa(makeQaDb(data, updates));
+
+    assert.strictEqual(result.questions.toQueue, 0);
+    assert.strictEqual(result.answers.toQueue, 0);
+    assert.strictEqual(result.courses.toDemote, 0);
+    assert.strictEqual(updates.length, 0, 'no writes on second run');
 });

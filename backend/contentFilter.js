@@ -314,4 +314,64 @@ const sweepExistingReviews = async (db, { dryRun = false } = {}) => {
     };
 };
 
-module.exports = { detectFlaggedText, sweepExistingReviews, parseCourseList };
+/**
+ * Retroactive sweep for questions, answers and custom course suggestions.
+ * Tightens only: flagged approved rows become pending (0), flagged
+ * approved courses drop back to 'pending'. Rejected/pending rows are
+ * never loosened and nothing is auto-approved.
+ *
+ * @param {{query: Function}} db mysql2 promise pool (or a compatible mock)
+ * @param {{dryRun?: boolean}} options preview without updating anything
+ */
+const sweepExistingQa = async (db, { dryRun = false } = {}) => {
+    const [questions] = await db.query('SELECT id, question, is_approved FROM questions');
+    const [answers] = await db.query('SELECT id, answer, is_approved FROM question_answers');
+    const [courses] = await db.query('SELECT id, name, status FROM custom_courses');
+
+    const partition = (rows, field) => {
+        const toQueue = [];
+        let alreadyQueued = 0;
+        for (const row of rows) {
+            if (!detectFlaggedText(String(row[field] || '')).flagged) continue;
+            if (Number(row.is_approved) === 0) alreadyQueued += 1;
+            else toQueue.push(row.id);
+        }
+        return { toQueue, alreadyQueued };
+    };
+
+    const q = partition(questions, 'question');
+    const a = partition(answers, 'answer');
+
+    const coursesToDemote = [];
+    let coursesAlreadyPending = 0;
+    for (const row of courses) {
+        if (!detectFlaggedText(String(row.name || '')).flagged) continue;
+        if (row.status === 'approved') coursesToDemote.push(row.id);
+        else if (row.status === 'pending') coursesAlreadyPending += 1;
+        // rejected stays rejected
+    }
+
+    const updateByIds = async (sql, ids) => {
+        const CHUNK = 500;
+        for (let i = 0; i < ids.length; i += CHUNK) {
+            const chunk = ids.slice(i, i + CHUNK);
+            const placeholders = chunk.map(() => '?').join(',');
+            await db.query(sql.replace('?', placeholders), chunk);
+        }
+    };
+
+    if (!dryRun) {
+        if (q.toQueue.length > 0) await updateByIds('UPDATE questions SET is_approved = 0 WHERE id IN (?)', q.toQueue);
+        if (a.toQueue.length > 0) await updateByIds('UPDATE question_answers SET is_approved = 0 WHERE id IN (?)', a.toQueue);
+        if (coursesToDemote.length > 0) await updateByIds("UPDATE custom_courses SET status = 'pending' WHERE id IN (?)", coursesToDemote);
+    }
+
+    return {
+        questions: { scanned: questions.length, toQueue: q.toQueue.length, alreadyQueued: q.alreadyQueued, flaggedIds: q.toQueue },
+        answers: { scanned: answers.length, toQueue: a.toQueue.length, alreadyQueued: a.alreadyQueued, flaggedIds: a.toQueue },
+        courses: { scanned: courses.length, toDemote: coursesToDemote.length, alreadyPending: coursesAlreadyPending, flaggedIds: coursesToDemote },
+        dryRun
+    };
+};
+
+module.exports = { detectFlaggedText, sweepExistingReviews, sweepExistingQa, parseCourseList };

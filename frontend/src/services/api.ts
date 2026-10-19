@@ -175,6 +175,10 @@ export const deleteReview = (id: number) => {
     return api.delete(`/admin/reviews/${id}`);
 };
 
+export const bulkReviewDecision = (ids: number[], action: 'approve' | 'reject') => {
+    return api.post('/admin/reviews/bulk', { ids, action });
+};
+
 export const approveReview = (id: number) => {
     return api.put(`/admin/reviews/${id}`, { is_approved: true });
 };
@@ -195,6 +199,14 @@ export const getAdminQuestions = (page: number = 1, limit: number = 50) => {
 
 export const deleteQuestion = (id: number) => {
     return api.delete(`/admin/questions/${id}`);
+};
+
+export const updateQuestion = (id: number, data: { question?: string; is_approved?: boolean }) => {
+    return api.put(`/admin/questions/${id}`, data);
+};
+
+export const updateAnswer = (id: number, data: { answer?: string; is_approved?: boolean }) => {
+    return api.put(`/admin/answers/${id}`, data);
 };
 
 export const getAdminStats = () => {

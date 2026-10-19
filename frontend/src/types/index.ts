@@ -39,7 +39,9 @@ export interface AdminQuestion {
     teacher_name: string;
     question: string;
     answer_count: number;
+    is_approved: number;
     created_at: string;
+    answers?: { id: number; question_id: number; answer: string; is_approved: number; created_at: string }[];
 }
 
 export interface AdminTeacherReview extends Review {

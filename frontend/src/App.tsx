@@ -20,6 +20,9 @@ import {
     getAdminQuestions,
     getAdminStats,
     deleteQuestion,
+    updateQuestion,
+    updateAnswer,
+    bulkReviewDecision,
     submitReview,
     getAdminCustomCourses,
     reviewCustomCourse,
@@ -796,6 +799,46 @@ const App: React.FC = () => {
 
 
 
+    const handleUpdateQuestion = useCallback(async (id: number, data: { question?: string; is_approved?: boolean }) => {
+        setAdminMutationLoading(true);
+        try {
+            const res = await updateQuestion(id, data);
+            showToast(res.data?.message || 'Question updated', 'success');
+            await loadAdminData();
+        } catch (error) {
+            showToast('Failed to update question', 'error');
+        } finally {
+            setAdminMutationLoading(false);
+        }
+    }, [loadAdminData, showToast]);
+
+    const handleUpdateAnswer = useCallback(async (id: number, data: { answer?: string; is_approved?: boolean }) => {
+        setAdminMutationLoading(true);
+        try {
+            const res = await updateAnswer(id, data);
+            showToast(res.data?.message || 'Answer updated', 'success');
+            await loadAdminData();
+        } catch (error) {
+            showToast('Failed to update answer', 'error');
+        } finally {
+            setAdminMutationLoading(false);
+        }
+    }, [loadAdminData, showToast]);
+
+    const handleBulkReviewDecision = useCallback(async (ids: number[], action: 'approve' | 'reject') => {
+        setAdminMutationLoading(true);
+        try {
+            const res = await bulkReviewDecision(ids, action);
+            const updated = res.data?.updated ?? ids.length;
+            showToast(`${updated} review(s) ${action === 'approve' ? 'approved' : 'rejected'}`, 'success');
+            await loadAdminData();
+        } catch (error) {
+            showToast('Bulk update failed', 'error');
+        } finally {
+            setAdminMutationLoading(false);
+        }
+    }, [loadAdminData, showToast]);
+
     const handleSubmitReview = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedTeacher) {
@@ -1148,6 +1191,9 @@ const App: React.FC = () => {
                         adminReviewsPage={adminReviewsPage}
                         adminQuestions={adminQuestions}
                         onDeleteQuestion={handleDeleteQuestion}
+                        onUpdateQuestion={handleUpdateQuestion}
+                        onUpdateAnswer={handleUpdateAnswer}
+                        onBulkReviewDecision={handleBulkReviewDecision}
                         adminMutationLoading={adminMutationLoading}
                         adminLoadingMoreQuestions={adminLoadingMoreQuestions}
                         adminQuestionsPage={adminQuestionsPage}

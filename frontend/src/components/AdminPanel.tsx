@@ -44,6 +44,9 @@ export interface AdminPanelProps {
     adminReviewsPage: number;
     adminQuestions: AdminQuestion[];
     onDeleteQuestion: (id: number) => void;
+    onUpdateQuestion: (id: number, data: { question?: string; is_approved?: boolean }) => void | Promise<void>;
+    onUpdateAnswer: (id: number, data: { answer?: string; is_approved?: boolean }) => void | Promise<void>;
+    onBulkReviewDecision: (ids: number[], action: 'approve' | 'reject') => void | Promise<void>;
     adminMutationLoading: boolean;
     adminLoadingMoreQuestions: boolean;
     adminQuestionsPage: number;
@@ -91,6 +94,9 @@ const AdminPanel = memo(({
     adminReviewsPage,
     adminQuestions,
     onDeleteQuestion,
+    onUpdateQuestion,
+    onUpdateAnswer,
+    onBulkReviewDecision,
     adminMutationLoading,
     adminLoadingMoreQuestions,
     adminQuestionsPage,
@@ -147,6 +153,9 @@ const AdminPanel = memo(({
     const [editingReviewId, setEditingReviewId] = useState<number | null>(null);
     const [editReviewComment, setEditReviewComment] = useState('');
     const [editReviewUserName, setEditReviewUserName] = useState('');
+
+    // Bulk moderation selection (reviews tab)
+    const [selectedReviewIds, setSelectedReviewIds] = useState<number[]>([]);
 
     // Teacher detail view state
     const [detailTeacherId, setDetailTeacherId] = useState<number | null>(null);
@@ -221,6 +230,23 @@ const AdminPanel = memo(({
     const handleRejectReview = async (id: number) => {
         await onRejectReview(id);
         await refreshTeacherDetail();
+    };
+
+    // Bulk moderation: only ids still present and still pending count.
+    const selectedPendingIds = selectedReviewIds.filter((id) =>
+        reviewsForModeration.some((r) => r.id === id && Number(r.is_approved) === 0)
+    );
+
+    const toggleReviewSelection = (id: number) => {
+        setSelectedReviewIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    };
+
+    const clearReviewSelection = () => setSelectedReviewIds([]);
+
+    const runBulkDecision = async (action: 'approve' | 'reject') => {
+        if (selectedPendingIds.length === 0) return;
+        await onBulkReviewDecision(selectedPendingIds, action);
+        clearReviewSelection();
     };
 
     // Shared inline edit form, used by the reviews tab and the teacher
@@ -586,6 +612,14 @@ const AdminPanel = memo(({
             {activeTab === 'reviews' && (
             <div className="admin-section">
                 <h3>All Reviews ({totalReviews})</h3>
+                {selectedPendingIds.length > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', margin: '0 0 12px', padding: '8px 12px', background: '#eef2ff', borderRadius: '8px' }}>
+                        <strong>{selectedPendingIds.length} selected</strong>
+                        <button onClick={() => runBulkDecision('approve')} className="admin-mini-btn admin-mini-approve" disabled={adminMutationLoading}>Approve selected</button>
+                        <button onClick={() => runBulkDecision('reject')} className="admin-mini-btn admin-mini-reject" disabled={adminMutationLoading}>Reject selected</button>
+                        <button onClick={clearReviewSelection} className="btn-cancel" style={{ padding: '4px 12px' }}>Clear</button>
+                    </div>
+                )}
                 <div className="admin-list">
                     {totalReviews === 0 ? (
                         <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>No reviews yet.</p>
@@ -600,6 +634,15 @@ const AdminPanel = memo(({
                                     renderReviewEditForm(review.id, isPending)
                                 ) : (
                                 <>
+                                    {isPending && (
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedReviewIds.includes(review.id)}
+                                            onChange={() => toggleReviewSelection(review.id)}
+                                            aria-label={`Select review by ${review.user_name || 'Anonymous'}`}
+                                            style={{ marginTop: '4px', width: '16px', height: '16px', cursor: 'pointer' }}
+                                        />
+                                    )}
                                     <div className="review-info">
                                         <strong>{review.teacher_name}</strong>
                                         {isPending && (
@@ -670,24 +713,54 @@ const AdminPanel = memo(({
                     {adminQuestions.length === 0 ? (
                         <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>No questions yet.</p>
                     ) : (
-                        adminQuestions.map((question: AdminQuestion) => (
+                        adminQuestions.map((question: AdminQuestion) => {
+                            const questionPending = Number(question.is_approved) === 0;
+                            return (
                             <div key={question.id} className="admin-item">
                                 <div className="review-info">
                                     <strong>{question.teacher_name}</strong>
+                                    {questionPending && (
+                                        <span className="admin-pending-badge" style={{ marginLeft: '8px' }}>Pending</span>
+                                    )}
                                     <p style={{ marginTop: '8px', marginBottom: '5px' }}>"{question.question}"</p>
                                     <small>
                                         <Icon name="message-circle" size={12} /> {question.answer_count} answer{question.answer_count !== 1 ? 's' : ''} | <Icon name="calendar" size={12} /> {new Date(question.created_at).toLocaleDateString()}
                                     </small>
+                                    {(question.answers || []).length > 0 && (
+                                        <div style={{ marginTop: '8px', paddingLeft: '12px', borderLeft: '2px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                            {(question.answers || []).map((ans) => (
+                                                <div key={ans.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                    <span style={{ flex: 1, fontSize: '0.85rem', color: '#334155' }}>"{ans.answer}"</span>
+                                                    {Number(ans.is_approved) === 0 && (
+                                                        <>
+                                                            <span className="admin-pending-badge">Pending</span>
+                                                            <button onClick={() => onUpdateAnswer(ans.id, { is_approved: true })} className="admin-mini-btn admin-mini-approve" disabled={adminMutationLoading}>Approve</button>
+                                                            <button onClick={() => onUpdateAnswer(ans.id, { is_approved: false })} className="admin-mini-btn admin-mini-reject" disabled={adminMutationLoading}>Reject</button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
-                                <button
-                                    onClick={() => onDeleteQuestion(question.id)}
-                                    className="delete-btn"
-                                    disabled={adminMutationLoading || adminLoadingMoreQuestions}
-                                >
-                                    Delete
-                                </button>
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                    {questionPending && (
+                                        <>
+                                            <button onClick={() => onUpdateQuestion(question.id, { is_approved: true })} className="admin-mini-btn admin-mini-approve" disabled={adminMutationLoading || adminLoadingMoreQuestions}>Approve</button>
+                                            <button onClick={() => onUpdateQuestion(question.id, { is_approved: false })} className="admin-mini-btn admin-mini-reject" disabled={adminMutationLoading || adminLoadingMoreQuestions}>Reject</button>
+                                        </>
+                                    )}
+                                    <button
+                                        onClick={() => onDeleteQuestion(question.id)}
+                                        className="delete-btn"
+                                        disabled={adminMutationLoading || adminLoadingMoreQuestions}
+                                    >
+                                        Delete
+                                    </button>
+                                </div>
                             </div>
-                        ))
+                            );
+                        })
                     )}
                 </div>
                 {!adminLoadingMoreQuestions && adminQuestionsPage < adminQuestionsTotalPages && (

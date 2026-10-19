@@ -10,7 +10,7 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const db = require('./db');
 const { csrfSetCookie, csrfValidate } = require('./csrf');
-const { detectFlaggedText, sweepExistingReviews } = require('./contentFilter');
+const { detectFlaggedText, sweepExistingReviews, sweepExistingQa } = require('./contentFilter');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -240,6 +240,39 @@ const runReviewFilterSweep = async () => {
     }
 };
 
+// One-time retroactive sweep for questions, answers and custom courses
+// (marker action SWEEP_QA keeps it independent from the reviews sweep).
+let qaSweepAttempts = 0;
+let qaSweepDone = false;
+
+const runQaFilterSweep = async () => {
+    if (qaSweepDone) return;
+    try {
+        const [marker] = await db.query("SELECT id FROM audit_logs WHERE action = 'SWEEP_QA' LIMIT 1");
+        if (marker.length > 0) {
+            qaSweepDone = true;
+            return;
+        }
+        const result = await sweepExistingQa(db);
+        if (result.questions.toQueue > 0 || result.answers.toQueue > 0) invalidateCache('questions');
+        if (result.courses.toDemote > 0) invalidateCache('courses');
+        qaSweepDone = true;
+        await db.query(
+            "INSERT INTO audit_logs (action, details, ip_address) VALUES ('SWEEP_QA', ?, 'system')",
+            [JSON.stringify({
+                questions: result.questions.toQueue,
+                answers: result.answers.toQueue,
+                courses: result.courses.toDemote
+            })]
+        );
+        console.log(`🔎 Q&A filter sweep: ${result.questions.toQueue} question(s), ${result.answers.toQueue} answer(s), ${result.courses.toDemote} course(s) queued`);
+    } catch (error) {
+        qaSweepAttempts += 1;
+        console.error('❌ Q&A filter sweep failed:', error.message);
+        if (qaSweepAttempts < 10) setTimeout(runQaFilterSweep, 30000);
+    }
+};
+
 // ========== SCHEMA BOOTSTRAP ==========
 // Creates tables that may be added after the initial deployment, so the
 // server can auto-migrate on Render without manual SQL.
@@ -309,6 +342,7 @@ const runSchemaBootstrap = async () => {
         console.log('✅ Schema bootstrap complete (questions, question_answers, custom_courses, cleanup)');
         // Schema is up: retroactively filter any pre-existing reviews.
         runReviewFilterSweep();
+        runQaFilterSweep();
     } catch (error) {
         schemaBootstrapError = error.message;
         console.error('❌ Schema bootstrap failed:', error.message);
@@ -1152,6 +1186,35 @@ app.post('/api/admin/filter-reviews', verifyAdmin, csrfValidate, async (req, res
     }
 });
 
+// POST /api/admin/filter-qa - run the NLP content filter over existing
+// questions, answers and custom course suggestions (?dryRun=true to
+// preview). Flagged approved rows are queued; nothing is auto-approved.
+app.post('/api/admin/filter-qa', verifyAdmin, csrfValidate, async (req, res) => {
+    try {
+        const dryRun = String(req.query.dryRun) === 'true' || (req.body && req.body.dryRun === true);
+        const result = await sweepExistingQa(db, { dryRun });
+        if (!dryRun) {
+            if (result.questions.toQueue > 0 || result.answers.toQueue > 0) invalidateCache('questions');
+            if (result.courses.toDemote > 0) invalidateCache('courses');
+            qaSweepDone = true;
+            await createAuditLog(
+                req.admin.id,
+                'SWEEP_QA',
+                JSON.stringify({
+                    questions: result.questions.toQueue,
+                    answers: result.answers.toQueue,
+                    courses: result.courses.toDemote
+                }),
+                req.ip
+            );
+        }
+        res.json({ success: true, ...result });
+    } catch (error) {
+        console.error('Error filtering Q&A content:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
 // GET /api/admin/questions - list questions (admin only)
 app.get('/api/admin/questions', verifyAdmin, async (req, res) => {
     try {
@@ -1170,6 +1233,23 @@ app.get('/api/admin/questions', verifyAdmin, async (req, res) => {
 
         const [countResult] = await db.query('SELECT COUNT(*) as total FROM questions');
         const total = countResult[0].total;
+
+        // Attach answers (with approval state) so the admin Q&A tab can
+        // moderate them inline.
+        const questionIds = questions.map((q) => q.id);
+        const answersByQuestion = {};
+        if (questionIds.length > 0) {
+            const placeholders = questionIds.map(() => '?').join(',');
+            const [answers] = await db.query(
+                `SELECT id, question_id, answer, is_approved, created_at FROM question_answers WHERE question_id IN (${placeholders}) ORDER BY created_at ASC`,
+                questionIds
+            );
+            for (const answer of answers) {
+                if (!answersByQuestion[answer.question_id]) answersByQuestion[answer.question_id] = [];
+                answersByQuestion[answer.question_id].push(answer);
+            }
+        }
+        questions.forEach((q) => { q.answers = answersByQuestion[q.id] || []; });
 
         res.json({
             questions: questions,
@@ -1198,6 +1278,120 @@ app.delete('/api/admin/questions/:id', verifyAdmin, csrfValidate, async (req, re
         res.json({ success: true, message: 'Question deleted successfully' });
     } catch (error) {
         console.error('Error deleting question:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// PUT /api/admin/questions/:id - approve/reject (or edit) a question (admin only)
+app.put('/api/admin/questions/:id', verifyAdmin, csrfValidate, [
+    body('question').optional().isLength({ min: 3, max: 500 }).withMessage('Question must be 3-500 characters'),
+    body('is_approved').optional().isBoolean().withMessage('is_approved must be a boolean')
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
+    try {
+        const questionId = req.params.id;
+        const { question, is_approved } = req.body;
+        const sanitizedQuestion = question !== undefined ? String(question).trim().slice(0, 1000) : undefined;
+
+        const [existing] = await db.query('SELECT id FROM questions WHERE id = ?', [questionId]);
+        if (existing.length === 0) return res.status(404).json({ error: 'Question not found' });
+
+        const updates = [];
+        const updateVals = [];
+        if (sanitizedQuestion !== undefined) {
+            updates.push('question = ?');
+            updateVals.push(sanitizedQuestion);
+        }
+        if (is_approved !== undefined) {
+            updates.push('is_approved = ?');
+            updateVals.push(is_approved ? 1 : 0);
+        }
+        if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
+
+        await db.query(`UPDATE questions SET ${updates.join(', ')} WHERE id = ?`, [...updateVals, questionId]);
+        const action = is_approved === undefined ? 'EDIT_QUESTION' : (is_approved ? 'APPROVE_QUESTION' : 'REJECT_QUESTION');
+        await createAuditLog(req.admin.id, action, `Question ID: ${questionId}`, req.ip);
+        invalidateCache('questions');
+        res.json({
+            success: true,
+            message: is_approved === undefined ? 'Question updated' : (is_approved ? 'Question approved' : 'Question rejected')
+        });
+    } catch (error) {
+        console.error('Error updating question:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// PUT /api/admin/answers/:id - approve/reject (or edit) an answer (admin only)
+app.put('/api/admin/answers/:id', verifyAdmin, csrfValidate, [
+    body('answer').optional().isLength({ min: 1, max: 500 }).withMessage('Answer must be 1-500 characters'),
+    body('is_approved').optional().isBoolean().withMessage('is_approved must be a boolean')
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
+    try {
+        const answerId = req.params.id;
+        const { answer, is_approved } = req.body;
+        const sanitizedAnswer = answer !== undefined ? String(answer).trim().slice(0, 1000) : undefined;
+
+        const [existing] = await db.query('SELECT id FROM question_answers WHERE id = ?', [answerId]);
+        if (existing.length === 0) return res.status(404).json({ error: 'Answer not found' });
+
+        const updates = [];
+        const updateVals = [];
+        if (sanitizedAnswer !== undefined) {
+            updates.push('answer = ?');
+            updateVals.push(sanitizedAnswer);
+        }
+        if (is_approved !== undefined) {
+            updates.push('is_approved = ?');
+            updateVals.push(is_approved ? 1 : 0);
+        }
+        if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
+
+        await db.query(`UPDATE question_answers SET ${updates.join(', ')} WHERE id = ?`, [...updateVals, answerId]);
+        const action = is_approved === undefined ? 'EDIT_ANSWER' : (is_approved ? 'APPROVE_ANSWER' : 'REJECT_ANSWER');
+        await createAuditLog(req.admin.id, action, `Answer ID: ${answerId}`, req.ip);
+        invalidateCache('questions');
+        res.json({
+            success: true,
+            message: is_approved === undefined ? 'Answer updated' : (is_approved ? 'Answer approved' : 'Answer rejected')
+        });
+    } catch (error) {
+        console.error('Error updating answer:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// POST /api/admin/reviews/bulk - approve or reject many reviews at once
+app.post('/api/admin/reviews/bulk', verifyAdmin, csrfValidate, [
+    body('ids').isArray({ min: 1, max: 500 }).withMessage('ids must be a non-empty array'),
+    body('action').isIn(['approve', 'reject']).withMessage("action must be 'approve' or 'reject'")
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
+    try {
+        const { ids, action } = req.body;
+        const cleanIds = [...new Set(ids.map((id) => parseInt(id, 10)).filter((id) => id > 0))];
+        if (cleanIds.length === 0) return res.status(400).json({ error: 'No valid review ids' });
+
+        const placeholders = cleanIds.map(() => '?').join(',');
+        const approved = action === 'approve' ? 1 : 0;
+        const [result] = await db.query(
+            `UPDATE reviews SET is_approved = ? WHERE id IN (${placeholders})`,
+            [approved, ...cleanIds]
+        );
+        await createAuditLog(
+            req.admin.id,
+            action === 'approve' ? 'BULK_APPROVE_REVIEWS' : 'BULK_REJECT_REVIEWS',
+            `${result.affectedRows} review(s) set to ${approved}`,
+            req.ip
+        );
+        invalidateCache('teachers');
+        res.json({ success: true, updated: result.affectedRows });
+    } catch (error) {
+        console.error('Error in bulk review update:', error);
         res.status(500).json({ error: 'Database error' });
     }
 });
