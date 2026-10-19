@@ -114,7 +114,7 @@ const CompareView: React.FC<CompareViewProps> = ({
                                     {compareDetails.map((t) => (
                                         <th key={t.id} className="compare-teacher-cell">
                                             <div className="compare-table-teacher">
-                                                <Avatar name={t.name} imageUrl={t.image_url} className="compare-table-avatar" size={136} />
+                                                <Avatar name={t.name} imageUrl={t.image_url} className="compare-table-avatar" size={72} />
                                                 <div className="compare-table-teacher-info">
                                                     <span className="compare-table-name">{t.name}</span>
                                                     <span className="compare-table-dept">{t.department}</span>

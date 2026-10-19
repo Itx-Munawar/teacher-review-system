@@ -405,7 +405,7 @@ const AdminPanel = memo(({
                                                             name={teacherDetail.teacher.name}
                                                             imageUrl={teacherDetail.teacher.image_url}
                                                             className="admin-detail-photo"
-                                                            size={112}
+                                                            size={64}
                                                         />
                                                         <div className="admin-detail-title">
                                                             <strong>{teacherDetail.teacher.name}</strong>

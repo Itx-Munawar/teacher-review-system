@@ -2,10 +2,13 @@
    - Caches the app shell (index.html + static assets) for offline use
    - Serves the shell from cache as a fallback so previously visited pages work offline
    - Never caches API responses (always network) to keep review data fresh
+   - Leaves cross-origin requests (teacher photo thumbnails on wsrv.nl, Google Fonts) to the
+     browser: this worker can't cache them (opaque responses), so intercepting them only
+     added a hop and a second code path in front of every photo.
 */
 
-const CACHE_NAME = 'umt-reviews-v1';
-const SHELL_CACHE = 'umt-reviews-shell-v1';
+const CACHE_NAME = 'umt-reviews-v2';
+const SHELL_CACHE = 'umt-reviews-shell-v2';
 
 const SHELL_URLS = [
     '/',
@@ -34,7 +37,11 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
     const { request } = event;
+    if (request.method !== 'GET') return;
     const url = new URL(request.url);
+
+    // Cross-origin (photo thumbnails, fonts): straight to the browser and its HTTP cache
+    if (url.origin !== self.location.origin) return;
 
     // Always use network for API calls (never cache fresh review data)
     if (url.pathname.startsWith('/api/')) {
@@ -55,18 +62,29 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Static assets: cache-first, then network
+    // Same-origin static assets
     if (request.destination === 'script' || request.destination === 'style' || request.destination === 'image' || request.destination === 'font') {
+        // Build output under /static/ has a content hash in its name, so a cached copy is
+        // never stale: serve it without touching the network (the old code fired a network
+        // request for every cached asset anyway, wasting bandwidth on slow connections).
+        const isHashed = url.pathname.startsWith('/static/');
+
         event.respondWith(
             caches.match(request).then((cached) => {
-                const networkFetch = fetch(request).then((response) => {
-                    if (response && response.ok && url.origin === self.location.origin) {
+                const refresh = () => fetch(request).then((response) => {
+                    if (response && response.ok) {
                         const copy = response.clone();
                         caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
                     }
                     return response;
-                }).catch(() => cached);
-                return cached || networkFetch;
+                });
+
+                if (cached) {
+                    // Unhashed files (logos, manifest) are refreshed quietly for next time
+                    if (!isHashed) event.waitUntil(refresh().catch(() => {}));
+                    return cached;
+                }
+                return refresh();
             })
         );
         return;

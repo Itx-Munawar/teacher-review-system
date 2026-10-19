@@ -121,13 +121,14 @@ const SwipeableCards: React.FC<SwipeableCardsProps> = ({
                         transform: `translateX(calc(-${activeIndex * 100}% + ${dragOffset}px))`,
                     }}
                 >
-                    {teachers.map((teacher) => (
+                    {teachers.map((teacher, cardIndex) => (
                         <div key={teacher.id} className="swipe-card">
                             <div className="swipe-card-header">
                                 <Avatar
                                     name={teacher.name}
                                     imageUrl={teacher.image_url}
                                     className="swipe-card-avatar"
+                                    priority={cardIndex === activeIndex}
                                 />
                                 <div className="swipe-card-info">
                                     <h3 className="swipe-card-name">{teacher.name}</h3>

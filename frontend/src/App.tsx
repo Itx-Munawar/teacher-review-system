@@ -1260,7 +1260,7 @@ const App: React.FC = () => {
                                             className="teacher-card"
                                             onClick={() => handleTeacherClick(teacher)}
                                         >
-                                            <Avatar name={teacher.name} imageUrl={teacher.image_url} className="teacher-card-image" />
+                                            <Avatar name={teacher.name} imageUrl={teacher.image_url} className="teacher-card-image" priority={index < 6} />
                                             <div className="teacher-card-info">
                                                 <h3>{teacher.name}</h3>
                                                 <p className="department">{teacher.department}</p>

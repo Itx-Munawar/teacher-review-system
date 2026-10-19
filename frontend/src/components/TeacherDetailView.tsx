@@ -73,7 +73,8 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                     name={selectedTeacher.name}
                     imageUrl={selectedTeacher.image_url}
                     className="teacher-detail-image"
-                    size={260}
+                    size={130}
+                    priority
                 />
 
                 <div className="teacher-detail-header">

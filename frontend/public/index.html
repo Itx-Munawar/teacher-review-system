@@ -12,6 +12,11 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="UMT Reviews" />
 
+    <!-- Teacher photo thumbnails come from wsrv.nl. Opening that connection now (DNS + TCP + TLS)
+         instead of when the first photo is requested saves several round trips on slow mobile networks. -->
+    <link rel="preconnect" href="https://wsrv.nl" />
+    <link rel="dns-prefetch" href="https://wsrv.nl" />
+
     <!-- Fonts (limited weights for faster load on slow connections) -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
