@@ -1133,7 +1133,9 @@ app.post('/api/admin/filter-reviews', verifyAdmin, csrfValidate, async (req, res
             await createAuditLog(
                 req.admin.id,
                 'SWEEP_REVIEWS',
-                `Scanned ${result.scanned}, queued ${result.toQueue} (${result.alreadyQueued} already queued)`,
+                // Same JSON shape as the startup sweep marker so
+                // GET /api/admin/stats can parse either record.
+                JSON.stringify({ scanned: result.scanned, queued: result.toQueue, alreadyQueued: result.alreadyQueued }),
                 req.ip
             );
         }
