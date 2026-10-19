@@ -362,17 +362,19 @@ ensureTables();
 
 // ========== PUBLIC API ENDPOINTS ==========
 
-// GET /api/teachers - paginated list (20 per page)
-// Supports: ?page=N&sort=name|reviews|newest&department=<name>
+// GET /api/teachers - paginated list (20 per page by default)
+// Supports: ?page=N&limit=20..200&sort=name|reviews|newest&department=<name>
 app.get('/api/teachers', async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
-        const limit = 20;
+        // limit: the admin panel pulls the whole teacher list in big pages so
+        // its sorting covers every row; public callers keep the default of 20.
+        const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 200);
         const offset = (page - 1) * limit;
         const sort = req.query.sort || 'name';
         const department = req.query.department || '';
 
-        const cacheKey = `teachers:${page}:${sort}:${department}`;
+        const cacheKey = `teachers:${page}:${limit}:${sort}:${department}`;
         const cached = getCached(cacheKey);
         if (cached) {
             res.set('Cache-Control', 'public, max-age=60');

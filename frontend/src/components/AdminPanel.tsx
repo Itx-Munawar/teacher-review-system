@@ -1,9 +1,12 @@
-import React, { useState, useMemo, memo } from 'react';
+import React, { useState, useEffect, useMemo, memo } from 'react';
 import Icon from './Icon';
+import { getTeachers } from '../services/api';
 import Avatar from './Avatar';
 import type { Teacher, AdminReview, AdminQuestion, CustomCourse, AdminTeacherDetail } from '../types';
 
 type AdminTab = 'teachers' | 'reviews' | 'qa' | 'courses';
+
+type TeacherSortKey = 'name' | 'department' | 'reviews' | 'newest';
 
 export interface AdminPanelProps {
     teachers: Teacher[];
@@ -141,10 +144,16 @@ const AdminPanel = memo(({
     const pendingCoursesCount = customCourses.filter(c => c.status === 'pending').length;
     const visibleCourses = customCourses.filter(c => c.status !== 'rejected');
 
-    const displayTeachers = searchTerm ? searchResults : teachers;
+    // Full server-sorted list: fetched like the home page so sorting covers
+    // EVERY teacher (server ORDER BY), not just the shared loaded pages.
+    const [allTeachers, setAllTeachers] = useState<Teacher[]>([]);
+    const [sortLoading, setSortLoading] = useState(false);
+
+    const baseTeachers = allTeachers.length > 0 ? allTeachers : teachers;
+    const displayTeachers = searchTerm ? searchResults : baseTeachers;
 
     // Teacher list sorting (Manage Teachers tab)
-    const [teacherSortKey, setTeacherSortKey] = useState<'name' | 'department' | 'reviews' | 'newest'>('name');
+    const [teacherSortKey, setTeacherSortKey] = useState<TeacherSortKey>('name');
     const [teacherSortDir, setTeacherSortDir] = useState<'asc' | 'desc'>('asc');
 
     const sortedTeachers = useMemo(() => {
@@ -164,6 +173,37 @@ const AdminPanel = memo(({
             }
         });
     }, [displayTeachers, teacherSortKey, teacherSortDir]);
+
+    // Load every teacher, server-side ordered (mirrors the home page loader).
+    // Runs on mount and whenever the sort field changes; direction flips are
+    // pure client-side re-ordering of the already-complete list.
+    useEffect(() => {
+        let cancelled = false;
+        const serverSort = teacherSortKey === 'reviews' || teacherSortKey === 'newest' ? teacherSortKey : 'name';
+        setSortLoading(true);
+        (async () => {
+            try {
+                const first = await getTeachers(1, serverSort, undefined, 200);
+                if (cancelled) return;
+                let list: Teacher[] = first.data?.teachers || [];
+                const totalPages: number = first.data?.pagination?.totalPages || 1;
+                if (totalPages > 1) {
+                    const rest = await Promise.all(
+                        Array.from({ length: totalPages - 1 }, (_, i) => getTeachers(i + 2, serverSort, undefined, 200))
+                    );
+                    if (cancelled) return;
+                    rest.forEach((r) => { list = list.concat(r.data?.teachers || []); });
+                }
+                setAllTeachers(list);
+            } catch (err) {
+                // Keep the shared paginated list already on screen as fallback.
+                if (!cancelled) console.error('Failed to load full teacher list:', err);
+            } finally {
+                if (!cancelled) setSortLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [teacherSortKey]);
 
     const sortDirLabel = teacherSortKey === 'reviews'
         ? (teacherSortDir === 'asc' ? '↑ Fewest' : '↓ Most')
@@ -466,7 +506,9 @@ const AdminPanel = memo(({
                 </div>
 
                 <div className="search-box" style={{ marginBottom: '1rem' }}>
+                    <label htmlFor="admin-teacher-search" className="admin-search-label">Search teachers</label>
                     <input
+                        id="admin-teacher-search"
                         type="text"
                         placeholder="Search teachers by name or department..."
                         aria-label="Search teachers by name or department"
@@ -508,15 +550,20 @@ const AdminPanel = memo(({
                     >
                         {sortDirLabel}
                     </button>
+                    {sortLoading && <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#7c3aed' }}>Updating...</span>}
                 </div>
 
                 <div className="admin-list">
                     {isSearching ? (
                         <div className="loading">Searching...</div>
                     ) :                        displayTeachers.length === 0 ? (
-                            <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
-                                {searchTerm ? 'No teachers found' : 'No teachers added yet'}
-                            </p>
+                            sortLoading ? (
+                                <div className="loading">Loading teachers...</div>
+                            ) : (
+                                <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
+                                    {searchTerm ? 'No teachers found' : 'No teachers added yet'}
+                                </p>
+                            )
                         ) : (
                             sortedTeachers.map((teacher: Teacher) => {
                             const isEditing = editingTeacherId === teacher.id;
@@ -670,12 +717,12 @@ const AdminPanel = memo(({
                 {!searchTerm && (
                     <>
                         {loadingMore && <div className="loading-more">Loading more teachers...</div>}
-                        {!loadingMore && teachers.length < totalTeachersCount && (
+                        {!loadingMore && baseTeachers.length < totalTeachersCount && (
                             <button onClick={onLoadMore} className="load-more-btn" style={{ marginTop: '1rem', width: '100%' }}>
-                                Load More ({teachers.length} / {totalTeachersCount})
+                                Load More ({baseTeachers.length} / {totalTeachersCount})
                             </button>
                         )}
-                        {teachers.length === totalTeachersCount && totalTeachersCount > 0 && (
+                        {baseTeachers.length === totalTeachersCount && totalTeachersCount > 0 && (
                             <div className="end-of-list">You've seen all {totalTeachersCount} teachers</div>
                         )}
                     </>

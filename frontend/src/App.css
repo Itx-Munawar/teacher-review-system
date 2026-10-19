@@ -5806,3 +5806,27 @@ select:focus-visible {
         transition: background 0.15s ease, transform 0.15s ease !important;
     }
 }
+
+/* ===== Admin search visibility =====
+   The shared .search-input uses a translucent white border tuned for the
+   colorful home hero, which all but disappears on the admin panel's
+   near-white surfaces - restate a clearly visible border (and a visible
+   label) so the field is unmistakable. */
+.admin-search-label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #374151;
+    margin-bottom: 6px;
+}
+
+.admin-section .search-input {
+    border: 2px solid rgba(120, 70, 200, 0.45);
+    background: #ffffff;
+}
+
+.admin-section .search-input:focus {
+    border-color: rgba(120, 70, 200, 0.85);
+    box-shadow: 0 0 0 3px rgba(120, 70, 200, 0.18);
+    outline: none;
+}

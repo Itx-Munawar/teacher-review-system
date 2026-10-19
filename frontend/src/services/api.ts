@@ -45,8 +45,8 @@ api.interceptors.response.use(
 
 // ========== PUBLIC APIs ==========
 
-export const getTeachers = (page: number = 1, sort: string = 'name', department?: string) => {
-    const params = new URLSearchParams({ page: String(page), limit: '20', sort });
+export const getTeachers = (page: number = 1, sort: string = 'name', department?: string, limit: number = 20) => {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit), sort });
     if (department) params.set('department', department);
     return api.get(`/teachers?${params.toString()}`);
 };
