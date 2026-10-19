@@ -1181,7 +1181,6 @@ const App: React.FC = () => {
                         reviewsForModeration={reviewsForModeration}
                         totalReviewsCount={adminStats?.total_reviews ?? 0}
                         pendingReviewsCount={adminStats?.pending_reviews ?? 0}
-                        lastSweep={adminStats?.last_sweep ?? null}
                         reviewsPendingOnly={reviewsPendingOnly}
                         onTogglePendingOnly={handleTogglePendingOnly}
                         onAddTeacher={handleAddTeacher}

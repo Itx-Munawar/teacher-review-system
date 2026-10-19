@@ -1,4 +1,4 @@
-import React, { useState, memo } from 'react';
+import React, { useState, useMemo, memo } from 'react';
 import Icon from './Icon';
 import Avatar from './Avatar';
 import type { Teacher, AdminReview, AdminQuestion, CustomCourse, AdminTeacherDetail } from '../types';
@@ -11,8 +11,6 @@ export interface AdminPanelProps {
     totalReviewsCount: number;
     /** Reviews waiting for approval (global count from /api/admin/stats). */
     pendingReviewsCount: number;
-    /** Result of the latest NLP filter sweep over existing reviews, if any. */
-    lastSweep: { scanned: number; queued: number; at: string } | null;
     /** When true, the reviews list shows only pending (unapproved) reviews. */
     reviewsPendingOnly: boolean;
     /** Flip the pending-only filter (dashboard pending counter / show-all). */
@@ -67,7 +65,6 @@ const AdminPanel = memo(({
     reviewsForModeration,
     totalReviewsCount,
     pendingReviewsCount,
-    lastSweep,
     reviewsPendingOnly,
     onTogglePendingOnly,
     onAddTeacher,
@@ -145,6 +142,34 @@ const AdminPanel = memo(({
     const visibleCourses = customCourses.filter(c => c.status !== 'rejected');
 
     const displayTeachers = searchTerm ? searchResults : teachers;
+
+    // Teacher list sorting (Manage Teachers tab)
+    const [teacherSortKey, setTeacherSortKey] = useState<'name' | 'department' | 'reviews' | 'newest'>('name');
+    const [teacherSortDir, setTeacherSortDir] = useState<'asc' | 'desc'>('asc');
+
+    const sortedTeachers = useMemo(() => {
+        const dir = teacherSortDir === 'asc' ? 1 : -1;
+        const byName = (a: Teacher, b: Teacher) => a.name.localeCompare(b.name) || a.id - b.id;
+        return [...displayTeachers].sort((a, b) => {
+            switch (teacherSortKey) {
+                case 'department':
+                    return (a.department.localeCompare(b.department) || byName(a, b)) * dir;
+                case 'reviews':
+                    return ((a.review_count || 0) - (b.review_count || 0) || byName(a, b)) * dir;
+                case 'newest':
+                    return ((a.created_at || '').localeCompare(b.created_at || '') || byName(a, b)) * dir;
+                case 'name':
+                default:
+                    return byName(a, b) * dir;
+            }
+        });
+    }, [displayTeachers, teacherSortKey, teacherSortDir]);
+
+    const sortDirLabel = teacherSortKey === 'reviews'
+        ? (teacherSortDir === 'asc' ? '↑ Fewest' : '↓ Most')
+        : teacherSortKey === 'newest'
+            ? (teacherSortDir === 'asc' ? '↑ Oldest' : '↓ Newest')
+            : (teacherSortDir === 'asc' ? '↑ A→Z' : '↓ Z→A');
 
     // Tab state
     const [activeTab, setActiveTab] = useState<AdminTab>('teachers');
@@ -338,12 +363,6 @@ const AdminPanel = memo(({
                     >
                         {pendingReviewsCount} Pending{reviewsPendingOnly ? ' ✓' : ''}
                     </button>
-                    <span style={{ opacity: 0.85 }} title="Last NLP filter sweep over existing reviews">
-                        <Icon name="info" size={15} />{' '}
-                        {lastSweep
-                            ? `Sweep: ${lastSweep.scanned} scanned · ${lastSweep.queued} queued · ${new Date(lastSweep.at).toLocaleDateString()}`
-                            : 'Sweep: not run yet'}
-                    </span>
                 </div>
                 <button onClick={onLogout} className="logout-btn">Logout</button>
             </div>
@@ -462,15 +481,44 @@ const AdminPanel = memo(({
                     )}
                 </div>
 
+                <div className="teacher-sort-bar" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', margin: '0 0 0.75rem' }}>
+                    <label htmlFor="teacher-sort" style={{ fontSize: '0.85rem', fontWeight: 600, color: '#555' }}>Sort by</label>
+                    <select
+                        id="teacher-sort"
+                        value={teacherSortKey}
+                        onChange={(e) => {
+                            const key = e.target.value as typeof teacherSortKey;
+                            setTeacherSortKey(key);
+                            // Sensible starting direction per field.
+                            setTeacherSortDir(key === 'reviews' || key === 'newest' ? 'desc' : 'asc');
+                        }}
+                        style={{ padding: '6px 10px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '0.85rem', background: '#fff', color: '#333' }}
+                    >
+                        <option value="name">Name</option>
+                        <option value="department">Department</option>
+                        <option value="reviews">Reviews</option>
+                        <option value="newest">Date added</option>
+                    </select>
+                    <button
+                        type="button"
+                        className="admin-mini-btn"
+                        onClick={() => setTeacherSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+                        aria-label={teacherSortDir === 'asc' ? 'Reverse to descending' : 'Reverse to ascending'}
+                        title="Reverse sort direction"
+                    >
+                        {sortDirLabel}
+                    </button>
+                </div>
+
                 <div className="admin-list">
                     {isSearching ? (
                         <div className="loading">Searching...</div>
-                    ) : displayTeachers.length === 0 ? (
-                        <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
-                            {searchTerm ? 'No teachers found' : 'No teachers added yet'}
-                        </p>
-                    ) : (
-                        displayTeachers.map((teacher: Teacher) => {
+                    ) :                        displayTeachers.length === 0 ? (
+                            <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
+                                {searchTerm ? 'No teachers found' : 'No teachers added yet'}
+                            </p>
+                        ) : (
+                            sortedTeachers.map((teacher: Teacher) => {
                             const isEditing = editingTeacherId === teacher.id;
                             return (
                                 <div key={teacher.id} className="admin-item">
