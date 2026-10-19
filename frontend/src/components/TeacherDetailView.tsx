@@ -29,7 +29,7 @@ const extractCourses = (review: Review): string[] => {
         const parsed = JSON.parse(str);
         const list = Array.isArray(parsed) ? parsed : [parsed];
         return list
-            .map((c: any) => String(c).trim())
+            .map((c: unknown) => String(c).trim())
             .filter((c: string) => c.length > 0);
     } catch {
         // If JSON.parse fails, treat the raw value as a single course name
@@ -73,7 +73,8 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                     name={selectedTeacher.name}
                     imageUrl={selectedTeacher.image_url}
                     className="teacher-detail-image"
-                    size={260}
+                    size={130}
+                    priority
                 />
 
                 <div className="teacher-detail-header">

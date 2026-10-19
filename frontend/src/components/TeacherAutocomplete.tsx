@@ -191,7 +191,7 @@ const TeacherAutocomplete: React.FC<TeacherAutocompleteProps> = ({
                             }}
                             onMouseEnter={() => setActiveIndex(idx)}
                         >
-                            <Avatar name={t.name} imageUrl={t.image_url} className="autocomplete-avatar" />
+                            <Avatar name={t.name} imageUrl={t.image_url} className="autocomplete-avatar" size={48} />
                             <div className="autocomplete-text">
                                 <span className="autocomplete-name">{t.name}</span>
                                 <span className="autocomplete-dept">{t.department}</span>

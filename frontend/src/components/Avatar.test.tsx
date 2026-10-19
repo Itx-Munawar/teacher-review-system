@@ -32,13 +32,13 @@ const proxyParams = () => new URLSearchParams(srcOf().split('?')[1] || '');
 
 /** Every avatar configuration actually used across the app's screens. */
 const SCREENS = [
-    { screen: 'Teacher list card (App.tsx / DepartmentPage.tsx)', className: 'teacher-card-image', size: undefined, expected: 160 },
-    { screen: 'Teacher detail hero (TeacherDetailView.tsx)', className: 'teacher-detail-image', size: 260, expected: 260 },
-    { screen: 'Search autocomplete (TeacherAutocomplete.tsx)', className: 'autocomplete-avatar', size: undefined, expected: 160 },
-    { screen: 'Compare table header (CompareView.tsx)', className: 'compare-table-avatar', size: 136, expected: 136 },
+    { screen: 'Teacher list card (App.tsx / DepartmentPage.tsx)', className: 'teacher-card-image', size: undefined, expected: 80 },
+    { screen: 'Teacher detail hero (TeacherDetailView.tsx)', className: 'teacher-detail-image', size: 130, expected: 130 },
+    { screen: 'Search autocomplete (TeacherAutocomplete.tsx)', className: 'autocomplete-avatar', size: 48, expected: 48 },
+    { screen: 'Compare table header (CompareView.tsx)', className: 'compare-table-avatar', size: 72, expected: 72 },
     { screen: 'Compare selected card (CompareView.tsx)', className: 'compare-selected-photo', size: 112, expected: 112 },
-    { screen: 'Swipeable compare card (SwipeableCards.tsx)', className: 'swipe-card-avatar', size: undefined, expected: 160 },
-    { screen: 'Admin teacher details (AdminPanel.tsx)', className: 'admin-detail-photo', size: 112, expected: 112 },
+    { screen: 'Swipeable compare card (SwipeableCards.tsx)', className: 'swipe-card-avatar', size: undefined, expected: 80 },
+    { screen: 'Admin teacher details (AdminPanel.tsx)', className: 'admin-detail-photo', size: 64, expected: 64 },
 ];
 
 describe('Avatar — thumbnail loading across every screen', () => {
@@ -93,6 +93,37 @@ describe('Avatar — thumbnail loading across every screen', () => {
                 expect(div.getAttribute('aria-hidden')).toBe('true');
             });
         });
+    });
+});
+
+describe('Avatar — perceived speed', () => {
+    it('is lazy and not high-priority by default (off-screen photos must not compete with the page)', () => {
+        render(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className="teacher-card-image" />);
+        expect(img()!.getAttribute('loading')).toBe('lazy');
+        expect(img()!.hasAttribute('fetchpriority')).toBe(false);
+    });
+
+    it('loads immediately at high priority when marked as on-screen', () => {
+        render(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className="teacher-card-image" priority />);
+        expect(img()!.getAttribute('loading')).toBe('eager');
+        expect(img()!.getAttribute('fetchpriority')).toBe('high');
+    });
+
+    it('paints a coloured placeholder behind the photo while it downloads', () => {
+        // jsdom's CSS parser drops gradients, so check the serialised markup instead
+        const { TextEncoder: NodeTextEncoder } = require('util');
+        (globalThis as any).TextEncoder = (globalThis as any).TextEncoder || NodeTextEncoder;
+        const { renderToStaticMarkup } = require('react-dom/server');
+        const html = renderToStaticMarkup(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className="teacher-card-image" />);
+        expect(html).toContain('<img');
+        expect(html).toContain('linear-gradient(135deg');
+    });
+
+    it('keeps list thumbnails small: a ~60px circle must not request more than 80px (1x) / 160px (2x)', () => {
+        render(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className="teacher-card-image" />);
+        expect(proxyParams().get('w')).toBe('80');
+        expect(img()!.getAttribute('srcset')).toContain('w=160');
+        expect(img()!.getAttribute('srcset')).not.toContain('w=320');
     });
 });
 

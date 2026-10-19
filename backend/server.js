@@ -195,6 +195,18 @@ const invalidateCache = (pattern) => {
     }
 };
 
+// Departments are free text on each teacher row, so normalise what an admin
+// types: collapse whitespace, and reuse the spelling/case of an existing
+// department (case-insensitive match) so "computer science" and
+// "Computer Science" never become two separate filters.
+const normalizeDepartment = (value) => String(value || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+const canonicalDepartment = async (value) => {
+    const cleaned = normalizeDepartment(value);
+    if (!cleaned) return cleaned;
+    const [rows] = await db.query('SELECT department FROM teachers WHERE LOWER(department) = LOWER(?) LIMIT 1', [cleaned]);
+    return rows.length > 0 ? rows[0].department : cleaned;
+};
+
 // ========== SCHEMA BOOTSTRAP ==========
 // Creates tables that may be added after the initial deployment, so the
 // server can auto-migrate on Render without manual SQL.
@@ -349,7 +361,9 @@ app.get('/api/departments', async (req, res) => {
             GROUP BY department
             ORDER BY department
         `);
-        res.set('Cache-Control', 'public, max-age=3600');
+        // Revalidate every time (cheap 304 via ETag) so a department an admin
+        // just added shows up in the site filter immediately, not an hour later.
+        res.set('Cache-Control', 'no-cache');
         res.json(rows);
     } catch (error) {
         console.error('Error fetching departments:', error);
@@ -681,7 +695,9 @@ app.post('/api/admin/forgot-password', resetLimiter, csrfValidate, async (req, r
         const admin = admins[0];
         const resetToken = crypto.randomBytes(32).toString('hex');
         const tokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
-        await db.query('UPDATE admins SET reset_token = ?, reset_token_expires = ? WHERE id = ?', [resetToken, tokenExpiry, admin.id]);
+        // Store only a SHA-256 hash; the raw token exists only in the emailed link
+        const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+        await db.query('UPDATE admins SET reset_token = ?, reset_token_expires = ? WHERE id = ?', [resetTokenHash, tokenExpiry, admin.id]);
         const frontendUrl = process.env.FRONTEND_URL;
         const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
         await sendEmail(email, 'Password Reset Request', `<p>Click <a href="${resetLink}">here</a> to reset your password. Link expires in 1 hour.</p>`);
@@ -696,8 +712,11 @@ app.post('/api/admin/reset-password', csrfValidate, async (req, res) => {
     // ... (your existing reset password code) ...
     try {
         const { token, newPassword } = req.body;
-        if (!token || !newPassword || newPassword.length < 6) return res.status(400).json({ error: 'Token and new password (min 6 chars) required' });
-        const [admins] = await db.query('SELECT id FROM admins WHERE reset_token = ? AND reset_token_expires > NOW()', [token]);
+        if (!token || typeof token !== 'string' || !newPassword || typeof newPassword !== 'string' || newPassword.length < 10) {
+            return res.status(400).json({ error: 'Token and new password (min 10 chars) required' });
+        }
+        const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+        const [admins] = await db.query('SELECT id FROM admins WHERE reset_token = ? AND reset_token_expires > NOW()', [tokenHash]);
         if (admins.length === 0) return res.status(400).json({ error: 'Invalid or expired token' });
         const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
         await db.query('UPDATE admins SET password = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?', [hashedPassword, admins[0].id]);
@@ -735,7 +754,7 @@ app.post('/api/admin/setup', csrfValidate, async (req, res) => {
         res.json({ success: true, message: 'Admin created. Use new credentials to login.' });
     } catch (error) {
         console.error('Setup error:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'Server error' });
     }
 });
 
@@ -750,7 +769,8 @@ app.post('/api/admin/teachers', verifyAdmin, csrfValidate, [
     try {
         const { name, department, image_url } = req.body;
         const sanitizedName = name.trim().slice(0, 200);
-        const sanitizedDept = department.trim().slice(0, 200);
+        const sanitizedDept = await canonicalDepartment(department);
+        if (sanitizedDept.length < 2) return res.status(400).json({ error: 'Department must be 2-100 characters' });
         const sanitizedImageUrl = image_url ? image_url.trim().slice(0, 500) : null;
         const [result] = await db.query('INSERT INTO teachers (name, department, image_url) VALUES (?, ?, ?)', [sanitizedName, sanitizedDept, sanitizedImageUrl]);
         await createAuditLog(req.admin.id, 'ADD_TEACHER', `Added teacher: ${sanitizedName}`, req.ip);
@@ -842,7 +862,8 @@ app.put('/api/admin/teachers/:id', verifyAdmin, csrfValidate, [
         const teacherId = req.params.id;
         const { name, department, image_url } = req.body;
         const sanitizedName = name.trim().slice(0, 200);
-        const sanitizedDept = department.trim().slice(0, 200);
+        const sanitizedDept = await canonicalDepartment(department);
+        if (sanitizedDept.length < 2) return res.status(400).json({ error: 'Department must be 2-100 characters' });
         const sanitizedImageUrl = image_url ? image_url.trim().slice(0, 500) : null;
 
         // Check if teacher exists
@@ -944,12 +965,12 @@ app.post('/api/admin/clean-teacher-images', verifyAdmin, csrfValidate, async (re
 app.get('/api/admin/reviews', verifyAdmin, async (req, res) => {
     // ... (your existing get admin reviews code) ...
     try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+        const page = Math.max(parseInt(req.query.page) || 1, 1);
+        const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 100);
         const offset = (page - 1) * limit;
 
         const [reviews] = await db.query(`
-            SELECT r.*, t.name as teacher_name 
+            SELECT r.*, t.name as teacher_name
             FROM reviews r
             JOIN teachers t ON r.teacher_id = t.id
             ORDER BY r.created_at DESC
@@ -1239,50 +1260,6 @@ Sitemap: ${baseUrl}/sitemap.xml
 // Health check
 app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
-});
-
-// Schema status – diagnostic for the Q&A tables and courses column
-app.get('/api/schema-status', async (req, res) => {
-    try {
-        const [questions] = await db.query("SHOW TABLES LIKE 'questions'");
-        const [answers] = await db.query("SHOW TABLES LIKE 'question_answers'");
-        const [coursesCol] = await db.query("SHOW COLUMNS FROM reviews LIKE 'courses'");
-        res.json({
-            questions_table: questions.length > 0,
-            question_answers_table: answers.length > 0,
-            courses_column: coursesCol.length > 0,
-            bootstrap_error: schemaBootstrapError,
-            bootstrap_done: schemaBootstrapDone
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message, bootstrap_error: schemaBootstrapError });
-    }
-});
-
-// Public endpoint to ensure courses column exists (Render cold-start safety net)
-app.get('/api/ensure-courses', async (req, res) => {
-    try {
-        const [coursesCol] = await db.query("SHOW COLUMNS FROM reviews LIKE 'courses'");
-        if (coursesCol.length === 0) {
-            await db.query('ALTER TABLE reviews ADD COLUMN courses VARCHAR(2000) NULL AFTER user_name');
-            console.log('✅ Added courses column to reviews table (via ensure-courses)');
-            res.json({ success: true, message: 'Courses column added' });
-        } else {
-            res.json({ success: true, message: 'Courses column already exists' });
-        }
-    } catch (error) {
-        console.error('⚠️ ensure-courses error:', error.message);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-app.get('/api/db-test', async (req, res) => {
-    try {
-        const [result] = await db.query('SELECT 1 as test');
-        res.json({ status: 'Connected to DB', result });
-    } catch (error) {
-        res.status(500).json({ status: 'DB connection failed', error: error.message });
-    }
 });
 
 // Start server
