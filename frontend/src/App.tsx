@@ -108,7 +108,7 @@ const App: React.FC = () => {
     const [newTeacherDepartment, setNewTeacherDepartment] = useState('');
     const [newTeacherImage, setNewTeacherImage] = useState('');
     const [reviewsForModeration, setReviewsForModeration] = useState<AdminReview[]>([]);
-    const [adminStats, setAdminStats] = useState<{ total_teachers: number; total_reviews: number; reviews_last_week: number } | null>(null);
+    const [adminStats, setAdminStats] = useState<{ total_teachers: number; total_reviews: number; reviews_last_week: number; pending_reviews?: number; last_sweep?: { scanned: number; queued: number; already_queued?: number; at: string } | null } | null>(null);
 
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastIdRef = useRef(0);
@@ -1118,6 +1118,8 @@ const App: React.FC = () => {
                         teachers={teachers}
                         reviewsForModeration={reviewsForModeration}
                         totalReviewsCount={adminStats?.total_reviews ?? 0}
+                        pendingReviewsCount={adminStats?.pending_reviews ?? 0}
+                        lastSweep={adminStats?.last_sweep ?? null}
                         onAddTeacher={handleAddTeacher}
                         onUpdateTeacher={handleUpdateTeacher}
                         onDeleteTeacher={handleDeleteTeacher}

@@ -1290,15 +1290,39 @@ app.put('/api/admin/custom-courses/:id', verifyAdmin, csrfValidate, async (req, 
 });
 
 app.get('/api/admin/stats', verifyAdmin, async (req, res) => {
-    // ... (your existing stats code) ...
     try {
         const [teacherCount] = await db.query('SELECT COUNT(*) as count FROM teachers');
         const [reviewCount] = await db.query('SELECT COUNT(*) as count FROM reviews');
         const [recentReviews] = await db.query('SELECT COUNT(*) as count FROM reviews WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)');
+        const [pendingCount] = await db.query('SELECT COUNT(*) as count FROM reviews WHERE is_approved = 0');
+
+        // Latest NLP filter sweep record (audit_logs row written by the
+        // one-time startup sweep or POST /api/admin/filter-reviews).
+        // Non-fatal: stats still work if audit_logs has no sweep row yet.
+        let last_sweep = null;
+        try {
+            const [sweepRows] = await db.query(
+                "SELECT details, created_at FROM audit_logs WHERE action = 'SWEEP_REVIEWS' ORDER BY id DESC LIMIT 1"
+            );
+            if (sweepRows.length > 0) {
+                const parsed = JSON.parse(sweepRows[0].details || '{}');
+                last_sweep = {
+                    scanned: Number(parsed.scanned) || 0,
+                    queued: Number(parsed.queued) || 0,
+                    already_queued: Number(parsed.alreadyQueued) || 0,
+                    at: sweepRows[0].created_at
+                };
+            }
+        } catch (sweepErr) {
+            last_sweep = null;
+        }
+
         res.json({
             total_teachers: teacherCount[0].count,
             total_reviews: reviewCount[0].count,
-            reviews_last_week: recentReviews[0].count
+            reviews_last_week: recentReviews[0].count,
+            pending_reviews: pendingCount[0].count,
+            last_sweep
         });
     } catch (error) {
         console.error('Error fetching stats:', error);

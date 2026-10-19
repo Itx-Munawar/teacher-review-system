@@ -9,6 +9,10 @@ export interface AdminPanelProps {
     teachers: Teacher[];
     reviewsForModeration: AdminReview[];
     totalReviewsCount: number;
+    /** Reviews waiting for approval (global count from /api/admin/stats). */
+    pendingReviewsCount: number;
+    /** Result of the latest NLP filter sweep over existing reviews, if any. */
+    lastSweep: { scanned: number; queued: number; at: string } | null;
     onAddTeacher: (e: React.FormEvent) => void;
     onDeleteTeacher: (id: number) => void;
     onUpdateTeacher: (id: number, data: { name: string; department: string; image_url?: string }) => void;
@@ -55,6 +59,8 @@ const AdminPanel = memo(({
     teachers,
     reviewsForModeration,
     totalReviewsCount,
+    pendingReviewsCount,
+    lastSweep,
     onAddTeacher,
     onDeleteTeacher,
     onUpdateTeacher,
@@ -276,6 +282,15 @@ const AdminPanel = memo(({
                 <div className="admin-stats">
                     <span><Icon name="book" size={15} /> {totalTeachersCount || teachers.length} Teachers</span>
                     <span><Icon name="message-circle" size={15} /> {totalReviews} Reviews</span>
+                    <span style={{ color: pendingReviewsCount > 0 ? '#f59e0b' : undefined, fontWeight: pendingReviewsCount > 0 ? 700 : undefined }}>
+                        {pendingReviewsCount} Pending
+                    </span>
+                    <span style={{ opacity: 0.85 }} title="Last NLP filter sweep over existing reviews">
+                        <Icon name="info" size={15} />{' '}
+                        {lastSweep
+                            ? `Sweep: ${lastSweep.scanned} scanned · ${lastSweep.queued} queued · ${new Date(lastSweep.at).toLocaleDateString()}`
+                            : 'Sweep: not run yet'}
+                    </span>
                 </div>
                 <button onClick={onLogout} className="logout-btn">Logout</button>
             </div>
@@ -291,7 +306,7 @@ const AdminPanel = memo(({
                     className={`admin-tab ${activeTab === 'reviews' ? 'admin-tab-active' : ''}`}
                     onClick={() => setActiveTab('reviews')}
                 >
-                    <Icon name="message-circle" size={15} /> Reviews
+                    <Icon name="message-circle" size={15} /> Reviews{pendingReviewsCount > 0 ? ` (${pendingReviewsCount})` : ''}
                 </button>
                 <button
                     className={`admin-tab ${activeTab === 'qa' ? 'admin-tab-active' : ''}`}
