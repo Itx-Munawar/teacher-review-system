@@ -167,8 +167,8 @@ export const getAdminTeacherDetail = (id: number) => {
     return api.get(`/admin/teachers/${id}`);
 };
 
-export const getAdminReviews = (page: number = 1, limit: number = 50) => {
-    return api.get(`/admin/reviews?page=${page}&limit=${limit}`);
+export const getAdminReviews = (page: number = 1, limit: number = 50, pendingOnly: boolean = false) => {
+    return api.get(`/admin/reviews?page=${page}&limit=${limit}${pendingOnly ? '&pending=1' : ''}`);
 };
 
 export const deleteReview = (id: number) => {

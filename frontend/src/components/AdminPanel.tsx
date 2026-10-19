@@ -13,6 +13,10 @@ export interface AdminPanelProps {
     pendingReviewsCount: number;
     /** Result of the latest NLP filter sweep over existing reviews, if any. */
     lastSweep: { scanned: number; queued: number; at: string } | null;
+    /** When true, the reviews list shows only pending (unapproved) reviews. */
+    reviewsPendingOnly: boolean;
+    /** Flip the pending-only filter (dashboard pending counter / show-all). */
+    onTogglePendingOnly: () => void | Promise<void>;
     onAddTeacher: (e: React.FormEvent) => void;
     onDeleteTeacher: (id: number) => void;
     onUpdateTeacher: (id: number, data: { name: string; department: string; image_url?: string }) => void;
@@ -64,6 +68,8 @@ const AdminPanel = memo(({
     totalReviewsCount,
     pendingReviewsCount,
     lastSweep,
+    reviewsPendingOnly,
+    onTogglePendingOnly,
     onAddTeacher,
     onDeleteTeacher,
     onUpdateTeacher,
@@ -308,9 +314,30 @@ const AdminPanel = memo(({
                 <div className="admin-stats">
                     <span><Icon name="book" size={15} /> {totalTeachersCount || teachers.length} Teachers</span>
                     <span><Icon name="message-circle" size={15} /> {totalReviews} Reviews</span>
-                    <span style={{ color: pendingReviewsCount > 0 ? '#f59e0b' : undefined, fontWeight: pendingReviewsCount > 0 ? 700 : undefined }}>
-                        {pendingReviewsCount} Pending
-                    </span>
+                    <button
+                        type="button"
+                        onClick={() => { setActiveTab('reviews'); onTogglePendingOnly(); }}
+                        aria-pressed={reviewsPendingOnly}
+                        title="Show only pending reviews"
+                        style={{
+                            background: reviewsPendingOnly
+                                ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.35), rgba(245, 158, 11, 0.18))'
+                                : 'linear-gradient(135deg, rgba(255, 94, 156, 0.15), rgba(0, 201, 255, 0.15))',
+                            border: `1px solid ${reviewsPendingOnly ? 'rgba(245, 158, 11, 0.65)' : 'rgba(168, 85, 247, 0.25)'}`,
+                            padding: '6px 14px',
+                            borderRadius: '50px',
+                            fontWeight: pendingReviewsCount > 0 ? 700 : 600,
+                            fontSize: '0.85rem',
+                            color: pendingReviewsCount > 0 ? '#b45309' : '#4c1d95',
+                            fontFamily: 'inherit',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                        }}
+                    >
+                        {pendingReviewsCount} Pending{reviewsPendingOnly ? ' ✓' : ''}
+                    </button>
                     <span style={{ opacity: 0.85 }} title="Last NLP filter sweep over existing reviews">
                         <Icon name="info" size={15} />{' '}
                         {lastSweep
@@ -611,7 +638,12 @@ const AdminPanel = memo(({
 
             {activeTab === 'reviews' && (
             <div className="admin-section">
-                <h3>All Reviews ({totalReviews})</h3>
+                <h3>{reviewsPendingOnly ? 'Pending Reviews' : 'All Reviews'} ({reviewsPendingOnly ? pendingReviewsCount : totalReviews})</h3>
+                {reviewsPendingOnly && (
+                    <div style={{ margin: '0 0 12px' }}>
+                        <button onClick={() => onTogglePendingOnly()} className="btn-cancel" style={{ padding: '4px 12px' }}>Show all reviews</button>
+                    </div>
+                )}
                 {selectedPendingIds.length > 0 && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', margin: '0 0 12px', padding: '8px 12px', background: '#eef2ff', borderRadius: '8px' }}>
                         <strong>{selectedPendingIds.length} selected</strong>
@@ -623,6 +655,8 @@ const AdminPanel = memo(({
                 <div className="admin-list">
                     {totalReviews === 0 ? (
                         <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>No reviews yet.</p>
+                    ) : reviewsPendingOnly && reviewsForModeration.length === 0 ? (
+                        <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>No pending reviews - all caught up!</p>
                     ) : (
                         reviewsForModeration.map((review: AdminReview) => {
                             const isReviewEditing = editingReviewId === review.id;

@@ -1061,15 +1061,23 @@ app.get('/api/admin/reviews', verifyAdmin, async (req, res) => {
         const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 100);
         const offset = (page - 1) * limit;
 
+        // Optional moderation filter: ?pending=1 returns only unapproved
+        // rows (used by the dashboard "pending" counter click-through).
+        const pendingOnly = req.query.pending === '1' || req.query.pending === 'true';
+        const whereClause = pendingOnly ? 'WHERE r.is_approved = 0' : '';
+
         const [reviews] = await db.query(`
             SELECT r.*, t.name as teacher_name
             FROM reviews r
             JOIN teachers t ON r.teacher_id = t.id
+            ${whereClause}
             ORDER BY r.created_at DESC
             LIMIT ${limit} OFFSET ${offset}
         `);
 
-        const [countResult] = await db.query('SELECT COUNT(*) as total FROM reviews');
+        const [countResult] = pendingOnly
+            ? await db.query('SELECT COUNT(*) as total FROM reviews WHERE is_approved = 0')
+            : await db.query('SELECT COUNT(*) as total FROM reviews');
         const total = countResult[0].total;
 
         res.json({

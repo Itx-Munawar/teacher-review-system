@@ -279,10 +279,12 @@ const App: React.FC = () => {
     const [adminQuestionsTotalPages, setAdminQuestionsTotalPages] = useState(1);
     const [adminLoadingMoreQuestions, setAdminLoadingMoreQuestions] = useState(false);
     const [customCourses, setCustomCourses] = useState<CustomCourse[]>([]);
+    // When true, the admin reviews list fetches only pending (unapproved) rows.
+    const [reviewsPendingOnly, setReviewsPendingOnly] = useState(false);
 
     const loadAdminData = useCallback(async () => {
         const [reviewsResult, questionsResult, coursesResult] = await Promise.allSettled([
-            getAdminReviews(1, 50),
+            getAdminReviews(1, 50, reviewsPendingOnly),
             getAdminQuestions(1, 50),
             getAdminCustomCourses()
         ]);
@@ -337,14 +339,31 @@ const App: React.FC = () => {
         } catch (err) {
             console.error('Error loading admin stats:', err);
         }
-    }, []);
+    }, [reviewsPendingOnly]);
+
+    // Toggle the "pending only" review filter (dashboard pending counter).
+    // Fetches page 1 with the *next* flag explicitly to avoid stale state.
+    const handleTogglePendingOnly = useCallback(async () => {
+        const next = !reviewsPendingOnly;
+        setReviewsPendingOnly(next);
+        try {
+            const res = await getAdminReviews(1, 50, next);
+            const data = res.data?.reviews || [];
+            setReviewsForModeration(data);
+            setAdminReviewsTotalPages(res.data?.pagination?.totalPages || 1);
+            setAdminReviewsPage(1);
+        } catch (error) {
+            console.error('Error applying pending filter:', error);
+            showToast('Failed to filter reviews', 'error');
+        }
+    }, [reviewsPendingOnly, showToast]);
 
     const handleLoadMoreReviews = useCallback(async () => {
         const nextPage = adminReviewsPage + 1;
         if (nextPage > adminReviewsTotalPages || adminLoadingMoreReviews) return;
         setAdminLoadingMoreReviews(true);
         try {
-            const reviewsRes = await getAdminReviews(nextPage, 50);
+            const reviewsRes = await getAdminReviews(nextPage, 50, reviewsPendingOnly);
             const reviewsData = reviewsRes.data?.reviews || [];
             setReviewsForModeration(prev => [...prev, ...reviewsData]);
             setAdminReviewsPage(nextPage);
@@ -354,7 +373,7 @@ const App: React.FC = () => {
         } finally {
             setAdminLoadingMoreReviews(false);
         }
-    }, [adminReviewsPage, adminReviewsTotalPages, adminLoadingMoreReviews, showToast]);
+    }, [adminReviewsPage, adminReviewsTotalPages, adminLoadingMoreReviews, reviewsPendingOnly, showToast]);
 
     const handleLoadMoreQuestions = useCallback(async () => {
         const nextPage = adminQuestionsPage + 1;
@@ -1163,6 +1182,8 @@ const App: React.FC = () => {
                         totalReviewsCount={adminStats?.total_reviews ?? 0}
                         pendingReviewsCount={adminStats?.pending_reviews ?? 0}
                         lastSweep={adminStats?.last_sweep ?? null}
+                        reviewsPendingOnly={reviewsPendingOnly}
+                        onTogglePendingOnly={handleTogglePendingOnly}
                         onAddTeacher={handleAddTeacher}
                         onUpdateTeacher={handleUpdateTeacher}
                         onDeleteTeacher={handleDeleteTeacher}
