@@ -1,7 +1,10 @@
 require('dotenv').config();
 const mysql = require('mysql2');
 
-// SSL configuration – enable if required by your cloud MySQL provider
+// SSL configuration – required by cloud MySQL providers such as Aiven,
+// which enforce TLS (set DB_SSL=true). Aiven's certificates chain to a
+// private CA that isn't in the system store, so the server certificate is
+// accepted without local verification.
 const sslConfig = process.env.DB_SSL === 'true' ? { ssl: { rejectUnauthorized: false } } : {};
 
 const pool = mysql.createPool({
@@ -9,7 +12,9 @@ const pool = mysql.createPool({
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
-   port: process.env.DB_PORT || 24580,
+    // DB_PORT: Aiven prints its own port next to the host in Service
+    // Overview; 24580 is the Render MySQL default (used when unset).
+    port: process.env.DB_PORT || 24580,
     waitForConnections: true,
     connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT) || 20,
     queueLimit: 0,
@@ -25,7 +30,7 @@ const promisePool = pool.promise();
 const initDB = async () => {
     try {
         const connection = await promisePool.getConnection();
-        console.log('✅ Connected to MySQL database on Render');
+        console.log(`✅ Connected to MySQL at ${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 24580}`);
         connection.release();
 
         // Optional: periodic ping to keep connections alive (every 5 minutes)
