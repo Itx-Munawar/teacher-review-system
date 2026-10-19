@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const db = require('./db');
 const { csrfSetCookie, csrfValidate } = require('./csrf');
+const { detectFlaggedText } = require('./contentFilter');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -559,13 +560,20 @@ app.post('/api/questions', questionLimiter, [
         const [teachers] = await db.query('SELECT id FROM teachers WHERE id = ?', [teacher_id]);
         if (teachers.length === 0) return res.status(404).json({ error: 'Teacher not found' });
 
+        // NLP content filter: flagged content is queued for admin approval.
+        const flagged = detectFlaggedText(sanitizedQuestion).flagged;
         const [result] = await db.query(
-            `INSERT INTO questions (teacher_id, question, is_approved) VALUES (?, ?, 1)`,
-            [teacher_id, sanitizedQuestion]
+            `INSERT INTO questions (teacher_id, question, is_approved) VALUES (?, ?, ?)`,
+            [teacher_id, sanitizedQuestion, flagged ? 0 : 1]
         );
 
         invalidateCache('questions');
-        res.json({ success: true, question_id: result.insertId, message: 'Question submitted!' });
+        res.json({
+            success: true,
+            question_id: result.insertId,
+            pending: flagged,
+            message: flagged ? 'Question submitted - it will appear once approved.' : 'Question submitted!'
+        });
     } catch (error) {
         console.error('Error saving question:', error);
         res.status(500).json({ error: 'Database error' });
@@ -586,13 +594,20 @@ app.post('/api/questions/:id/answers', questionLimiter, [
         const [questions] = await db.query('SELECT id FROM questions WHERE id = ?', [questionId]);
         if (questions.length === 0) return res.status(404).json({ error: 'Question not found' });
 
+        // NLP content filter: flagged content is queued for admin approval.
+        const flagged = detectFlaggedText(sanitizedAnswer).flagged;
         const [result] = await db.query(
-            `INSERT INTO question_answers (question_id, answer, is_approved) VALUES (?, ?, 1)`,
-            [questionId, sanitizedAnswer]
+            `INSERT INTO question_answers (question_id, answer, is_approved) VALUES (?, ?, ?)`,
+            [questionId, sanitizedAnswer, flagged ? 0 : 1]
         );
 
         invalidateCache('questions');
-        res.json({ success: true, answer_id: result.insertId, message: 'Answer submitted!' });
+        res.json({
+            success: true,
+            answer_id: result.insertId,
+            pending: flagged,
+            message: flagged ? 'Answer submitted - it will appear once approved.' : 'Answer submitted!'
+        });
     } catch (error) {
         console.error('Error saving answer:', error);
         res.status(500).json({ error: 'Database error' });
@@ -619,6 +634,12 @@ app.post('/api/reviews', reviewLimiter, [
         if (Array.isArray(courses) && courses.length > 0) {
             sanitizedCourses = JSON.stringify(courses.map(c => String(c).trim().slice(0, 200)).filter(Boolean));
         }
+
+        // NLP content filter across comment, display name and course tags.
+        // Flagged reviews are queued (is_approved=0) for the admin panel,
+        // never rejected outright.
+        const flagged = [sanitizedComment, sanitizedName, ...(Array.isArray(courses) ? courses : [])]
+            .some((value) => detectFlaggedText(String(value)).flagged);
         
         const [teachers] = await db.query('SELECT id FROM teachers WHERE id = ?', [teacher_id]);
         if (teachers.length === 0) {
@@ -627,15 +648,18 @@ app.post('/api/reviews', reviewLimiter, [
         
         const [result] = await db.query(
             `INSERT INTO reviews (teacher_id, comment, user_name, courses, is_approved) 
-             VALUES (?, ?, ?, ?, 1)`,
-            [teacher_id, sanitizedComment, sanitizedName, sanitizedCourses]
+             VALUES (?, ?, ?, ?, ?)`,
+            [teacher_id, sanitizedComment, sanitizedName, sanitizedCourses, flagged ? 0 : 1]
         );
         
         invalidateCache('teachers');
         res.json({
             success: true,
             review_id: result.insertId,
-            message: 'Review submitted successfully!'
+            pending: flagged,
+            message: flagged
+                ? 'Review submitted - it will appear publicly once approved.'
+                : 'Review submitted successfully!'
         });
     } catch (error) {
         console.error('Error saving review:', error);
@@ -1121,12 +1145,16 @@ app.post('/api/custom-courses', questionLimiter, [
         const name = req.body.name.trim().replace(/\s+/g, ' ');
         const nameKey = name.toLowerCase();
 
+        // NLP content filter: a flagged suggestion never auto-approves,
+        // regardless of how often an approved name was reused before.
+        const flagged = detectFlaggedText(name).flagged;
+
         // Already approved as a custom course? Just bump its usage counter.
         const [approved] = await db.query(
             "SELECT id FROM custom_courses WHERE name_key = ? AND status = 'approved'",
             [nameKey]
         );
-        if (approved.length > 0) {
+        if (!flagged && approved.length > 0) {
             await db.query('UPDATE custom_courses SET times_used = times_used + 1 WHERE id = ?', [approved[0].id]);
             return res.json({ success: true, status: 'approved' });
         }
@@ -1137,7 +1165,7 @@ app.post('/api/custom-courses', questionLimiter, [
              ON DUPLICATE KEY UPDATE times_used = times_used + 1`,
             [name, nameKey]
         );
-        res.json({ success: true, status: 'pending' });
+        res.json({ success: true, status: 'pending', pending: flagged });
     } catch (error) {
         console.error('Error suggesting custom course:', error);
         res.status(500).json({ error: 'Database error' });

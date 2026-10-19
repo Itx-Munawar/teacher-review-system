@@ -815,8 +815,9 @@ const App: React.FC = () => {
                 user_name: reviewUserName.trim() || 'Anonymous',
             };
             if (reviewCourses.length > 0) reviewPayload.courses = reviewCourses;
-            await submitReview(reviewPayload);
-            showToast('Review submitted successfully!', 'success');
+            const res = await submitReview(reviewPayload);
+            const pendingReview = Boolean(res.data?.pending);
+            showToast(res.data?.message || 'Review submitted successfully!', pendingReview ? 'info' : 'success');
             haptic([12, 40, 12]);
             // Confetti
             if ((window as any).canvasConfetti) {
@@ -832,7 +833,9 @@ const App: React.FC = () => {
             setReviewUserName('');
             setReviewCourses([]);
             setReviewError('');
-            setReviewSuccess(`Your review for ${selectedTeacher.name} has been submitted. Thank you!`);
+            setReviewSuccess(pendingReview
+                ? `Your review for ${selectedTeacher.name} has been received and will appear once approved.`
+                : `Your review for ${selectedTeacher.name} has been submitted. Thank you!`);
 
             const response = await getTeacherDetail(selectedTeacher.id);
             setSelectedTeacher(mapTeacherDetail(response.data, selectedTeacher));

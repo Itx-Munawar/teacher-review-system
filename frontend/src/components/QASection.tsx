@@ -39,10 +39,12 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
         setError('');
         setSuccess('');
         try {
-            await submitQuestion({ teacher_id: teacherId, question: questionText.trim() });
+            const res = await submitQuestion({ teacher_id: teacherId, question: questionText.trim() });
             setQuestionText('');
             setShowAskForm(false);
-            setSuccess('Question posted! Other students can now answer it.');
+            setSuccess(res.data?.pending
+                ? 'Question received - it will be posted once approved.'
+                : 'Question posted! Other students can now answer it.');
             loadQuestions();
         } catch (err) {
             const axiosErr = err as { response?: { data?: { error?: string } } };
@@ -59,10 +61,12 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
         setError('');
         setSuccess('');
         try {
-            await submitAnswer(questionId, answer);
+            const res = await submitAnswer(questionId, answer);
             setAnswerTexts(prev => ({ ...prev, [questionId]: '' }));
             setOpenAnswerForms(prev => ({ ...prev, [questionId]: false }));
-            setSuccess('Answer posted!');
+            setSuccess(res.data?.pending
+                ? 'Answer received - it will be posted once approved.'
+                : 'Answer posted!');
             loadQuestions();
         } catch (err) {
             const axiosErr = err as { response?: { data?: { error?: string } } };
