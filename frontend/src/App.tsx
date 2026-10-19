@@ -1344,7 +1344,6 @@ const App: React.FC = () => {
             <footer className="app-footer" role="contentinfo">
                 <div className="footer-content">
                     <p>© {new Date().getFullYear()} UMT Teacher Reviews. All rights reserved.</p>
-                    <p>Developed by Munawar Hussain</p>
                     <p className="footer-links">
                         <a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Use</a> · <a href="/dmca">DMCA &amp; Content Removal</a>
                     </p>

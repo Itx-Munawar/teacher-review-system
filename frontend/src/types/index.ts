@@ -28,6 +28,7 @@ export interface AdminReview {
     comment: string;
     user_name: string;
     courses?: string;
+    is_approved: boolean;
     created_at: string;
 }
 

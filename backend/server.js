@@ -988,30 +988,41 @@ app.delete('/api/admin/reviews/:id', verifyAdmin, csrfValidate, async (req, res)
     }
 });
 
-// PUT /api/admin/reviews/:id - edit a review (admin only)
-app.put('/api/admin/reviews/:id', verifyAdmin, csrfValidate, [
-    body('comment').isLength({ min: 3, max: 1000 }).withMessage('Comment must be 3-1000 characters'),
-    body('user_name').optional().isLength({ max: 100 }).withMessage('Name too long')
+// PUT /api/admin/reviews/:id - edit a review (admin only)\r\n// Accepts optional is_approved field to toggle approval status.\r\n// When is_approved is omitted, only comment/user_name are updated (existing behavior).\r\napp.put('/api/admin/reviews/:id', verifyAdmin, csrfValidate, [
+    body('comment').optional().isLength({ min: 3, max: 1000 }).withMessage('Comment must be 3-1000 characters'),
+    body('user_name').optional().isLength({ max: 100 }).withMessage('Name too long'),
+    body('is_approved').optional().isBoolean().withMessage('is_approved must be a boolean')
 ], async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
     try {
         const reviewId = req.params.id;
-        const { comment, user_name } = req.body;
-        const sanitizedComment = comment.trim().slice(0, 1000);
+        const { comment, user_name, is_approved } = req.body;
+        const sanitizedComment = comment ? comment.trim().slice(0, 1000) : undefined;
         const sanitizedName = user_name ? user_name.trim().slice(0, 100) : undefined;
 
-        // Check if review exists
-        const [existing] = await db.query('SELECT id FROM reviews WHERE id = ?', [reviewId]);
-        if (existing.length === 0) return res.status(404).json({ error: 'Review not found' });
-
-        if (sanitizedName !== undefined) {
-            await db.query('UPDATE reviews SET comment = ?, user_name = ? WHERE id = ?', [sanitizedComment, sanitizedName, reviewId]);
-        } else {
-            await db.query('UPDATE reviews SET comment = ? WHERE id = ?', [sanitizedComment, reviewId]);
+        // Check if review exists\n        const [existing] = await db.query('SELECT id FROM reviews WHERE id = ?', [reviewId]);\r\n        if (existing.length === 0) return res.status(404).json({ error: 'Review not found' });\r\n\r\n        // Build the update query dynamically\r\n        const updates = [];
+        const updateVals = [];
+        if (sanitizedComment !== undefined) {
+            updates.push('comment = ?');
+            updateVals.push(sanitizedComment);
         }
-        await createAuditLog(req.admin.id, 'EDIT_REVIEW', `Edited review ID: ${reviewId}`, req.ip);
-        res.json({ success: true, message: 'Review updated successfully' });
+        if (sanitizedName !== undefined) {
+            updates.push('user_name = ?');
+            updateVals.push(sanitizedName);
+        }
+        if (is_approved !== undefined) {
+            updates.push('is_approved = ?');
+            updateVals.push(is_approved);
+        }
+
+        if (updates.length === 0) {
+            return res.status(400).json({ error: 'No fields to update' });
+        }
+
+        await db.query(`UPDATE reviews SET ${updates.join(', ')} WHERE id = ?`, [...updateVals, reviewId]);
+        await createAuditLog(req.admin.id, is_approved !== undefined ? is_approved ? 'APPROVE_REVIEW' : 'REJECT_REVIEW' : 'EDIT_REVIEW', `Review ID: ${reviewId} ${is_approved !== undefined ? is_approved ? 'approved' : 'rejected' : 'edited'}`, req.ip);
+        res.json({ success: true, message: is_approved !== undefined ? (is_approved ? 'Review approved' : 'Review rejected' : 'Review updated successfully') });
     } catch (error) {
         console.error('Error editing review:', error);
         res.status(500).json({ error: 'Database error' });

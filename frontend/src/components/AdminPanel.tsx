@@ -14,6 +14,8 @@ export interface AdminPanelProps {
     onUpdateTeacher: (id: number, data: { name: string; department: string; image_url?: string }) => void;
     onDeleteReview: (id: number) => void;
     onUpdateReview: (id: number, data: { comment: string; user_name?: string }) => void;
+    onApproveReview: (id: number) => void;
+    onRejectReview: (id: number) => void;
     onLogout: () => void;
     showAddTeacherForm: boolean;
     setShowAddTeacherForm: (v: boolean) => void;
@@ -543,6 +545,15 @@ const AdminPanel = memo(({
                                     <div>
                                         <button onClick={() => startEditReview(review)} className="edit-btn" style={{ marginRight: '8px' }} aria-label="Edit review" disabled={adminMutationLoading}>
                                             <Icon name="edit" size={14} />
+                                    {review.is_approved === 0 && (
+                                        <>
+
+                                            <button className="admin-mini-btn admin-mini-approve" disabled={adminMutationLoading}> Approve </button>
+
+                                            <button className="admin-mini-btn admin-mini-reject" disabled={adminMutationLoading}> Reject </button>
+
+                                        </>
+                                    )}
                                         </button>
                                         <button onClick={() => onDeleteReview(review.id)} className="delete-btn" disabled={adminMutationLoading}>Delete</button>
                                     </div>

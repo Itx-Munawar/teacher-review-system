@@ -175,8 +175,12 @@ export const deleteReview = (id: number) => {
     return api.delete(`/admin/reviews/${id}`);
 };
 
-export const updateReview = (id: number, data: { comment: string; user_name?: string }) => {
-    return api.put(`/admin/reviews/${id}`, data);
+export const approveReview = (id: number) => {
+    return api.put(`/admin/reviews/${id}`, { is_approved: true });
+};
+
+export const rejectReview = (id: number) => {
+    return api.put(`/admin/reviews/${id}`, { is_approved: false });
 };
 
 export type { AdminQuestion } from '../types';
