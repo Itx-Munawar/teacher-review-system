@@ -1066,7 +1066,9 @@ app.put('/api/admin/reviews/:id', verifyAdmin, csrfValidate, [
         }
         if (is_approved !== undefined) {
             updates.push('is_approved = ?');
-            updateVals.push(is_approved);
+            // Coerce to 0/1 so the TINYINT column never depends on driver
+            // boolean stringification.
+            updateVals.push(is_approved ? 1 : 0);
         }
 
         if (updates.length === 0) {

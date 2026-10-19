@@ -13,7 +13,7 @@ export interface AdminPanelProps {
     onDeleteTeacher: (id: number) => void;
     onUpdateTeacher: (id: number, data: { name: string; department: string; image_url?: string }) => void;
     onDeleteReview: (id: number) => void;
-    onUpdateReview: (id: number, data: { comment: string; user_name?: string }) => void;
+    onUpdateReview: (id: number, data: { comment: string; user_name?: string; is_approved?: boolean }) => void;
     onApproveReview: (id: number) => void;
     onRejectReview: (id: number) => void;
     onLogout: () => void;
@@ -60,6 +60,8 @@ const AdminPanel = memo(({
     onUpdateTeacher,
     onDeleteReview,
     onUpdateReview,
+    onApproveReview,
+    onRejectReview,
     onLogout,
     showAddTeacherForm,
     setShowAddTeacherForm,
@@ -181,10 +183,11 @@ const AdminPanel = memo(({
         setEditReviewUserName('');
     };
 
-    const handleUpdateReview = async (id: number) => {
+    const handleUpdateReview = async (id: number, approve?: boolean) => {
         await onUpdateReview(id, {
             comment: editReviewComment,
-            user_name: editReviewUserName || undefined
+            user_name: editReviewUserName || undefined,
+            ...(approve ? { is_approved: true } : {})
         });
         cancelEditReview();
     };
@@ -438,15 +441,20 @@ const AdminPanel = memo(({
                                                             <p className="admin-detail-empty">No reviews for this teacher yet.</p>
                                                         ) : (
                                                             teacherDetail.reviews.map((review) => (
-                                                                <div key={review.id} className={`admin-detail-review ${review.is_approved === 0 ? 'admin-detail-review-pending' : ''}`}>
+                                                                <div key={review.id} className={`admin-detail-review ${Number(review.is_approved) === 0 ? 'admin-detail-review-pending' : ''}`}>
                                                                     <div className="admin-detail-review-head">
                                                                         <strong>{review.user_name || 'Anonymous'}</strong>
                                                                         <span className="admin-detail-review-date">
                                                                             {new Date(review.created_at).toLocaleDateString()}
-                                                                        </span>
-                                                                        {review.is_approved === 0 && (
-                                                                            <span className="admin-pending-badge">Pending</span>
-                                                                        )}
+                                                                        </span>                                                {Number(review.is_approved) === 0 && (
+                                                    <>
+                                                        <span className="admin-pending-badge">Pending</span>
+                                                        <span style={{ display: 'inline-flex', gap: '6px' }}>
+                                                            <button onClick={() => onApproveReview(review.id)} className="admin-mini-btn admin-mini-approve" disabled={adminMutationLoading}>Approve</button>
+                                                            <button onClick={() => onRejectReview(review.id)} className="admin-mini-btn admin-mini-reject" disabled={adminMutationLoading}>Reject</button>
+                                                        </span>
+                                                    </>
+                                                )}
                                                                     </div>
                                                                     {review.courses && (
                                                                         <div className="admin-detail-review-courses">📖 {review.courses}</div>
@@ -494,6 +502,8 @@ const AdminPanel = memo(({
                     ) : (
                         reviewsForModeration.map((review: AdminReview) => {
                             const isReviewEditing = editingReviewId === review.id;
+                            // Works for both 0/1 (MySQL) and false/true payloads.
+                            const isPending = Number(review.is_approved) === 0;
                             return (
                             <div key={review.id} className="admin-item">
                                 {isReviewEditing ? (
@@ -515,8 +525,18 @@ const AdminPanel = memo(({
                                             className="search-input"
                                             style={{ margin: 0 }}
                                         />
-                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                             <button onClick={() => handleUpdateReview(review.id)} className="btn-submit" style={{ padding: '4px 12px' }} disabled={adminMutationLoading}>Save</button>
+                                            {isPending && (
+                                                <button
+                                                    onClick={() => handleUpdateReview(review.id, true)}
+                                                    className="btn-submit"
+                                                    style={{ padding: '4px 12px', background: '#10b981', borderColor: '#10b981' }}
+                                                    disabled={adminMutationLoading}
+                                                >
+                                                    Save &amp; Approve
+                                                </button>
+                                            )}
                                             <button onClick={cancelEditReview} className="btn-cancel" style={{ padding: '4px 12px' }}>Cancel</button>
                                         </div>
                                     </div>
@@ -524,7 +544,10 @@ const AdminPanel = memo(({
                                 <>
                                     <div className="review-info">
                                         <strong>{review.teacher_name}</strong>
-                                        <p style={{ marginTop: '8px', marginBottom: '5px' }}>"{review.comment}"</p>
+                                        {isPending && (
+                                            <span className="admin-pending-badge" style={{ marginLeft: '8px' }}>Pending</span>
+                                        )}
+                                        <p style={{ marginTop: '8px', marginBottom: '5px' }}>&quot;{review.comment}&quot;</p>
                                         <small>
                                             <Icon name="user" size={12} /> {review.user_name || 'Anonymous'} | <Icon name="calendar" size={12} /> {new Date(review.created_at).toLocaleDateString()}
                                         </small>
@@ -554,19 +577,16 @@ const AdminPanel = memo(({
                                             }
                                         })()}
                                     </div>
-                                    <div>
-                                        <button onClick={() => startEditReview(review)} className="edit-btn" style={{ marginRight: '8px' }} aria-label="Edit review" disabled={adminMutationLoading}>
+                                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                                        <button onClick={() => startEditReview(review)} className="edit-btn" aria-label="Edit review" disabled={adminMutationLoading}>
                                             <Icon name="edit" size={14} />
-                                    {review.is_approved === false && (
-                                        <>
-
-                                            <button className="admin-mini-btn admin-mini-approve" disabled={adminMutationLoading}> Approve </button>
-
-                                            <button className="admin-mini-btn admin-mini-reject" disabled={adminMutationLoading}> Reject </button>
-
-                                        </>
-                                    )}
                                         </button>
+                                        {isPending && (
+                                            <>
+                                                <button onClick={() => onApproveReview(review.id)} className="admin-mini-btn admin-mini-approve" disabled={adminMutationLoading}>Approve</button>
+                                                <button onClick={() => onRejectReview(review.id)} className="admin-mini-btn admin-mini-reject" disabled={adminMutationLoading}>Reject</button>
+                                            </>
+                                        )}
                                         <button onClick={() => onDeleteReview(review.id)} className="delete-btn" disabled={adminMutationLoading}>Delete</button>
                                     </div>
                                 </>

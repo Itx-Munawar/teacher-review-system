@@ -743,7 +743,7 @@ const App: React.FC = () => {
             }
         }    }, [selectedTeacher, loadAdminData, showToast]);
 
-    const handleUpdateReview = useCallback(async (id: number, data: { comment: string; user_name?: string }) => {
+    const handleUpdateReview = useCallback(async (id: number, data: { comment: string; user_name?: string; is_approved?: boolean }) => {
         setAdminMutationLoading(true);
         try {
             await updateReview(id, data);

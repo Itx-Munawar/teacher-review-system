@@ -28,7 +28,8 @@ export interface AdminReview {
     comment: string;
     user_name: string;
     courses?: string;
-    is_approved: boolean;
+    /** MySQL returns 0/1; some payloads may carry booleans — treat either as pending/approved. */
+    is_approved: boolean | number;
     created_at: string;
 }
 

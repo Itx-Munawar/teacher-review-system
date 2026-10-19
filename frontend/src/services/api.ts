@@ -183,7 +183,7 @@ export const rejectReview = (id: number) => {
     return api.put(`/admin/reviews/${id}`, { is_approved: false });
 };
 
-export const updateReview = (id: number, data: { comment: string; user_name?: string }) => {
+export const updateReview = (id: number, data: { comment: string; user_name?: string; is_approved?: boolean }) => {
     return api.put(`/admin/reviews/${id}`, data);
 };
 
