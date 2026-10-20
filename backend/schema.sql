@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS reviews (
     comment TEXT NOT NULL,
     courses VARCHAR(2000) DEFAULT NULL,
     user_name VARCHAR(100) NOT NULL DEFAULT 'Anonymous',
-    is_approved TINYINT(1) NOT NULL DEFAULT 1,
+    is_approved TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY idx_reviews_teacher (teacher_id, is_approved),
@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS questions (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     teacher_id INT NOT NULL,
     question TEXT NOT NULL,
-    is_approved TINYINT(1) NOT NULL DEFAULT 1,
+    is_approved TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY idx_questions_teacher (teacher_id, is_approved)
@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS question_answers (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     question_id INT UNSIGNED NOT NULL,
     answer TEXT NOT NULL,
-    is_approved TINYINT(1) NOT NULL DEFAULT 1,
+    is_approved TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY idx_answers_question (question_id)

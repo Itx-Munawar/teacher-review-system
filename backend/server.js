@@ -286,7 +286,7 @@ const runSchemaBootstrap = async () => {
                 id INT UNSIGNED NOT NULL AUTO_INCREMENT,
                 teacher_id INT NOT NULL,
                 question TEXT NOT NULL,
-                is_approved TINYINT(1) NOT NULL DEFAULT 1,
+                is_approved TINYINT(1) NOT NULL DEFAULT 0,
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (id),
                 KEY idx_questions_teacher (teacher_id, is_approved)
@@ -297,7 +297,7 @@ const runSchemaBootstrap = async () => {
                 id INT UNSIGNED NOT NULL AUTO_INCREMENT,
                 question_id INT UNSIGNED NOT NULL,
                 answer TEXT NOT NULL,
-                is_approved TINYINT(1) NOT NULL DEFAULT 1,
+                is_approved TINYINT(1) NOT NULL DEFAULT 0,
                 created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (id),
                 KEY idx_answers_question (question_id)
@@ -630,19 +630,19 @@ app.post('/api/questions', questionLimiter, [
         const [teachers] = await db.query('SELECT id FROM teachers WHERE id = ?', [teacher_id]);
         if (teachers.length === 0) return res.status(404).json({ error: 'Teacher not found' });
 
-        // NLP content filter: flagged content is queued for admin approval.
-        const flagged = detectFlaggedText(sanitizedQuestion).flagged;
+        // Moderation-first: every question starts pending (is_approved=0)
+        // and only becomes public once an admin approves it in the panel.
         const [result] = await db.query(
             `INSERT INTO questions (teacher_id, question, is_approved) VALUES (?, ?, ?)`,
-            [teacher_id, sanitizedQuestion, flagged ? 0 : 1]
+            [teacher_id, sanitizedQuestion, 0]
         );
 
         invalidateCache('questions');
         res.json({
             success: true,
             question_id: result.insertId,
-            pending: flagged,
-            message: flagged ? 'Question submitted - it will appear once approved.' : 'Question submitted!'
+            pending: true,
+            message: 'Question submitted - it will appear once approved.'
         });
     } catch (error) {
         console.error('Error saving question:', error);
@@ -664,19 +664,19 @@ app.post('/api/questions/:id/answers', questionLimiter, [
         const [questions] = await db.query('SELECT id FROM questions WHERE id = ?', [questionId]);
         if (questions.length === 0) return res.status(404).json({ error: 'Question not found' });
 
-        // NLP content filter: flagged content is queued for admin approval.
-        const flagged = detectFlaggedText(sanitizedAnswer).flagged;
+        // Moderation-first: every answer starts pending (is_approved=0)
+        // and only becomes public once an admin approves it in the panel.
         const [result] = await db.query(
             `INSERT INTO question_answers (question_id, answer, is_approved) VALUES (?, ?, ?)`,
-            [questionId, sanitizedAnswer, flagged ? 0 : 1]
+            [questionId, sanitizedAnswer, 0]
         );
 
         invalidateCache('questions');
         res.json({
             success: true,
             answer_id: result.insertId,
-            pending: flagged,
-            message: flagged ? 'Answer submitted - it will appear once approved.' : 'Answer submitted!'
+            pending: true,
+            message: 'Answer submitted - it will appear once approved.'
         });
     } catch (error) {
         console.error('Error saving answer:', error);
@@ -705,12 +705,8 @@ app.post('/api/reviews', reviewLimiter, [
             sanitizedCourses = JSON.stringify(courses.map(c => String(c).trim().slice(0, 200)).filter(Boolean));
         }
 
-        // NLP content filter across comment, display name and course tags.
-        // Flagged reviews are queued (is_approved=0) for the admin panel,
-        // never rejected outright.
-        const flagged = [sanitizedComment, sanitizedName, ...(Array.isArray(courses) ? courses : [])]
-            .some((value) => detectFlaggedText(String(value)).flagged);
-        
+        // Moderation-first: every review starts pending (is_approved=0) and
+        // only appears publicly once an admin approves it in the panel.
         const [teachers] = await db.query('SELECT id FROM teachers WHERE id = ?', [teacher_id]);
         if (teachers.length === 0) {
             return res.status(404).json({ error: 'Teacher not found' });
@@ -719,17 +715,15 @@ app.post('/api/reviews', reviewLimiter, [
         const [result] = await db.query(
             `INSERT INTO reviews (teacher_id, comment, user_name, courses, is_approved) 
              VALUES (?, ?, ?, ?, ?)`,
-            [teacher_id, sanitizedComment, sanitizedName, sanitizedCourses, flagged ? 0 : 1]
+            [teacher_id, sanitizedComment, sanitizedName, sanitizedCourses, 0]
         );
         
         invalidateCache('teachers');
         res.json({
             success: true,
             review_id: result.insertId,
-            pending: flagged,
-            message: flagged
-                ? 'Review submitted - it will appear publicly once approved.'
-                : 'Review submitted successfully!'
+            pending: true,
+            message: 'Review submitted - it will appear publicly once approved.'
         });
     } catch (error) {
         console.error('Error saving review:', error);
