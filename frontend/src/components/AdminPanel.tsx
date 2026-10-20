@@ -433,9 +433,14 @@ const AdminPanel = memo(({
                 </button>
                 <button
                     className={`admin-tab ${activeTab === 'reviews' ? 'admin-tab-active' : ''}`}
-                    onClick={() => setActiveTab('reviews')}
+                    onClick={() => {
+                        setActiveTab('reviews');
+                        // The tab always opens the full list; pending-only is
+                        // only reachable via the dashboard counter.
+                        if (reviewsPendingOnly) onTogglePendingOnly();
+                    }}
                 >
-                    <Icon name="message-circle" size={15} /> Reviews{pendingReviewsCount > 0 ? ` (${pendingReviewsCount})` : ''}
+                    <Icon name="message-circle" size={15} /> Reviews{totalReviews > 0 ? ` (${totalReviews})` : ''}
                 </button>
                 <button
                     className={`admin-tab ${activeTab === 'qa' ? 'admin-tab-active' : ''}`}
