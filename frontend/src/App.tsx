@@ -282,25 +282,39 @@ const App: React.FC = () => {
     // When true, the admin reviews list fetches only pending (unapproved) rows.
     const [reviewsPendingOnly, setReviewsPendingOnly] = useState(false);
 
+    // Mirror the loaded-page counters into refs so loadAdminData can reload
+    // every page the admin has open without re-creating the callback itself.
+    const adminReviewsPageRef = useRef(adminReviewsPage);
+    const adminQuestionsPageRef = useRef(adminQuestionsPage);
+    useEffect(() => { adminReviewsPageRef.current = adminReviewsPage; }, [adminReviewsPage]);
+    useEffect(() => { adminQuestionsPageRef.current = adminQuestionsPage; }, [adminQuestionsPage]);
+
     const loadAdminData = useCallback(async () => {
+        // Re-fetch every review/Q&A page the admin already has open, not just
+        // page 1: resetting to a single page after a save collapsed the list
+        // and yanked the viewport to the top of the page.
+        const reviewPages = Array.from({ length: Math.max(adminReviewsPageRef.current, 1) }, (_, i) => i + 1);
+        const questionPages = Array.from({ length: Math.max(adminQuestionsPageRef.current, 1) }, (_, i) => i + 1);
+
         const [reviewsResult, questionsResult, coursesResult] = await Promise.allSettled([
-            getAdminReviews(1, 50, reviewsPendingOnly),
-            getAdminQuestions(1, 50),
+            Promise.all(reviewPages.map((p) => getAdminReviews(p, 50, reviewsPendingOnly))),
+            Promise.all(questionPages.map((p) => getAdminQuestions(p, 50))),
             getAdminCustomCourses()
         ]);
 
         let reviewsData: AdminReview[] = [];
         let totalPages = 1;
         if (reviewsResult.status === 'fulfilled') {
-            const reviewsRes = reviewsResult.value;
-            if (reviewsRes.data) {
-                if (Array.isArray(reviewsRes.data)) {
-                    reviewsData = reviewsRes.data;
-                } else if (reviewsRes.data.reviews) {
-                    reviewsData = reviewsRes.data.reviews;
-                    totalPages = reviewsRes.data.pagination?.totalPages || 1;
-                } else if (reviewsRes.data.data) {
-                    reviewsData = reviewsRes.data.data;
+            for (const reviewsRes of reviewsResult.value) {
+                const d = reviewsRes.data;
+                if (!d) continue;
+                if (Array.isArray(d)) {
+                    reviewsData = reviewsData.concat(d);
+                } else if (d.reviews) {
+                    reviewsData = reviewsData.concat(d.reviews);
+                    totalPages = d.pagination?.totalPages || 1;
+                } else if (d.data) {
+                    reviewsData = reviewsData.concat(d.data);
                 }
             }
         } else {
@@ -310,10 +324,12 @@ const App: React.FC = () => {
         let questionsData: AdminQuestion[] = [];
         let questionsTotalPages = 1;
         if (questionsResult.status === 'fulfilled') {
-            const questionsRes = questionsResult.value;
-            if (questionsRes.data?.questions) {
-                questionsData = questionsRes.data.questions;
-                questionsTotalPages = questionsRes.data.pagination?.totalPages || 1;
+            for (const questionsRes of questionsResult.value) {
+                const d = questionsRes.data;
+                if (d?.questions) {
+                    questionsData = questionsData.concat(d.questions);
+                    questionsTotalPages = d.pagination?.totalPages || 1;
+                }
             }
         } else {
             console.error('Error loading admin questions:', questionsResult.reason);
@@ -329,8 +345,8 @@ const App: React.FC = () => {
         setAdminQuestionsTotalPages(questionsTotalPages);
         setReviewsForModeration(reviewsData);
         setAdminQuestions(questionsData);
-        setAdminReviewsPage(1);
-        setAdminQuestionsPage(1);
+        // No page-counter reset here: every already-loaded page was re-fetched
+        // above, so the list keeps its length and the viewport stays put.
 
         // Fetch actual totals from the stats endpoint
         try {

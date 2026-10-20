@@ -278,30 +278,45 @@ const AdminPanel = memo(({
         }
     };
 
-    const handleUpdateReview = async (id: number, approve?: boolean) => {
-        await onUpdateReview(id, {
-            comment: editReviewComment,
-            user_name: editReviewUserName || undefined,
-            ...(approve ? { is_approved: true } : {})
+    // Refetching the list after a mutation can change the page height and
+    // yank the viewport; capture the scroll offset and restore it right after
+    // the re-render so the admin stays on the row they just acted on.
+    const preserveScrollPos = async (run: () => Promise<unknown>) => {
+        const y = window.scrollY;
+        await run();
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => window.scrollTo({ top: y, behavior: 'auto' }));
         });
-        cancelEditReview();
-        await refreshTeacherDetail();
     };
 
-    const handleDeleteReview = async (id: number) => {
-        await onDeleteReview(id);
-        await refreshTeacherDetail();
-    };
+    const handleUpdateReview = (id: number, approve?: boolean) =>
+        preserveScrollPos(async () => {
+            await onUpdateReview(id, {
+                comment: editReviewComment,
+                user_name: editReviewUserName || undefined,
+                ...(approve ? { is_approved: true } : {})
+            });
+            cancelEditReview();
+            await refreshTeacherDetail();
+        });
 
-    const handleApproveReview = async (id: number) => {
-        await onApproveReview(id);
-        await refreshTeacherDetail();
-    };
+    const handleDeleteReview = (id: number) =>
+        preserveScrollPos(async () => {
+            await onDeleteReview(id);
+            await refreshTeacherDetail();
+        });
 
-    const handleRejectReview = async (id: number) => {
-        await onRejectReview(id);
-        await refreshTeacherDetail();
-    };
+    const handleApproveReview = (id: number) =>
+        preserveScrollPos(async () => {
+            await onApproveReview(id);
+            await refreshTeacherDetail();
+        });
+
+    const handleRejectReview = (id: number) =>
+        preserveScrollPos(async () => {
+            await onRejectReview(id);
+            await refreshTeacherDetail();
+        });
 
     // Bulk moderation: only ids still present and still pending count.
     const selectedPendingIds = selectedReviewIds.filter((id) =>
@@ -314,10 +329,12 @@ const AdminPanel = memo(({
 
     const clearReviewSelection = () => setSelectedReviewIds([]);
 
-    const runBulkDecision = async (action: 'approve' | 'reject') => {
+    const runBulkDecision = (action: 'approve' | 'reject') => {
         if (selectedPendingIds.length === 0) return;
-        await onBulkReviewDecision(selectedPendingIds, action);
-        clearReviewSelection();
+        return preserveScrollPos(async () => {
+            await onBulkReviewDecision(selectedPendingIds, action);
+            clearReviewSelection();
+        });
     };
 
     // Shared inline edit form, used by the reviews tab and the teacher
