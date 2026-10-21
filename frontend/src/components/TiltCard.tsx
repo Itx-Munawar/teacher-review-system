@@ -40,6 +40,16 @@ const TiltCard: React.FC<TiltCardProps> = ({
         el.style.setProperty('--tilt-y', '50%');
     };
 
+    // Clickable cards are divs for the tilt effect, so they need the keyboard
+    // affordances a native <button> would provide.
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (!onClick) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            e.currentTarget.click();
+        }
+    };
+
     return (
         <div
             ref={cardRef}
@@ -47,6 +57,9 @@ const TiltCard: React.FC<TiltCardProps> = ({
             onMouseMove={handleMouseMove}
             onMouseLeave={handleMouseLeave}
             onClick={onClick}
+            onKeyDown={handleKeyDown}
+            role={onClick ? 'button' : undefined}
+            tabIndex={onClick ? 0 : undefined}
             style={style}
         >
             {children}

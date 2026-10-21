@@ -24,7 +24,9 @@ const TeacherAutocomplete: React.FC<TeacherAutocompleteProps> = ({
     onClear,
     onCompare,
     isInCompare,
-    placeholder = 'Search by teacher name or department...',
+    // The sidebar input is ~180px of usable width on a small laptop; a long
+    // placeholder gets clipped mid-word. Keep it short and unambiguous.
+    placeholder = 'Search teachers...',
     inputRef
 }) => {
     const [suggestions, setSuggestions] = useState<Teacher[]>([]);

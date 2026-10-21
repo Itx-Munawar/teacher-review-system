@@ -1387,13 +1387,16 @@ const App: React.FC = () => {
                                     >
                                         <TiltCard
                                             className="teacher-card"
+                                            maxTilt={6}
                                             onClick={() => handleTeacherClick(teacher)}
                                         >
                                             <Avatar name={teacher.name} imageUrl={teacher.image_url} className="teacher-card-image" priority={index < 6} />
                                             <div className="teacher-card-info">
-                                                <h3>{teacher.name}</h3>
-                                                <p className="department">{teacher.department}</p>
-                                                <span className="reviews-count">({teacher.review_count} reviews)</span>
+                                                <h3 title={teacher.name}>{teacher.name}</h3>
+                                                <p className="department" title={teacher.department}>{teacher.department}</p>
+                                                <span className="reviews-count">
+                                                    ({teacher.review_count} {teacher.review_count === 1 ? 'review' : 'reviews'})
+                                                </span>
                                             </div>
                                             <button
                                                 onClick={(e) => {

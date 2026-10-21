@@ -5861,7 +5861,7 @@ select:focus-visible {
     body {
         animation: none !important;
     }
-n    /* Stop gradient text animation */
+    /* Stop gradient text animation */
     .gradient-text {
         animation: none !important;
     }
@@ -5899,7 +5899,7 @@ select:focus-visible {
     .teacher-detail-image {
         animation: none !important;
     }
-n    /* Simplify card entrance animations */
+    /* Simplify card entrance animations */
     .teacher-card-enter {
         animation: fadeIn 0.2s ease-out both !important;
     }
@@ -5908,7 +5908,7 @@ select:focus-visible {
     .tilt-card {
         transform-style: flat !important;
     }
-n    /* Reduce shadow complexity */
+    /* Reduce shadow complexity */
     .teacher-card {
         box-shadow: 0 2px 8px rgba(120, 70, 200, 0.12) !important;
     }
@@ -5957,4 +5957,252 @@ select:focus-visible {
     border-color: rgba(120, 70, 200, 0.85);
     box-shadow: 0 0 0 3px rgba(120, 70, 200, 0.18);
     outline: none;
+}
+
+/* ============================================================
+   UI POLISH: append-only override layer
+   ------------------------------------------------------------
+   The rules above accumulated over many iterations, leaving two
+   structural problems on the home screen:
+
+     1. .teacher-card-info is a flex item with the default
+        min-width:auto, so long names and departments refused to
+        shrink. The text column overflowed a 198px card and every
+        card grew to ~250px tall (three-line names, five-line
+        departments, an avatar floating in the middle).
+     2. The hero and welcome panel were sized for a wide desktop.
+        At 800-1000px the header and welcome copy consumed a third
+        of the viewport before any teacher appeared.
+
+   Values below are deliberately compact. Keep this section last so
+   it continues to win the cascade.
+   ============================================================ */
+
+/* ---- Sidebar: give the card column a little more room ---- */
+.sidebar {
+    padding: 1.25rem;
+}
+
+/* At 800-1100px the old flex:1 split left the list only ~206px wide,
+   which forced three-line names and hid most department names. A fixed
+   basis keeps the list readable; the empty welcome panel can afford it. */
+@media (min-width: 769px) {
+    .sidebar {
+        flex: 0 1 340px;
+    }
+}
+
+.search-input {
+    padding: 11px 16px;
+    font-size: 0.95rem;
+}
+
+/* ---- Teacher rows ----
+   avatar 42px | name (max 2 lines) / department (1 line) / count | compare
+   min-width:0 is the actual bug fix: without it the text column's
+   min-content width pushes it outside the card. */
+.teacher-card {
+    padding: 0.55rem 0.6rem;
+    gap: 0.5rem;
+    min-height: 62px;
+    align-items: center;
+}
+
+.teacher-card-image {
+    width: 40px;
+    height: 40px;
+    font-size: 0.9rem;
+}
+
+.teacher-card-info {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding-right: 26px;
+}
+
+.teacher-card h3 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1.25;
+    margin: 0 0 1px;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+}
+
+.teacher-card .department {
+    font-size: 0.75rem;
+    line-height: 1.3;
+    margin: 0 0 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.teacher-card .reviews-count {
+    display: block;
+    font-size: 0.7rem;
+    line-height: 1.2;
+}
+
+.teacher-card .compare-toggle-btn {
+    width: 26px;
+    height: 26px;
+    top: 6px;
+    right: 6px;
+    font-size: 0.85rem;
+    border-width: 1.5px;
+}
+
+.teacher-list {
+    gap: 0.55rem;
+    max-height: calc(100vh - 230px);
+    scrollbar-gutter: stable;
+}
+
+.skeleton-card {
+    padding: 0.6rem 0.65rem;
+    gap: 0.6rem;
+    min-height: 64px;
+}
+
+.skeleton-image {
+    width: 40px;
+    height: 40px;
+}
+
+.skeleton-text-line {
+    margin: 5px 0;
+}
+
+/* ---- Header: the page title should not outrank the content ---- */
+.header {
+    padding: 1rem 1.5rem 1.2rem;
+}
+
+.header .header-brand h1 {
+    font-size: 1.8rem;
+    letter-spacing: -0.4px;
+}
+
+.header .header-logo {
+    height: 44px;
+}
+
+.header-tagline,
+.header p {
+    font-size: 0.95rem;
+    margin: 0.3rem 0 0.85rem;
+}
+
+.header-actions {
+    gap: 8px;
+}
+
+/* Quiet outline actions: three gradient pills competed with the
+   teacher list for attention on a student-facing page. */
+.header-actions .admin-login-btn {
+    margin-top: 0;
+    padding: 7px 16px;
+    font-size: 0.85rem;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    box-shadow: none;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+.header-actions .admin-login-btn:hover {
+    background: rgba(255, 255, 255, 0.28);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
+}
+
+/* ---- Welcome panel: less hero, more index ---- */
+.welcome-message {
+    padding: 1.75rem 0.75rem;
+}
+
+.welcome-message h2 {
+    font-size: 1.4rem;
+    margin-bottom: 0.5rem;
+}
+
+.welcome-message p {
+    font-size: 0.95rem;
+    margin: 0;
+}
+
+.department-links {
+    text-align: left;
+    margin-top: 1.35rem;
+}
+
+.department-links h3 {
+    font-size: 0.9rem;
+    margin: 0 0 0.5rem;
+    letter-spacing: 0.01em;
+}
+
+/* Left-aligned chips read as a list. Centred wrapping produced
+   ragged line starts and made 28 departments look random.
+   On desktop the panel has room to show them all, so the inner
+   scrollbar (which clipped the list mid-row) is removed. */
+.department-links-list {
+    justify-content: flex-start;
+    gap: 0.35rem;
+    max-height: none;
+    padding-right: 4px;
+    scrollbar-width: thin;
+    scrollbar-gutter: stable;
+}
+
+.department-link-chip {
+    font-size: 0.76rem;
+    line-height: 1.3;
+    padding: 0.3rem 0.55rem;
+}
+
+/* ---- Mobile keeps comfortable tap targets ---- */
+@media (max-width: 768px) {
+    .teacher-list {
+        max-height: none;
+    }
+
+    /* A 500px-tall chip cloud would bury the footer on a phone. */
+    .department-links-list {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+
+    .teacher-card {
+        min-height: 68px;
+    }
+
+    .teacher-card-image {
+        width: 44px;
+        height: 44px;
+    }
+
+    .teacher-card .compare-toggle-btn {
+        width: 40px;
+        height: 40px;
+        top: 6px;
+        right: 6px;
+        font-size: 1.05rem;
+    }
+
+    .teacher-card-info {
+        padding-right: 44px;
+    }
+
+    .header {
+        padding: 0.85rem 1rem 1rem;
+    }
+
+    .header .header-brand h1 {
+        font-size: 1.2rem;
+    }
 }
