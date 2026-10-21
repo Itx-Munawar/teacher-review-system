@@ -320,9 +320,11 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                         </p>
                     </section>
 
-                    {/* Always visible — hidden/collapsing button rows kept failing on
-                        real phones (keyboard resize races), so the row is a plain,
-                        permanent part of the form flow now. */}
+                    </div>
+
+                    {/* Kept outside the scrolling field body so Cancel/Submit stay
+                        on screen on short laptops and above the mobile keyboard.
+                        The row is still non-floating and always in the form flow. */}
                     <div className="form-buttons" role="group" aria-label="Review form actions">
                         <button type="button" onClick={onClose} className="btn-cancel">
                             Cancel
@@ -337,7 +339,6 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                                 'Submit Review'
                             )}
                         </button>
-                    </div>
                     </div>
                 </form>
                 )}
