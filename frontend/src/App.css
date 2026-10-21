@@ -6006,11 +6006,16 @@ select:focus-visible {
     gap: 0.5rem;
     min-height: 62px;
     align-items: center;
+    /* An older <=380px rule stacked the card into a column, which made the
+       text column overflow and pushed the compare button over the name.
+       The row layout works down to 320px, so keep it at every width. */
+    flex-direction: row;
 }
 
 .teacher-card-image {
     width: 40px;
     height: 40px;
+    margin: 0;
     font-size: 0.9rem;
 }
 
