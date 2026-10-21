@@ -627,9 +627,11 @@ app.get('/api/teachers/:id', async (req, res) => {
             return res.status(404).json({ error: 'Teacher not found' });
         }
 
-        // Get approved reviews for this teacher
+        // Get approved reviews for this teacher. Columns are listed explicitly
+        // so internal moderation fields (moderation_flag) never reach the
+        // public API, even though the row is approved.
         const [reviews] = await db.query(
-            `SELECT r.*
+            `SELECT r.id, r.teacher_id, r.comment, r.user_name, r.courses, r.is_approved, r.created_at
              FROM reviews r
              WHERE r.teacher_id = ? AND r.is_approved = 1
              ORDER BY r.created_at DESC`,
