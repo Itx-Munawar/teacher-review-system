@@ -25,6 +25,7 @@ export type IconName =
     | 'download'
     | 'trash'
     | 'help'
+    | 'flag'
     ;
 
 const PATHS: Record<IconName, React.ReactNode> = {
@@ -159,6 +160,12 @@ const PATHS: Record<IconName, React.ReactNode> = {
             <circle cx="12" cy="12" r="10" />
             <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
             <line x1="12" y1="17" x2="12.01" y2="17" />
+        </>
+    ),
+    flag: (
+        <>
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+            <line x1="4" y1="22" x2="4" y2="15" />
         </>
     ),
 

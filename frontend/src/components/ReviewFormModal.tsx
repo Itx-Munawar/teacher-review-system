@@ -300,8 +300,24 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                             onChange={(e) => setReviewComment(e.target.value)}
                             placeholder="Share your experience with this teacher..."
                             required
+                            minLength={15}
+                            maxLength={1000}
                             aria-required="true"
+                            aria-describedby="review-comment-help"
                         />
+                        <div className="review-form-meta" id="review-comment-help">
+                            <span className="review-char-count">
+                                {reviewComment.trim().length < 15
+                                    ? `${15 - reviewComment.trim().length} more character${15 - reviewComment.trim().length === 1 ? '' : 's'} needed`
+                                    : `${reviewComment.length}/1000`}
+                            </span>
+                        </div>
+                        <p className="review-form-disclaimer">
+                            Reviews are student opinions and are not verified by the university.
+                            Please describe your experience with the teaching, not the person&apos;s
+                            private life. Allegations of misconduct are reviewed by a moderator
+                            before they appear.
+                        </p>
                     </section>
 
                     {/* Always visible — hidden/collapsing button rows kept failing on

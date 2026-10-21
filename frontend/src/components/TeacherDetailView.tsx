@@ -1,8 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import Icon from './Icon';
 import Avatar from './Avatar';
 import LazySection from './LazySection';
 import QASection from './QASection';
+import { reportReview } from '../services/api';
 import type { TeacherDetail, Teacher, Review } from '../types';
 
 interface TeacherDetailViewProps {
@@ -52,6 +53,32 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
         () => [...(selectedTeacher.reviews || [])].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
         [selectedTeacher.reviews]
     );
+
+    // Reader reports: one inline form at a time, and a local record of what
+    // this session already reported so the button does not invite doubles.
+    const [reportOpenId, setReportOpenId] = useState<number | null>(null);
+    const [reportReason, setReportReason] = useState('');
+    const [reportSending, setReportSending] = useState(false);
+    const [reportedIds, setReportedIds] = useState<number[]>([]);
+
+    const submitReport = async (e: React.FormEvent, reviewId: number) => {
+        e.preventDefault();
+        const reason = reportReason.trim();
+        if (reason.length < 3 || reportSending) return;
+        setReportSending(true);
+        try {
+            await reportReview(reviewId, reason);
+            setReportedIds((ids) => [...ids, reviewId]);
+            setReportOpenId(null);
+            setReportReason('');
+            showToast('Report sent. Thank you - a moderator will take a look.', 'success');
+        } catch (err) {
+            const axiosErr = err as { response?: { data?: { error?: string } } };
+            showToast(axiosErr.response?.data?.error || 'Could not send the report. Please try again.', 'error');
+        } finally {
+            setReportSending(false);
+        }
+    };
 
     return (
         <>
@@ -119,6 +146,51 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                                         </div>
                                     )}
                                     <p className="review-comment">"{review.comment}"</p>
+                                    <div className="review-footer">
+                                        {reportedIds.includes(review.id) ? (
+                                            <span className="review-reported">
+                                                <Icon name="check" size={12} /> Reported — thank you
+                                            </span>
+                                        ) : reportOpenId === review.id ? (
+                                            <form
+                                                className="review-report-form"
+                                                onSubmit={(e) => submitReport(e, review.id)}
+                                            >
+                                                <input
+                                                    type="text"
+                                                    value={reportReason}
+                                                    onChange={(e) => setReportReason(e.target.value)}
+                                                    placeholder="Why are you reporting this review?"
+                                                    maxLength={300}
+                                                    aria-label="Reason for reporting this review"
+                                                    autoFocus
+                                                />
+                                                <button
+                                                    type="submit"
+                                                    className="review-report-send"
+                                                    disabled={reportSending || reportReason.trim().length < 3}
+                                                >
+                                                    {reportSending ? 'Sending…' : 'Send'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="review-report-cancel"
+                                                    onClick={() => { setReportOpenId(null); setReportReason(''); }}
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </form>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                className="review-report-trigger"
+                                                onClick={() => { setReportOpenId(review.id); setReportReason(''); }}
+                                                aria-label={`Report this review by ${review.user_name || 'Anonymous'}`}
+                                            >
+                                                <Icon name="flag" size={12} /> Report
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             );
                         })

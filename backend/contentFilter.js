@@ -243,6 +243,122 @@ const detectFlaggedText = (text) => {
     return { flagged: matches.length > 0, matches };
 };
 
+// ---------------------------------------------------------------------------
+// Sensitive-allegation detection
+// ---------------------------------------------------------------------------
+// Profanity filtering and allegation triage are different problems. A review
+// can be perfectly polite while accusing a teacher of harassment, threatening
+// grades, or targeting students by gender. Those rows are a legal and
+// reputational risk and must reach an admin before they reach the public page.
+//
+// This detector never blocks a submission — every review is queued anyway.
+// It only attaches a triage flag so the moderation queue can surface the rows
+// that need a human decision first.
+
+// Terms that are an allegation on their own, whatever else the text says.
+const SENSITIVE_TERMS = {
+    harassment: [
+        'harass', 'harassed', 'harassing', 'harassment', 'inappropriate',
+        'molest', 'molested', 'grope', 'groped', 'blackmail', 'blackmailed',
+        'sexual', 'sexually', 'pervert', 'creepy'
+    ],
+    threats: [
+        'threat', 'threats', 'threaten', 'threatened', 'threatening',
+        'dhamki', 'dhamka', 'intimidate', 'intimidated'
+    ],
+    violence: [
+        'hit me', 'beat me', 'hits students', 'beats students', 'slap',
+        'slapped', 'physically abused', 'physical abuse'
+    ],
+    substance: ['drunk', 'alcohol', 'drugs', 'nasha']
+};
+
+// Terms that only describe misconduct when the text also names a gender.
+// "He discusses his personal life" is odd; "he discusses girls' personal
+// lives" is an allegation.
+const CONDUCT_TERMS = [
+    'touch me', 'touched me', 'touches girls', 'touching girls',
+    'comments on girls', 'personal life', 'family issues', 'appearance'
+];
+
+const GENDER_TERMS = [
+    'girl', 'girls', 'boy', 'boys', 'female', 'females', 'male', 'males',
+    'ladies', 'lady', 'veil', 'hijab', 'appearance', 'looks', 'dressed'
+];
+
+// Unfairness claims: lower risk than misconduct, but worth triage.
+const BIAS_TERMS = [
+    'favoritism', 'favouritism', 'favorite', 'favourite', 'partial',
+    'parcial', 'biased', 'bias'
+];
+
+const normaliseForMatch = (text) =>
+    String(text || '')
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+const containsTerm = (haystack, term) => {
+    if (!haystack) return false;
+    if (term.includes(' ')) return haystack.includes(term);
+    return new RegExp(`(^|\\s)${term}(\\s|$)`).test(haystack);
+};
+
+/**
+ * Detect allegations that need human moderation before publication.
+ *
+ * @param {string} text
+ * @returns {{sensitive: boolean, categories: string[], matches: string[]}}
+ */
+const detectSensitiveAllegation = (text) => {
+    const haystack = normaliseForMatch(text);
+    if (!haystack) return { sensitive: false, categories: [], matches: [] };
+
+    const categories = new Set();
+    const matches = new Set();
+
+    for (const [category, terms] of Object.entries(SENSITIVE_TERMS)) {
+        for (const term of terms) {
+            if (containsTerm(haystack, term)) {
+                categories.add(category);
+                matches.add(term);
+            }
+        }
+    }
+
+    const hasGender = GENDER_TERMS.some((term) => containsTerm(haystack, term));
+    if (hasGender) {
+        for (const term of CONDUCT_TERMS) {
+            if (containsTerm(haystack, term)) {
+                categories.add('conduct');
+                matches.add(term);
+            }
+        }
+    }
+
+    return { sensitive: categories.size > 0, categories: [...categories], matches: [...matches] };
+};
+
+/**
+ * Triage flag stored on a review so the admin queue can sort by risk.
+ * Priority: sensitive > bias > profanity > none.
+ *
+ * @param {string} text
+ * @returns {'sensitive'|'bias'|'profanity'|null}
+ */
+const moderationFlagFor = (text) => {
+    if (detectSensitiveAllegation(text).sensitive) return 'sensitive';
+
+    const haystack = normaliseForMatch(text);
+    const hasGender = GENDER_TERMS.some((term) => containsTerm(haystack, term));
+    const hasBias = BIAS_TERMS.some((term) => containsTerm(haystack, term));
+    if (hasGender && hasBias) return 'bias';
+
+    if (detectFlaggedText(text).flagged) return 'profanity';
+    return null;
+};
+
 /**
  * Parse a stored courses value (JSON string, legacy plain text, or Buffer)
  * into a clean array of course names.
@@ -374,4 +490,11 @@ const sweepExistingQa = async (db, { dryRun = false } = {}) => {
     };
 };
 
-module.exports = { detectFlaggedText, sweepExistingReviews, sweepExistingQa, parseCourseList };
+module.exports = {
+    detectFlaggedText,
+    detectSensitiveAllegation,
+    moderationFlagFor,
+    sweepExistingReviews,
+    sweepExistingQa,
+    parseCourseList
+};

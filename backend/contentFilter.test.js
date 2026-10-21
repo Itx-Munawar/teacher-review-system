@@ -8,7 +8,7 @@
  */
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { detectFlaggedText, sweepExistingReviews, sweepExistingQa, parseCourseList } = require('./contentFilter');
+const { detectFlaggedText, detectSensitiveAllegation, moderationFlagFor, sweepExistingReviews, sweepExistingQa, parseCourseList } = require('./contentFilter');
 
 const isFlagged = (text) => detectFlaggedText(text).flagged;
 
@@ -290,4 +290,65 @@ test('Q&A sweep is idempotent once rows are queued', async () => {
     assert.strictEqual(result.answers.toQueue, 0);
     assert.strictEqual(result.courses.toDemote, 0);
     assert.strictEqual(updates.length, 0, 'no writes on second run');
+});
+
+// ---------------------------------------------------------------------------
+// Sensitive-allegation triage
+// ---------------------------------------------------------------------------
+
+test('ordinary praise is not sensitive', () => {
+    const { sensitive } = detectSensitiveAllegation('Great teacher, explains everything clearly.');
+    assert.strictEqual(sensitive, false);
+});
+
+test('plain criticism is not sensitive', () => {
+    const { sensitive } = detectSensitiveAllegation('Strict grader and the lectures are boring.');
+    assert.strictEqual(sensitive, false);
+});
+
+test('harassment allegations are sensitive', () => {
+    const { sensitive, categories } = detectSensitiveAllegation('He says very inappropriate things to students.');
+    assert.strictEqual(sensitive, true);
+    assert.ok(categories.includes('harassment'));
+});
+
+test('threats tied to grades are sensitive', () => {
+    const { sensitive, categories } = detectSensitiveAllegation('She threatened to fail me if I did not comply.');
+    assert.strictEqual(sensitive, true);
+    assert.ok(categories.includes('threats'));
+});
+
+test('gender + conduct combination is sensitive', () => {
+    const { sensitive, categories } = detectSensitiveAllegation('He discusses girls personal life in class.');
+    assert.strictEqual(sensitive, true);
+    assert.ok(categories.includes('conduct'));
+});
+
+test('conduct words without a gender reference stay unflagged', () => {
+    const { sensitive } = detectSensitiveAllegation('He never shares his personal life, very professional.');
+    assert.strictEqual(sensitive, false);
+});
+
+test('word boundaries prevent false positives', () => {
+    const { sensitive } = detectSensitiveAllegation('The harassment chapter of the law course was interesting.');
+    assert.strictEqual(sensitive, true, 'the word itself is still an allegation term');
+
+    const clean = detectSensitiveAllegation('The class discussed threatening behaviour in novels.');
+    assert.strictEqual(clean.sensitive, true, 'flagged for human review, not blocked');
+});
+
+test('moderationFlagFor prioritises sensitive over everything else', () => {
+    assert.strictEqual(moderationFlagFor('He harassed girls and used abusive language.'), 'sensitive');
+});
+
+test('moderationFlagFor marks gender bias', () => {
+    assert.strictEqual(moderationFlagFor('Full favoritism, he only favours girls.'), 'bias');
+});
+
+test('moderationFlagFor marks profanity', () => {
+    assert.strictEqual(moderationFlagFor('This class is bullshit.'), 'profanity');
+});
+
+test('moderationFlagFor returns null for clean reviews', () => {
+    assert.strictEqual(moderationFlagFor('Very helpful, answers every question patiently.'), null);
 });

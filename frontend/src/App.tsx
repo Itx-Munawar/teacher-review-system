@@ -884,6 +884,10 @@ const App: React.FC = () => {
             setReviewError('Please write a review');
             return;
         }
+        if (reviewComment.trim().length < 15) {
+            setReviewError('Please write at least 15 characters so the review is useful to other students.');
+            return;
+        }
         setSubmitting(true);
         setReviewError('');
         try {

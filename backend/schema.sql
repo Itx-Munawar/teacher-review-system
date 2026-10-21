@@ -20,16 +20,32 @@ CREATE TABLE IF NOT EXISTS teachers (
 CREATE TABLE IF NOT EXISTS reviews (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     teacher_id INT UNSIGNED NOT NULL,
-    rating TINYINT UNSIGNED NOT NULL DEFAULT 5,
+    rating TINYINT UNSIGNED NULL DEFAULT NULL,
     comment TEXT NOT NULL,
     courses VARCHAR(2000) DEFAULT NULL,
     user_name VARCHAR(100) NOT NULL DEFAULT 'Anonymous',
     is_approved TINYINT(1) NOT NULL DEFAULT 0,
+    moderation_flag VARCHAR(40) DEFAULT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY idx_reviews_teacher (teacher_id, is_approved),
     KEY idx_reviews_created (created_at),
     CONSTRAINT fk_reviews_teacher FOREIGN KEY (teacher_id) REFERENCES teachers (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Reader reports on published reviews. reporter_hash is a salted hash of the
+-- reporter's address so one client cannot file the same report twice; the raw
+-- address is never stored.
+CREATE TABLE IF NOT EXISTS review_reports (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    review_id INT UNSIGNED NOT NULL,
+    reason VARCHAR(300) NOT NULL,
+    reporter_hash CHAR(64) NOT NULL,
+    status ENUM('open','resolved','dismissed') NOT NULL DEFAULT 'open',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_review_report_once (review_id, reporter_hash),
+    KEY idx_review_reports_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Admin users (password column stores a bcrypt hash)

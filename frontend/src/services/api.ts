@@ -112,6 +112,11 @@ export const submitReview = (data: {
     return api.post('/reviews', reviewData);
 };
 
+// Report a published review for moderator attention.
+export const reportReview = (reviewId: number, reason: string) => {
+    return api.post(`/reviews/${reviewId}/report`, { reason });
+};
+
 
 // ========== CUSTOM COURSES (community-added, admin-approved) ==========
 

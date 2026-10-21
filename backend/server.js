@@ -10,7 +10,7 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const db = require('./db');
 const { csrfSetCookie, csrfValidate } = require('./csrf');
-const { detectFlaggedText, sweepExistingReviews, sweepExistingQa } = require('./contentFilter');
+const { detectFlaggedText, moderationFlagFor, sweepExistingReviews, sweepExistingQa } = require('./contentFilter');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -107,6 +107,14 @@ const questionLimiter = rateLimit({
     message: { error: 'Too many questions. Please try again later.' }
 });
 
+// Reporting is cheap for a user and expensive for a moderator, so keep the
+// per-IP budget tight. Duplicate reports for the same review are collapsed.
+const reportLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 10,
+    message: { error: 'Too many reports. Please try again later.' }
+});
+
 // Email transporter
 const transporter = nodemailer.createTransport({
     service: 'gmail',
@@ -196,6 +204,16 @@ const invalidateCache = (pattern) => {
     }
 };
 
+// Normalises user text for duplicate comparison: lowercase, punctuation and
+// whitespace collapsed, so "Best teacher!!" and "best   teacher" are equal.
+const normalizeReviewText = (text) =>
+    String(text || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+
+// Marks set by the schema bootstrap below. Both default to false so a request
+// that arrives while the DB is still migrating degrades instead of erroring.
+let reviewModerationColumnReady = false;
+let reviewReportsReady = false;
+
 // Departments are free text on each teacher row, so normalise what an admin
 // types: collapse whitespace, and reuse the spelling/case of an existing
 // department (case-insensitive match) so "computer science" and
@@ -273,6 +291,50 @@ const runQaFilterSweep = async () => {
     }
 };
 
+// One-time backfill: mark existing reviews that contain conduct allegations so
+// they surface first in the admin queue. It only sets a triage marker and
+// never changes approval state, so it cannot publish or hide anything.
+let sensitiveBackfillAttempts = 0;
+let sensitiveBackfillDone = false;
+
+const runSensitiveReviewBackfill = async () => {
+    if (sensitiveBackfillDone || !reviewModerationColumnReady) return;
+    try {
+        const [marker] = await db.query("SELECT id FROM audit_logs WHERE action = 'FLAG_SENSITIVE_REVIEWS' LIMIT 1");
+        if (marker.length > 0) {
+            sensitiveBackfillDone = true;
+            return;
+        }
+
+        const [rows] = await db.query(
+            'SELECT id, comment, user_name, courses FROM reviews WHERE moderation_flag IS NULL'
+        );
+        const flaggedIds = rows
+            .filter((row) => moderationFlagFor(`${row.comment || ''} ${row.user_name || ''} ${row.courses || ''}`) === 'sensitive')
+            .map((row) => row.id);
+
+        const CHUNK = 500;
+        for (let i = 0; i < flaggedIds.length; i += CHUNK) {
+            const chunk = flaggedIds.slice(i, i + CHUNK);
+            await db.query(
+                `UPDATE reviews SET moderation_flag = 'sensitive' WHERE id IN (${chunk.map(() => '?').join(',')})`,
+                chunk
+            );
+        }
+
+        sensitiveBackfillDone = true;
+        await db.query(
+            "INSERT INTO audit_logs (action, details, ip_address) VALUES ('FLAG_SENSITIVE_REVIEWS', ?, 'system')",
+            [JSON.stringify({ scanned: rows.length, flagged: flaggedIds.length })]
+        );
+        console.log(`🔎 Sensitive-review backfill: scanned ${rows.length}, flagged ${flaggedIds.length}`);
+    } catch (error) {
+        sensitiveBackfillAttempts += 1;
+        console.error('❌ Sensitive-review backfill failed:', error.message);
+        if (sensitiveBackfillAttempts < 10) setTimeout(runSensitiveReviewBackfill, 30000);
+    }
+};
+
 // ========== SCHEMA BOOTSTRAP ==========
 // Creates tables that may be added after the initial deployment, so the
 // server can auto-migrate on Render without manual SQL.
@@ -337,12 +399,61 @@ const runSchemaBootstrap = async () => {
         } catch (colErr) {
             console.error('⚠️ Could not ensure courses column:', colErr.message);
         }
+
+        // Triage marker for reviews that need a human decision before they go
+        // public (harassment/threat allegations). NULL means "no signal".
+        try {
+            const [flagCol] = await db.query("SHOW COLUMNS FROM reviews LIKE 'moderation_flag'");
+            if (flagCol.length === 0) {
+                await db.query('ALTER TABLE reviews ADD COLUMN moderation_flag VARCHAR(40) NULL AFTER is_approved');
+                console.log('✅ Added moderation_flag column to reviews table');
+            }
+            reviewModerationColumnReady = true;
+        } catch (flagErr) {
+            console.error('⚠️ Could not ensure moderation_flag column:', flagErr.message);
+        }
+
+        // rating is a legacy column: the UI no longer collects it. The old
+        // NOT NULL DEFAULT 5 silently recorded every new review as five stars,
+        // which poisoned anything that averages ratings. Make it nullable so
+        // new rows are honestly empty, and leave existing values untouched.
+        try {
+            const [ratingCol] = await db.query("SHOW COLUMNS FROM reviews LIKE 'rating'");
+            if (ratingCol.length > 0 && ratingCol[0].Null === 'NO') {
+                await db.query('ALTER TABLE reviews MODIFY COLUMN rating TINYINT UNSIGNED NULL DEFAULT NULL');
+                console.log('✅ reviews.rating is now nullable (legacy column, no longer written)');
+            }
+        } catch (ratingErr) {
+            console.error('⚠️ Could not relax reviews.rating:', ratingErr.message);
+        }
+
+        // Reader reports on published reviews. No FK on review_id, matching the
+        // questions table, so the bootstrap works with either INT type.
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS review_reports (
+                    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                    review_id INT UNSIGNED NOT NULL,
+                    reason VARCHAR(300) NOT NULL,
+                    reporter_hash CHAR(64) NOT NULL,
+                    status ENUM('open','resolved','dismissed') NOT NULL DEFAULT 'open',
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (id),
+                    UNIQUE KEY uq_review_report_once (review_id, reporter_hash),
+                    KEY idx_review_reports_status (status)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+            reviewReportsReady = true;
+        } catch (reportsErr) {
+            console.error('⚠️ Could not ensure review_reports table:', reportsErr.message);
+        }
         schemaBootstrapError = null;
         schemaBootstrapDone = true;
-        console.log('✅ Schema bootstrap complete (questions, question_answers, custom_courses, cleanup)');
+        console.log('✅ Schema bootstrap complete (questions, question_answers, custom_courses, review_reports, cleanup)');
         // Schema is up: retroactively filter any pre-existing reviews.
         runReviewFilterSweep();
         runQaFilterSweep();
+        runSensitiveReviewBackfill();
     } catch (error) {
         schemaBootstrapError = error.message;
         console.error('❌ Schema bootstrap failed:', error.message);
@@ -687,37 +798,78 @@ app.post('/api/questions/:id/answers', questionLimiter, [
 // POST /api/reviews - submit a new review
 app.post('/api/reviews', reviewLimiter, [
     body('teacher_id').isInt({ min: 1 }).withMessage('Invalid teacher ID'),
-    body('comment').isLength({ min: 3, max: 1000 }).withMessage('Comment must be 3-1000 characters'),
+    // 15 characters is the point where a review says something. Three-character
+    // entries ("ok", "bad") were 23% of the corpus and carry no information.
+    body('comment')
+        .customSanitizer((value) => String(value || '').trim())
+        .isLength({ min: 15, max: 1000 })
+        .withMessage('Review must be between 15 and 1000 characters'),
     body('user_name').optional().isLength({ max: 100 }).withMessage('Name too long')
 ], async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-        return res.status(400).json({ error: errors.array()[0].msg });
+        return res.status(400).json({ error: errors.array()[0].msg, code: 'VALIDATION_ERROR' });
     }
-    
+
     try {
         const { teacher_id, comment, user_name, courses } = req.body;
-        const sanitizedComment = comment.trim().slice(0, 1000);
-        const sanitizedName = user_name ? user_name.trim().slice(0, 100) : 'Anonymous';
-        // Accept courses as array, store as JSON string
-        let sanitizedCourses = null;
-        if (Array.isArray(courses) && courses.length > 0) {
-            sanitizedCourses = JSON.stringify(courses.map(c => String(c).trim().slice(0, 200)).filter(Boolean));
+        const sanitizedComment = String(comment).trim().slice(0, 1000);
+        const normalizedComment = normalizeReviewText(sanitizedComment);
+        if (normalizedComment.length < 15) {
+            return res.status(400).json({
+                error: 'Review must be between 15 and 1000 characters',
+                code: 'VALIDATION_ERROR'
+            });
         }
 
-        // Moderation-first: every review starts pending (is_approved=0) and
-        // only appears publicly once an admin approves it in the panel.
+        const sanitizedName = user_name ? String(user_name).trim().slice(0, 100) : 'Anonymous';
+        // Accept courses as array, store as JSON string
+        const courseList = Array.isArray(courses)
+            ? courses.map((c) => String(c).trim().slice(0, 200)).filter(Boolean)
+            : [];
+        const sanitizedCourses = courseList.length > 0 ? JSON.stringify(courseList) : null;
+
         const [teachers] = await db.query('SELECT id FROM teachers WHERE id = ?', [teacher_id]);
         if (teachers.length === 0) {
             return res.status(404).json({ error: 'Teacher not found' });
         }
-        
-        const [result] = await db.query(
-            `INSERT INTO reviews (teacher_id, comment, user_name, courses, is_approved) 
-             VALUES (?, ?, ?, ?, ?)`,
-            [teacher_id, sanitizedComment, sanitizedName, sanitizedCourses, 0]
+
+        // Duplicate guard: the same text posted twice for the same teacher is
+        // always spam, whether from a double-tap or a copied review. Comparing
+        // normalised text catches "best teacher" vs "Best Teacher!!".
+        const [existing] = await db.query(
+            'SELECT id, comment FROM reviews WHERE teacher_id = ? ORDER BY id DESC LIMIT 200',
+            [teacher_id]
         );
-        
+        const duplicate = existing.find((row) => normalizeReviewText(row.comment) === normalizedComment);
+        if (duplicate) {
+            return res.status(409).json({
+                error: 'You have already submitted this review for this teacher.',
+                code: 'DUPLICATE_REVIEW'
+            });
+        }
+
+        // Triage flag: sensitive allegations must be seen by a human first.
+        // Every review starts pending, so this never blocks or auto-publishes.
+        const reviewFlag = moderationFlagFor(`${sanitizedComment} ${courseList.join(' ')}`)
+            || (detectFlaggedText(sanitizedName).flagged ? 'profanity' : null);
+
+        const columns = ['teacher_id', 'comment', 'user_name', 'courses', 'is_approved'];
+        const values = [teacher_id, sanitizedComment, sanitizedName, sanitizedCourses, 0];
+        if (reviewModerationColumnReady) {
+            columns.push('moderation_flag');
+            values.push(reviewFlag);
+        }
+
+        const [result] = await db.query(
+            `INSERT INTO reviews (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`,
+            values
+        );
+
+        if (reviewFlag) {
+            console.log(`🛡️ Review ${result.insertId} queued with moderation_flag=${reviewFlag}`);
+        }
+
         invalidateCache('teachers');
         res.json({
             success: true,
@@ -730,6 +882,57 @@ app.post('/api/reviews', reviewLimiter, [
         res.status(500).json({ error: 'Database error' });
     }
 });
+
+// POST /api/reviews/:id/report - flag a published review for an admin
+app.post('/api/reviews/:id/report', reportLimiter, [
+    body('reason')
+        .customSanitizer((value) => String(value || '').trim())
+        .isLength({ min: 3, max: 300 })
+        .withMessage('Please give a short reason (3-300 characters)')
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ error: errors.array()[0].msg, code: 'VALIDATION_ERROR' });
+    }
+
+    if (!reviewReportsReady) {
+        return res.status(503).json({ error: 'Reporting is temporarily unavailable. Please try again shortly.' });
+    }
+
+    try {
+        const reviewId = parseInt(req.params.id, 10);
+        if (!Number.isInteger(reviewId) || reviewId < 1) {
+            return res.status(400).json({ error: 'Invalid review ID' });
+        }
+
+        const [reviews] = await db.query('SELECT id FROM reviews WHERE id = ?', [reviewId]);
+        if (reviews.length === 0) {
+            return res.status(404).json({ error: 'Review not found' });
+        }
+
+        // Store a salted hash instead of the reporter's IP: enough to collapse
+        // repeat reports from one client, nothing to identify them by.
+        const reporterHash = crypto
+            .createHash('sha256')
+            .update(`${req.ip || 'unknown'}|${JWT_SECRET}`)
+            .digest('hex');
+
+        await db.query(
+            `INSERT INTO review_reports (review_id, reason, reporter_hash)
+             VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE id = id`,
+            [reviewId, String(req.body.reason).trim().slice(0, 300), reporterHash]
+        );
+
+        await createAuditLog(null, 'REPORT_REVIEW', `Reported review ID: ${reviewId}`, req.ip);
+        res.json({ success: true, message: 'Report received. An admin will take a look.' });
+    } catch (error) {
+        console.error('Error reporting review:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// ========== ADMIN API ENDPOINTS ==========
 
 // ========== ADMIN API ENDPOINTS ==========
 
@@ -1061,9 +1264,12 @@ app.get('/api/admin/reviews', verifyAdmin, async (req, res) => {
         // rows (used by the dashboard "pending" counter click-through).
         const pendingOnly = req.query.pending === '1' || req.query.pending === 'true';
         const whereClause = pendingOnly ? 'WHERE r.is_approved = 0' : '';
+        const reportSelect = reviewReportsReady
+            ? `, (SELECT COUNT(*) FROM review_reports rr WHERE rr.review_id = r.id AND rr.status = 'open') AS open_reports`
+            : '';
 
         const [reviews] = await db.query(`
-            SELECT r.*, t.name as teacher_name
+            SELECT r.*, t.name as teacher_name${reportSelect}
             FROM reviews r
             JOIN teachers t ON r.teacher_id = t.id
             ${whereClause}

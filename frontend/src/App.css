@@ -903,6 +903,109 @@ body {
     font-style: italic;
 }
 
+/* Reader reporting: kept quiet until needed so it never competes with the review. */
+.review-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.5rem;
+}
+
+.review-report-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: none;
+    border: none;
+    padding: 2px 4px;
+    color: #9ca3af;
+    font-size: 0.78rem;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: color 0.15s ease, background 0.15s ease;
+}
+
+.review-report-trigger:hover,
+.review-report-trigger:focus-visible {
+    color: #dc2626;
+    background: rgba(220, 38, 38, 0.08);
+}
+
+.review-report-form {
+    display: flex;
+    gap: 6px;
+    width: 100%;
+    flex-wrap: wrap;
+}
+
+.review-report-form input {
+    flex: 1 1 220px;
+    min-width: 0;
+    padding: 6px 10px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    color: #374151;
+}
+
+.review-report-form input:focus {
+    outline: none;
+    border-color: #a855f7;
+    box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.15);
+}
+
+.review-report-send,
+.review-report-cancel {
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid transparent;
+}
+
+.review-report-send {
+    background: #7c3aed;
+    color: #fff;
+}
+
+.review-report-send:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.review-report-cancel {
+    background: #f3f4f6;
+    color: #4b5563;
+    border-color: #e5e7eb;
+}
+
+.review-reported {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #059669;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.review-form-meta {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 4px;
+}
+
+.review-char-count {
+    font-size: 0.75rem;
+    color: #9ca3af;
+}
+
+.review-form-disclaimer {
+    margin-top: 8px;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: #6b7280;
+}
+
 
 /* Welcome Message */
 .welcome-message {
@@ -1555,6 +1658,31 @@ body {
     background: #fde68a;
     padding: 2px 8px;
     border-radius: 50px;
+}
+
+/* Triage badges: risk first, then volume of reports. */
+.admin-flag-badge {
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 50px;
+    white-space: nowrap;
+}
+
+.admin-flag-sensitive {
+    color: #991b1b;
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
+}
+
+.admin-flag-bias {
+    color: #9a3412;
+    background: #ffedd5;
+}
+
+.admin-flag-reported {
+    color: #1e40af;
+    background: #dbeafe;
 }
 
 .admin-detail-review-courses {

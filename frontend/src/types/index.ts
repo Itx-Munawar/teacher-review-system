@@ -14,6 +14,10 @@ export interface Review {
     user_name: string;
     courses?: string;
     created_at: string;
+    /** Triage marker written by the content filter; only admins see it. */
+    moderation_flag?: 'sensitive' | 'bias' | 'profanity' | null;
+    /** Open reader reports (admin payloads only). */
+    open_reports?: number;
 }
 
 export interface TeacherDetail extends Teacher {
@@ -28,9 +32,13 @@ export interface AdminReview {
     comment: string;
     user_name: string;
     courses?: string;
-    /** MySQL returns 0/1; some payloads may carry booleans — treat either as pending/approved. */
+    /** MySQL returns 0/1; some payloads may carry booleans - treat either as pending/approved. */
     is_approved: boolean | number;
     created_at: string;
+    /** Triage marker written by the content filter. */
+    moderation_flag?: 'sensitive' | 'bias' | 'profanity' | null;
+    /** Number of unresolved reader reports. */
+    open_reports?: number;
 }
 
 export interface AdminQuestion {

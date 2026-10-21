@@ -694,7 +694,19 @@ const AdminPanel = memo(({
                                                                         <strong>{review.user_name || 'Anonymous'}</strong>
                                                                         <span className="admin-detail-review-date">
                                                                             {new Date(review.created_at).toLocaleDateString()}
-                                                                        </span>                                                {Number(review.is_approved) === 0 && (
+                                                                        </span>
+                                                                        {review.moderation_flag === 'sensitive' && (
+                                                                            <span className="admin-flag-badge admin-flag-sensitive" title="Contains a conduct allegation - review before publishing">Sensitive</span>
+                                                                        )}
+                                                                        {review.moderation_flag === 'bias' && (
+                                                                            <span className="admin-flag-badge admin-flag-bias" title="Alleges favouritism or bias">Bias</span>
+                                                                        )}
+                                                                        {Number(review.open_reports) > 0 && (
+                                                                            <span className="admin-flag-badge admin-flag-reported" title="Reported by readers">
+                                                                                {review.open_reports} report{Number(review.open_reports) === 1 ? '' : 's'}
+                                                                            </span>
+                                                                        )}
+                                                                        {Number(review.is_approved) === 0 && (
                                                     <>
                                                         <span className="admin-pending-badge">Pending</span>
                                                         <span style={{ display: 'inline-flex', gap: '6px' }}>
@@ -798,6 +810,17 @@ const AdminPanel = memo(({
                                         <strong>{review.teacher_name}</strong>
                                         {isPending && (
                                             <span className="admin-pending-badge" style={{ marginLeft: '8px' }}>Pending</span>
+                                        )}
+                                        {review.moderation_flag === 'sensitive' && (
+                                            <span className="admin-flag-badge admin-flag-sensitive" style={{ marginLeft: '8px' }} title="Contains a conduct allegation - review before publishing">Sensitive</span>
+                                        )}
+                                        {review.moderation_flag === 'bias' && (
+                                            <span className="admin-flag-badge admin-flag-bias" style={{ marginLeft: '8px' }} title="Alleges favouritism or bias">Bias</span>
+                                        )}
+                                        {Number(review.open_reports) > 0 && (
+                                            <span className="admin-flag-badge admin-flag-reported" style={{ marginLeft: '8px' }} title="Reported by readers">
+                                                {review.open_reports} report{Number(review.open_reports) === 1 ? '' : 's'}
+                                            </span>
                                         )}
                                         <p style={{ marginTop: '8px', marginBottom: '5px' }}>&quot;{review.comment}&quot;</p>
                                         <small>
