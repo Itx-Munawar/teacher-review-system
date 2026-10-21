@@ -294,20 +294,33 @@ const runQaFilterSweep = async () => {
 // One-time backfill: mark existing reviews that contain conduct allegations so
 // they surface first in the admin queue. It only sets a triage marker and
 // never changes approval state, so it cannot publish or hide anything.
+// Versioned: bump SENSITIVE_BACKFILL_VERSION when the lexicon improves so the
+// already-processed rows are re-scanned exactly once.
+const SENSITIVE_BACKFILL_VERSION = 2;
 let sensitiveBackfillAttempts = 0;
 let sensitiveBackfillDone = false;
 
 const runSensitiveReviewBackfill = async () => {
     if (sensitiveBackfillDone || !reviewModerationColumnReady) return;
     try {
-        const [marker] = await db.query("SELECT id FROM audit_logs WHERE action = 'FLAG_SENSITIVE_REVIEWS' LIMIT 1");
+        const [marker] = await db.query(
+            "SELECT id, details FROM audit_logs WHERE action = 'FLAG_SENSITIVE_REVIEWS' ORDER BY id DESC LIMIT 1"
+        );
         if (marker.length > 0) {
-            sensitiveBackfillDone = true;
-            return;
+            let appliedVersion = 1;
+            try {
+                appliedVersion = Number(JSON.parse(marker[0].details || '{}').version) || 1;
+            } catch (parseErr) {
+                appliedVersion = 1;
+            }
+            if (appliedVersion >= SENSITIVE_BACKFILL_VERSION) {
+                sensitiveBackfillDone = true;
+                return;
+            }
         }
 
         const [rows] = await db.query(
-            'SELECT id, comment, user_name, courses FROM reviews WHERE moderation_flag IS NULL'
+            "SELECT id, comment, user_name, courses FROM reviews WHERE moderation_flag IS NULL OR moderation_flag <> 'sensitive'"
         );
         const flaggedIds = rows
             .filter((row) => moderationFlagFor(`${row.comment || ''} ${row.user_name || ''} ${row.courses || ''}`) === 'sensitive')
@@ -325,9 +338,9 @@ const runSensitiveReviewBackfill = async () => {
         sensitiveBackfillDone = true;
         await db.query(
             "INSERT INTO audit_logs (action, details, ip_address) VALUES ('FLAG_SENSITIVE_REVIEWS', ?, 'system')",
-            [JSON.stringify({ scanned: rows.length, flagged: flaggedIds.length })]
+            [JSON.stringify({ version: SENSITIVE_BACKFILL_VERSION, scanned: rows.length, flagged: flaggedIds.length })]
         );
-        console.log(`🔎 Sensitive-review backfill: scanned ${rows.length}, flagged ${flaggedIds.length}`);
+        console.log(`🔎 Sensitive-review backfill v${SENSITIVE_BACKFILL_VERSION}: scanned ${rows.length}, flagged ${flaggedIds.length}`);
     } catch (error) {
         sensitiveBackfillAttempts += 1;
         console.error('❌ Sensitive-review backfill failed:', error.message);

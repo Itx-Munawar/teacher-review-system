@@ -260,7 +260,8 @@ const SENSITIVE_TERMS = {
     harassment: [
         'harass', 'harassed', 'harassing', 'harassment', 'inappropriate',
         'molest', 'molested', 'grope', 'groped', 'blackmail', 'blackmailed',
-        'sexual', 'sexually', 'pervert', 'creepy'
+        'sexual', 'sexually', 'pervert', 'creepy', 'flirt', 'flirting',
+        'uncomfortable', 'exploit', 'exploits', 'exploiting', 'taking advantage'
     ],
     threats: [
         'threat', 'threats', 'threaten', 'threatened', 'threatening',
@@ -278,7 +279,8 @@ const SENSITIVE_TERMS = {
 // lives" is an allegation.
 const CONDUCT_TERMS = [
     'touch me', 'touched me', 'touches girls', 'touching girls',
-    'comments on girls', 'personal life', 'family issues', 'appearance'
+    'comments on girls', 'personal life', 'family issues', 'appearance',
+    'grades girls', 'grades boys', 'marks to girls', 'marks to boys'
 ];
 
 const GENDER_TERMS = [

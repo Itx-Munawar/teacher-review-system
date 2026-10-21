@@ -352,3 +352,11 @@ test('moderationFlagFor marks profanity', () => {
 test('moderationFlagFor returns null for clean reviews', () => {
     assert.strictEqual(moderationFlagFor('Very helpful, answers every question patiently.'), null);
 });
+
+test('grading allegations aimed at a gender are sensitive', () => {
+    assert.strictEqual(detectSensitiveAllegation('He grades girls differently in the end.').sensitive, true);
+});
+
+test('discomfort allegations are sensitive', () => {
+    assert.strictEqual(detectSensitiveAllegation('There are rumours about him making girls uncomfortable.').sensitive, true);
+});
