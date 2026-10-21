@@ -8,8 +8,8 @@
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait",
-  "theme_color": "#667eea",
-  "background_color": "#ffffff",
+  "theme_color": "#1f1229",
+  "background_color": "#fdfaf4",
   "lang": "en",
   "categories": ["education"],
   "icons": [
