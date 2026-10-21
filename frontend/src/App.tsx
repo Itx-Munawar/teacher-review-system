@@ -910,7 +910,7 @@ const App: React.FC = () => {
                     particleCount: 100,
                     spread: 70,
                     origin: { y: 0.6 },
-                    colors: ['#667eea', '#764ba2', '#fbbf24']
+                    colors: ['#c6a15b', '#9a742f', '#e8cf9a']
                 });
             }
             setShowReviewForm(false);

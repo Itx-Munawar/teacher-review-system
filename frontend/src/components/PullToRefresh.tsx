@@ -181,7 +181,7 @@ const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children, thre
                             <circle
                                 cx="18" cy="18" r="15"
                                 fill="none"
-                                stroke={pullDistance >= threshold ? '#10b981' : '#667eea'}
+                                stroke={pullDistance >= threshold ? '#10b981' : '#9a742f'}
                                 strokeWidth="2.5"
                                 strokeDasharray="94"
                                 strokeDashoffset={94 - (94 * progress)}

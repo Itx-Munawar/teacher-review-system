@@ -42,7 +42,7 @@ const LoginForm = memo(({
                 <button type="submit">Login</button>
             </form>
             <p style={{ textAlign: 'center', marginTop: '15px' }}>
-                <a href="/forgot-password" style={{ color: '#667eea' }}>Forgot Password?</a>
+                <a href="/forgot-password" style={{ color: '#7a5320' }}>Forgot Password?</a>
             </p>
         </div>
     </div>

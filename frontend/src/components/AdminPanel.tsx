@@ -404,13 +404,13 @@ const AdminPanel = memo(({
                         style={{
                             background: reviewsPendingOnly
                                 ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.35), rgba(245, 158, 11, 0.18))'
-                                : 'linear-gradient(135deg, rgba(255, 94, 156, 0.15), rgba(0, 201, 255, 0.15))',
-                            border: `1px solid ${reviewsPendingOnly ? 'rgba(245, 158, 11, 0.65)' : 'rgba(168, 85, 247, 0.25)'}`,
+                                : 'linear-gradient(135deg, rgba(125, 74, 95, 0.15), rgba(63, 99, 96, 0.15))',
+                            border: `1px solid ${reviewsPendingOnly ? 'rgba(245, 158, 11, 0.65)' : 'rgba(94, 58, 114, 0.25)'}`,
                             padding: '6px 14px',
                             borderRadius: '50px',
                             fontWeight: pendingReviewsCount > 0 ? 700 : 600,
                             fontSize: '0.85rem',
-                            color: pendingReviewsCount > 0 ? '#b45309' : '#4c1d95',
+                            color: pendingReviewsCount > 0 ? '#b45309' : '#2a1838',
                             fontFamily: 'inherit',
                             cursor: 'pointer',
                             display: 'inline-flex',
@@ -572,7 +572,7 @@ const AdminPanel = memo(({
                     >
                         {sortDirLabel}
                     </button>
-                    {sortLoading && <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#7c3aed' }}>Updating...</span>}
+                    {sortLoading && <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#7a5320' }}>Updating...</span>}
                 </div>
 
                 <div className="admin-list">
@@ -774,7 +774,7 @@ const AdminPanel = memo(({
                     </div>
                 )}
                 {selectedPendingIds.length > 0 && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', margin: '0 0 12px', padding: '8px 12px', background: '#eef2ff', borderRadius: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', margin: '0 0 12px', padding: '8px 12px', background: '#f4ecdd', borderRadius: '8px' }}>
                         <strong>{selectedPendingIds.length} selected</strong>
                         <button onClick={() => runBulkDecision('approve')} className="admin-mini-btn admin-mini-approve" disabled={adminMutationLoading}>Approve selected</button>
                         <button onClick={() => runBulkDecision('reject')} className="admin-mini-btn admin-mini-reject" disabled={adminMutationLoading}>Reject selected</button>
@@ -839,14 +839,14 @@ const AdminPanel = memo(({
                                                 return (
                                                     <div style={{ marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                                                         {filtered.map((c: string, i: number) => (
-                                                            <span key={i} style={{ fontSize: '0.75rem', background: '#ede9fe', color: '#6d28d9', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>{c}</span>
+                                                            <span key={i} style={{ fontSize: '0.75rem', background: '#f1e8d9', color: '#7a5320', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>{c}</span>
                                                         ))}
                                                     </div>
                                                 );
                                             } catch {
                                                 const fallback = String(raw).trim();
                                                 if (fallback && fallback !== 'null') {
-                                                    return <span style={{ fontSize: '0.75rem', background: '#ede9fe', color: '#6d28d9', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>{fallback}</span>;
+                                                    return <span style={{ fontSize: '0.75rem', background: '#f1e8d9', color: '#7a5320', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>{fallback}</span>;
                                                 }
                                                 return null;
                                             }
