@@ -246,7 +246,7 @@ body {
 
 .teacher-card:hover {
     border-color: transparent;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(240, 230, 255, 0.92));
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(247, 241, 230, 0.92));
     box-shadow: var(--shadow-pop), 0 0 0 1px rgba(255, 255, 255, 0.5);
 }
 
@@ -382,7 +382,7 @@ body {
     justify-content: space-between;
     width: 100%;
     padding: 0.8rem 1rem;
-    border: 2px solid rgba(225, 215, 245, 0.9);
+    border: 2px solid rgba(233, 223, 204, 0.9);
     border-radius: 12px;
     font-size: 1rem;
     font-family: inherit;
@@ -462,7 +462,7 @@ body {
     left: 0;
     right: 0;
     background: white;
-    border: 2px solid rgba(225, 215, 245, 0.9);
+    border: 2px solid rgba(233, 223, 204, 0.9);
     border-radius: 12px;
     z-index: 100;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
@@ -482,7 +482,7 @@ body {
 
 .searchable-dropdown-search {
     padding: 8px 10px;
-    border-bottom: 1px solid #f3f0ff;
+    border-bottom: 1px solid #f4ecdd;
 }
 
 .searchable-dropdown-search-row {
@@ -528,7 +528,7 @@ body {
     border-radius: 8px;
     font-size: 0.9rem;
     font-family: inherit;
-    background: #faf8ff;
+    background: #fdf9f1;
     transition: all 0.2s;
     box-sizing: border-box;
 }
@@ -572,7 +572,7 @@ body {
 }
 
 .searchable-dropdown-item:hover {
-    background: #f3f0ff;
+    background: #f4ecdd;
     color: #7a5320;
 }
 
@@ -651,11 +651,11 @@ body {
     color: #7a5320 !important;
     font-weight: 600;
     border-top: 1px dashed #e5e7eb;
-    background: #faf8ff;
+    background: #fdf9f1;
 }
 
 .searchable-dropdown-other:hover {
-    background: #f3f0ff !important;
+    background: #f4ecdd !important;
 }
 
 /* Custom input mode */
@@ -769,7 +769,7 @@ body {
 .form-group textarea {
     width: 100%;
     padding: 0.8rem 1rem;
-    border: 2px solid rgba(225, 215, 245, 0.9);
+    border: 2px solid rgba(233, 223, 204, 0.9);
     border-radius: 12px;
     font-size: 1rem;
     font-family: inherit;
@@ -1066,7 +1066,7 @@ body {
     width: 100%;
     padding: 13px 16px;
     margin-bottom: 1rem;
-    border: 2px solid rgba(225, 215, 245, 0.9);
+    border: 2px solid rgba(233, 223, 204, 0.9);
     border-radius: 12px;
     font-size: 1rem;
     font-family: inherit;
@@ -1223,7 +1223,7 @@ body {
 }
 
 .add-teacher-btn {
-    background: linear-gradient(120deg, #10b981, #84cc16);
+    background: linear-gradient(120deg, #10b981, #059669);
     color: white;
     border: none;
     padding: 10px 22px;
@@ -1276,8 +1276,8 @@ body {
     display: flex;
     flex-direction: column;
     gap: 10px;
-    background: rgba(251, 191, 36, 0.14);
-    border: 1px solid rgba(251, 191, 36, 0.5);
+    background: rgba(198, 161, 91, 0.14);
+    border: 1px solid rgba(198, 161, 91, 0.5);
     color: #78350f;
     padding: 12px 14px;
     border-radius: var(--radius-md);
@@ -1338,7 +1338,7 @@ body {
     flex: 1;
     min-width: 180px;
     padding: 10px 14px;
-    border: 2px solid rgba(225, 215, 245, 0.9);
+    border: 2px solid rgba(233, 223, 204, 0.9);
     border-radius: 12px;
     font-size: 1rem;
     font-family: inherit;
@@ -1353,7 +1353,7 @@ body {
 }
 
 .add-teacher-form button {
-    background: linear-gradient(120deg, #10b981, #84cc16);
+    background: linear-gradient(120deg, #10b981, #059669);
     color: white;
     border: none;
     padding: 10px 20px;
@@ -1383,7 +1383,7 @@ body {
     background: white;
     margin-bottom: 0.5rem;
     border-radius: 12px;
-    border: 1px solid rgba(225, 215, 245, 0.8);
+    border: 1px solid rgba(233, 223, 204, 0.8);
 }
 
 .admin-item {
@@ -1394,7 +1394,7 @@ body {
     padding: 0.75rem 1rem;
     margin-bottom: 0.5rem;
     border-radius: 12px;
-    border: 1px solid rgba(225, 215, 245, 0.8);
+    border: 1px solid rgba(233, 223, 204, 0.8);
     box-shadow: 0 2px 8px rgba(33, 22, 43, 0.06);
     transition: all 0.25s;
 }
@@ -1512,7 +1512,7 @@ body {
     margin-top: 0.75rem;
     padding: 1rem;
     background: #f8fafc;
-    border: 1px solid rgba(225, 215, 245, 0.8);
+    border: 1px solid rgba(233, 223, 204, 0.8);
     border-radius: 12px;
     animation: adminDetailIn 0.2s ease;
 }
@@ -1681,7 +1681,7 @@ body {
 }
 
 .admin-flag-reported {
-    color: #1e40af;
+    color: #7a5320;
     background: #ece2d0;
 }
 
@@ -1987,7 +1987,7 @@ body {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(30, 15, 60, 0.55);
+    background: rgba(23, 13, 33, 0.55);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2044,10 +2044,10 @@ body {
 
 /* Footer */
 .app-footer {
-    background: linear-gradient(120deg, rgba(44, 26, 77, 0.92), rgba(76, 29, 149, 0.92), rgba(8, 51, 68, 0.92));
+    background: linear-gradient(120deg, rgba(23, 13, 33, 0.92), rgba(42, 24, 56, 0.92), rgba(56, 32, 69, 0.92));
     background-size: 300% 300%;
     animation: gradientShift 16s ease infinite;
-    color: #ffe2f0;
+    color: #f0e4cd;
     text-align: center;
     padding: 1.5rem;
     margin-top: 2rem;
@@ -2095,7 +2095,7 @@ body {
     font-family: inherit;
     font-size: 0.85rem;
     cursor: pointer;
-    box-shadow: 0 2px 8px rgba(49, 46, 129, 0.08);
+    box-shadow: 0 2px 8px rgba(33, 22, 43, 0.08);
 }
 
 .filter-select:focus {
@@ -2187,7 +2187,7 @@ body {
     align-items: center;
     justify-content: center;
     transition: all 0.2s ease;
-    box-shadow: 0 2px 8px rgba(49, 46, 129, 0.15);
+    box-shadow: 0 2px 8px rgba(33, 22, 43, 0.15);
     z-index: 3;
 }
 
@@ -2660,7 +2660,7 @@ body {
 /* Legal pages */
 .legal-page {
     min-height: 100vh;
-    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+    background: linear-gradient(135deg, #170d21, #2a1838, #1f1229);
     color: #e5e7eb;
     padding: 2rem 1rem;
 }
@@ -3563,7 +3563,7 @@ body {
 
 .autocomplete-dept {
     font-size: 0.75rem;
-    color: #a5b4fc;
+    color: #e8cf9a;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -3589,7 +3589,7 @@ body {
 .autocomplete-compare-btn:hover {
     transform: scale(1.1);
     border-color: #4b3159;
-    color: #a5b4fc;
+    color: #e8cf9a;
 }
 
 .autocomplete-compare-btn-active {
@@ -3681,7 +3681,7 @@ body {
 .qa-landscape-input:focus {
     outline: none;
     border-color: #4b3159;
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    box-shadow: 0 0 0 3px rgba(198, 161, 91, 0.15);
 }
 
 .qa-submit {
@@ -3840,7 +3840,7 @@ body {
 .qa-answer-form textarea:focus {
     outline: none;
     border-color: #4b3159;
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    box-shadow: 0 0 0 3px rgba(198, 161, 91, 0.15);
 }
 
 .qa-answer-form-actions {
@@ -3905,7 +3905,7 @@ body {
 .install-prompt-close {
     background: transparent;
     border: none;
-    color: #a5b4fc;
+    color: #e8cf9a;
     font-size: 1rem;
     cursor: pointer;
     padding: 4px;
@@ -4054,7 +4054,7 @@ body {
     gap: 8px;
     padding: 9px 18px;
     border-radius: 999px;
-    background: rgba(30, 27, 75, 0.92);
+    background: rgba(31, 18, 41, 0.92);
     color: #fff;
     font-size: 0.85rem;
     font-weight: 600;
@@ -4242,7 +4242,7 @@ body {
     flex-shrink: 0;
     margin-top: 0.5rem;
     padding-top: 0.75rem;
-    border-top: 1px solid #f3f0ff;
+    border-top: 1px solid #f4ecdd;
 }
 
 /* Slightly tighter section cards so the whole sheet reads compact on desktop */
@@ -4304,7 +4304,7 @@ body {
 /* ========== FORM: NUMBERED SECTIONS (review form + Q&A forms) ========== */
 .form-section {
     background: #faf9ff;
-    border: 1px solid #ece7fb;
+    border: 1px solid #e9dfcc;
     border-radius: 16px;
     padding: 1rem;
     margin-bottom: 0.9rem;
@@ -4352,7 +4352,7 @@ body {
 .form-section textarea {
     width: 100%;
     padding: 0.8rem 1rem;
-    border: 2px solid rgba(225, 215, 245, 0.9);
+    border: 2px solid rgba(233, 223, 204, 0.9);
     border-radius: 12px;
     font-size: 1rem;
     font-family: inherit;
@@ -4387,7 +4387,7 @@ body {
     width: 100%;
     padding: 0.8rem 1rem;
     background: white;
-    border: 2px solid rgba(225, 215, 245, 0.9);
+    border: 2px solid rgba(233, 223, 204, 0.9);
     border-radius: 12px;
     font: inherit;
     text-align: left;
@@ -4437,7 +4437,7 @@ body {
     align-items: center;
     gap: 0.6rem;
     padding: 0 0 0.8rem;
-    border-bottom: 1px solid #ece7fb;
+    border-bottom: 1px solid #e9dfcc;
 }
 
 .course-picker-back {
@@ -4489,7 +4489,7 @@ body {
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
-    border: 1px solid #ece7fb;
+    border: 1px solid #e9dfcc;
     border-radius: 12px;
     margin-top: 0.6rem;
 }
@@ -4853,8 +4853,8 @@ body {
 .toast-error .toast-icon { color: #ef4444; }
 
 .toast-info {
-    background: rgba(59, 130, 246, 0.15);
-    border-color: rgba(59, 130, 246, 0.3);
+    background: rgba(198, 161, 91, 0.15);
+    border-color: rgba(198, 161, 91, 0.3);
 }
 
 .toast-info .toast-icon { color: #e8cf9a; }
@@ -6742,8 +6742,8 @@ select:focus-visible {
 }
 
 .qa-q-badge {
-    background: #f3ecf8;
-    color: #6b3f8f;
+    background: #f1e8d9;
+    color: #7a5320;
 }
 
 .qa-a-badge {
