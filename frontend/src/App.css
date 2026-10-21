@@ -3798,6 +3798,10 @@ body {
 }
 
 .qa-reply-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
     margin: 10px 0 0 34px;
     background: transparent;
     border: 1px solid #ddc9a4;
@@ -9721,5 +9725,35 @@ a.header-brand:focus-visible {
     .qa-answer .review-date {
         flex: 0 0 calc(100% - 34px);
         margin-left: 34px;
+    }
+
+    /* The phone Q&A rules further up this file are declared before the base
+       Q&A rules, so they lost the cascade: answers stayed indented by 34px
+       and the full-width Answer pill hung over the card edge. Restate the
+       layout here, after everything else, so answers and the form use the
+       card's full content width. */
+    .qa-answers,
+    .qa-answer-form {
+        margin-left: 0;
+    }
+
+    .qa-answer {
+        padding: 10px 12px;
+        border-radius: 12px;
+    }
+
+    .qa-answer-form textarea {
+        border-radius: 12px;
+    }
+
+    .qa-reply-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: auto;
+        min-height: 40px;
+        margin: 12px 0 0;
+        padding: 8px 18px;
+        border-radius: 999px;
     }
 }
