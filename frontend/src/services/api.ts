@@ -85,6 +85,22 @@ export const getTeacherQuestions = (id: number) => {
     return api.get(`/teachers/${id}/questions`);
 };
 
+/** A question from the site-wide Q&A board (includes its teacher). */
+export interface BoardQuestion {
+    id: number;
+    question: string;
+    created_at: string;
+    teacher_id: number;
+    teacher_name: string;
+    teacher_department: string;
+    answers: { id: number; answer: string; created_at: string }[];
+}
+
+/** Every approved question across all teachers, newest first. */
+export const getAllQuestions = (page: number = 1, limit: number = 15) => {
+    return api.get(`/questions?page=${page}&limit=${limit}`);
+};
+
 export const submitQuestion = (data: { teacher_id: number; question: string }) => {
     return api.post('/questions', data);
 };

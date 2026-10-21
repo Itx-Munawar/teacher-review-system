@@ -9454,3 +9454,273 @@ select:focus-visible {
         border-radius: 12px;
     }
 }
+
+/* ============================================================
+   SITE-WIDE Q&A BOARD + HOME MASTHEAD CREST
+   Appended after the atelier layer so these win over it.
+   ============================================================ */
+
+/* The brand is now a link that returns to the start page. */
+a.header-brand {
+    color: inherit;
+    text-decoration: none;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+a.header-brand:hover {
+    opacity: 0.9;
+}
+
+a.header-brand:active {
+    transform: scale(0.99);
+}
+
+a.header-brand:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 4px;
+}
+
+/* ---- Q&A board ---- */
+.questions-view {
+    display: block;
+}
+
+.questions-view-hero {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1.3rem;
+    border-bottom: 1px solid var(--hairline);
+}
+
+.questions-view .back-button {
+    margin-bottom: 1.1rem;
+}
+
+.questions-view-eyebrow {
+    margin: 0 0 0.5rem;
+    color: var(--gold-deep);
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+}
+
+.questions-view-title {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0 0 0.7rem;
+    color: var(--ink);
+    font-family: var(--font-display);
+    font-size: clamp(1.85rem, 3.6vw, 2.6rem);
+    font-weight: 600;
+    line-height: 1.06;
+    letter-spacing: -0.015em;
+}
+
+.questions-view-title svg {
+    flex: 0 0 auto;
+    color: var(--gold);
+}
+
+.questions-view-lead {
+    max-width: 54ch;
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.92rem;
+    line-height: 1.7;
+}
+
+.questions-view-count {
+    margin: 0.7rem 0 0;
+    color: var(--gold-deep);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}
+
+.questions-list {
+    gap: 14px;
+}
+
+.question-card {
+    padding: 18px;
+    border-radius: 16px;
+    background: #fffdf9;
+    box-shadow: 0 20px 44px -36px rgba(33, 22, 43, 0.55);
+}
+
+/* Teacher attribution – links through to the full profile. */
+.question-teacher {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    width: 100%;
+    margin: 0 0 14px;
+    padding: 9px 12px;
+    border: 1px solid #efe4cd;
+    border-radius: 12px;
+    background: #fbf6ec;
+    color: var(--ink);
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.question-teacher:hover {
+    border-color: var(--gold);
+    background: #fbf1de;
+    transform: translateY(-1px);
+}
+
+.question-teacher:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+}
+
+.question-teacher-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: #f6ecd8;
+    color: var(--gold-deep);
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.question-teacher-text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.question-teacher-name {
+    color: var(--ink);
+    font-family: var(--font-display);
+    font-size: 0.98rem;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.question-teacher-dept {
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 0.75rem;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.question-teacher-arrow {
+    flex: 0 0 auto;
+    color: var(--gold);
+    transform: rotate(180deg);
+}
+
+.questions-load-more {
+    display: flex;
+    justify-content: center;
+    margin-top: 6px;
+}
+
+/* ---- Official UMT crest on the home masthead ---- */
+/* The static "UMT · Anonymous student voices" kicker is replaced by the
+   real element below, so retire the pseudo-element in every viewport. */
+.welcome-message::before {
+    display: none;
+}
+
+.welcome-crest {
+    display: flex;
+    margin: 0 0 1.15rem;
+}
+
+.welcome-crest-plate {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 88px;
+    height: 88px;
+    padding: 13px;
+    border-radius: 50%;
+    background: radial-gradient(122% 122% at 30% 18%, #3b2250 0%, #170d21 76%);
+    box-shadow:
+        inset 0 0 0 1px rgba(198, 161, 91, 0.5),
+        0 24px 48px -32px rgba(23, 13, 33, 0.9);
+}
+
+.welcome-crest-img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.welcome-message .welcome-eyebrow {
+    max-width: none;
+    margin: 0 0 0.8rem;
+    color: var(--gold-deep);
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+}
+
+@media (max-width: 768px) {
+    .questions-view-hero {
+        margin-bottom: 1.15rem;
+        padding-bottom: 1.05rem;
+    }
+
+    .questions-view-title {
+        font-size: 1.7rem;
+        gap: 9px;
+    }
+
+    .questions-view-lead {
+        font-size: 0.88rem;
+    }
+
+    .question-card {
+        padding: 14px;
+        border-radius: 14px;
+    }
+
+    .question-teacher {
+        margin-bottom: 12px;
+        padding: 8px 10px;
+    }
+
+    .welcome-crest-plate {
+        width: 74px;
+        height: 74px;
+        padding: 11px;
+    }
+
+    .welcome-message .welcome-eyebrow {
+        font-size: 0.55rem;
+        letter-spacing: 0.11em;
+    }
+
+    /* On phones the timestamp cannot share the row with the text: the text
+       would collapse to a word-per-line column. Give it its own line,
+       aligned under the text (badge 24px + 10px gap = 34px). */
+    .qa-question,
+    .qa-answer {
+        flex-wrap: wrap;
+    }
+
+    .qa-question .review-date,
+    .qa-answer .review-date {
+        flex: 0 0 calc(100% - 34px);
+        margin-left: 34px;
+    }
+}

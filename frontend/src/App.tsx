@@ -43,6 +43,7 @@ import LoginForm from './components/LoginForm';
 import CompareView from './components/CompareView';
 import TeacherDetailView from './components/TeacherDetailView';
 import ReviewFormModal from './components/ReviewFormModal';
+import QuestionsView from './components/QuestionsView';
 import ErrorBoundary from './components/ErrorBoundary';
 import { TeacherCardSkeleton } from './components/Skeleton';
 import { ToastHost } from './components/Toast';
@@ -126,6 +127,8 @@ const App: React.FC = () => {
     const [showContactModal, setShowContactModal] = useState(false);
     const [showMobileMenu, setShowMobileMenu] = useState(false);
     const [headerScrolled, setHeaderScrolled] = useState(false);
+    // Site-wide Q&A board (also keeps /questions working on a hard refresh)
+    const [showQnA, setShowQnA] = useState(() => typeof window !== 'undefined' && window.location.pathname === '/questions');
 
     // Compact sticky header once the user scrolls past the hero
     useEffect(() => {
@@ -938,6 +941,7 @@ const App: React.FC = () => {
             const response = await getTeacherDetail(teacher.id);
             setSelectedTeacher(mapTeacherDetail(response.data));
             setShowReviewForm(false);
+            setShowQnA(false);
             setReviewComment('');
             setReviewUserName('');
             setReviewCourses([]);
@@ -968,6 +972,7 @@ const App: React.FC = () => {
     const clearSelectedTeacher = () => {
         setSelectedTeacher(null);
         setShowReviewForm(false);
+        setShowQnA(false);
         setReviewSuccess('');
         navigate('/');
         restoreListScroll();
@@ -1110,9 +1115,23 @@ const App: React.FC = () => {
         setShowMobileMenu(false);
         setSelectedTeacher(null);
         setIsComparing(false);
+        setShowQnA(false);
         setShowReviewForm(false);
         setReviewSuccess('');
         navigate('/');
+        setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 80);
+    }, [navigate]);
+
+    // Open the site-wide Q&A board (header button + mobile bottom nav).
+    const handleOpenQnA = useCallback(() => {
+        haptic(10);
+        setShowMobileMenu(false);
+        setSelectedTeacher(null);
+        setIsComparing(false);
+        setShowReviewForm(false);
+        setReviewSuccess('');
+        setShowQnA(true);
+        navigate('/questions');
         setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 80);
     }, [navigate]);
 
@@ -1121,6 +1140,7 @@ const App: React.FC = () => {
         setShowMobileMenu(false);
         setSelectedTeacher(null);
         setIsComparing(false);
+        setShowQnA(false);
         setShowReviewForm(false);
         navigate('/');
         setTimeout(() => {
@@ -1133,6 +1153,7 @@ const App: React.FC = () => {
         haptic(10);
         setShowMobileMenu(false);
         setSelectedTeacher(null);
+        setShowQnA(false);
         setShowReviewForm(false);
         if (!isComparing) {
             navigate('/');
@@ -1256,11 +1277,17 @@ const App: React.FC = () => {
         <div className="app">
             <a href="#main-content" className="skip-link">Skip to main content</a>
             <ToastHost toasts={toasts} onDismiss={dismissToast} />
-            {compareList.length === 0 && !isComparing && <InstallPrompt />}
+            {compareList.length === 0 && !isComparing && !showQnA && <InstallPrompt />}
             <PullToRefresh onRefresh={handlePullRefresh}>
                 <header className="header" role="banner">
                     <div className="header-top">
-                        <div className="header-brand">
+                        <a
+                            className="header-brand"
+                            href="/"
+                            onClick={(e) => { e.preventDefault(); handleTabHome(); }}
+                            title="Back to the start page"
+                            aria-label="UMT Teacher Reviews - go to start page"
+                        >
                             <img
                                 src={`${process.env.PUBLIC_URL}/umt-logo.png`}
                                 alt="UMT Logo"
@@ -1270,7 +1297,7 @@ const App: React.FC = () => {
                                 decoding="async"
                             />
                             <h1 style={{ margin: 0 }}>UMT Teacher Reviews</h1>
-                        </div>
+                        </a>
                         <button
                             className={`menu-toggle${showMobileMenu ? ' menu-toggle-open' : ''}`}
                             onClick={() => setShowMobileMenu(v => !v)}
@@ -1292,6 +1319,9 @@ const App: React.FC = () => {
                         }} className="admin-login-btn">
                             <Icon name="lock" size={16} /> Admin Login
                         </button>
+                        <button onClick={handleOpenQnA} className="admin-login-btn">
+                            <Icon name="message-square" size={16} /> Q&amp;A
+                        </button>
                         <button onClick={() => { setShowContactModal(true); setShowMobileMenu(false); }} className="admin-login-btn">
                             <Icon name="mail" size={16} /> Contact Us
                         </button>
@@ -1302,7 +1332,7 @@ const App: React.FC = () => {
                 </header>
 
                 <div className={`container${selectedTeacher && !isComparing ? ' container-detail' : ''}`}>
-                <div className={`sidebar${(selectedTeacher || isComparing) && isMobileViewport ? ' sidebar-hidden-mobile' : ''}`}>
+                <div className={`sidebar${(selectedTeacher || isComparing || showQnA) && isMobileViewport ? ' sidebar-hidden-mobile' : ''}`}>
                     <div className="search-box">
                         <TeacherAutocomplete
                             value={searchTerm}
@@ -1434,7 +1464,9 @@ const App: React.FC = () => {
 
                 <main className={`main-content${selectedTeacher && !isComparing ? ' main-content-detail' : ''}`} id="main-content" ref={mainContentRef}>
                 <ErrorBoundary>
-                    {isComparing ? (
+                    {showQnA ? (
+                        <QuestionsView onOpenTeacher={handleTeacherClick} onBack={handleTabHome} />
+                    ) : isComparing ? (
                         <CompareView
                             compareDetails={compareDetails}
                             compareList={compareList}
@@ -1461,6 +1493,19 @@ const App: React.FC = () => {
                         />
                     ) : (
                         <div className="welcome-message">
+                            <div className="welcome-crest">
+                                <span className="welcome-crest-plate">
+                                    <img
+                                        src={`${process.env.PUBLIC_URL}/umt-logo.png`}
+                                        alt="University of Management and Technology"
+                                        className="welcome-crest-img"
+                                        width={86}
+                                        height={86}
+                                        decoding="async"
+                                    />
+                                </span>
+                            </div>
+                            <p className="welcome-eyebrow">University of Management and Technology · Lahore</p>
                             <h2 className="gradient-text">Welcome to Teacher Reviews</h2>
                             <p className="welcome-hint-desktop">Select a teacher from the left to read reviews or submit your own.</p>
                             <p className="welcome-hint-mobile">Select a teacher from the list above to read reviews or submit your own.</p>
@@ -1550,8 +1595,9 @@ const App: React.FC = () => {
             )}
             <BottomNav
                 items={[
-                    { key: 'home', label: 'Home', icon: 'home', active: !isComparing, onClick: handleTabHome },
-                    { key: 'search', label: 'Search', icon: 'search', active: isSearching && !!searchTerm, onClick: handleTabSearch },
+                    { key: 'home', label: 'Home', icon: 'home', active: !isComparing && !showQnA, onClick: handleTabHome },
+                    { key: 'search', label: 'Search', icon: 'search', active: isSearching && !!searchTerm && !showQnA, onClick: handleTabSearch },
+                    { key: 'qna', label: 'Q&A', icon: 'message-square', active: showQnA, onClick: handleOpenQnA },
                     { key: 'compare', label: 'Compare', icon: 'compare', active: isComparing, onClick: handleTabCompare },
                     { key: 'admin', label: 'Admin', icon: 'lock', onClick: handleTabAdmin },
                 ]}

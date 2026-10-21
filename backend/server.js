@@ -742,6 +742,76 @@ app.get('/api/teachers/:id/questions', async (req, res) => {
     }
 });
 
+// GET /api/questions - list every approved question across all teachers.
+// Powers the public Q&A board, so students can read and answer questions
+// without first opening a specific teacher page. Each row carries the
+// teacher's name/department so the client can label and link it.
+app.get('/api/questions', async (req, res) => {
+    try {
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.min(Math.max(parseInt(req.query.limit) || 15, 1), 50);
+        const offset = (page - 1) * limit;
+
+        const [countResult] = await db.query(
+            'SELECT COUNT(*) as total FROM questions WHERE is_approved = 1'
+        );
+        const total = countResult[0].total;
+
+        const [rows] = await db.query(`
+            SELECT q.id as question_id, q.question, q.created_at as question_created_at,
+                   t.id as teacher_id, t.name as teacher_name, t.department as teacher_department,
+                   a.id as answer_id, a.answer, a.created_at as answer_created_at
+            FROM questions q
+            JOIN teachers t ON t.id = q.teacher_id
+            LEFT JOIN question_answers a ON a.question_id = q.id AND a.is_approved = 1
+            WHERE q.is_approved = 1
+            ORDER BY q.created_at DESC, a.created_at ASC
+            LIMIT ${limit} OFFSET ${offset}
+        `);
+
+        // Group answers under their question (same shape as the teacher Q&A feed)
+        const grouped = [];
+        const map = {};
+        rows.forEach((row) => {
+            if (!map[row.question_id]) {
+                map[row.question_id] = {
+                    id: row.question_id,
+                    question: row.question,
+                    created_at: row.question_created_at,
+                    teacher_id: row.teacher_id,
+                    teacher_name: row.teacher_name,
+                    teacher_department: row.teacher_department,
+                    answers: []
+                };
+                grouped.push(map[row.question_id]);
+            }
+            if (row.answer_id) {
+                map[row.question_id].answers.push({
+                    id: row.answer_id,
+                    answer: row.answer,
+                    created_at: row.answer_created_at
+                });
+            }
+        });
+
+        // Dynamic user content – bypass the CDN cache so newly approved
+        // questions/answers show up immediately.
+        res.set('Cache-Control', 'no-store');
+        res.json({
+            questions: grouped,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages: Math.max(1, Math.ceil(total / limit))
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching questions board:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
 // POST /api/questions - ask a question about a teacher
 app.post('/api/questions', questionLimiter, [
     body('teacher_id').isInt({ min: 1 }).withMessage('Invalid teacher ID'),
