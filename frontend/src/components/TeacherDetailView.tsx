@@ -54,6 +54,20 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
         [selectedTeacher.reviews]
     );
 
+    // Distinct courses across reviews — a compact, honest profile fact.
+    const courseCount = useMemo(() => {
+        const courses = new Set<string>();
+        (selectedTeacher.reviews || []).forEach((review) => {
+            extractCourses(review).forEach((course) => courses.add(course.toLowerCase()));
+        });
+        return courses.size;
+    }, [selectedTeacher.reviews]);
+
+    const reviewCount = sortedReviews.length || selectedTeacher.review_count || selectedTeacher.total_reviews || 0;
+    const latestReview = sortedReviews[0]?.created_at
+        ? new Date(sortedReviews[0].created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
+        : '—';
+
     // Reader reports: one inline form at a time, and a local record of what
     // this session already reported so the button does not invite doubles.
     const [reportOpenId, setReportOpenId] = useState<number | null>(null);
@@ -91,46 +105,81 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
             }
         >
             <div className="teacher-detail">
-                <button className="back-button" onClick={onClearSelectedTeacher}>
-                    <Icon name="chevron-left" size={16} /> Back to Teachers
-                </button>
-
-                {/* Always rendered: falls back to initials when there is no usable photo */}
-                <Avatar
-                    name={selectedTeacher.name}
-                    imageUrl={selectedTeacher.image_url}
-                    className="teacher-detail-image"
-                    size={130}
-                    priority
-                />
-
-                <div className="teacher-detail-header">
-                    <h1>{selectedTeacher.name}</h1>
-                    <p className="department-name">{selectedTeacher.department}</p>
-                    <div className="review-count">
-                        <Icon name="star" size={16} /> {selectedTeacher.review_count || selectedTeacher.total_reviews || 0} Reviews
-                    </div>
+                <div className="profile-topbar">
+                    <button className="back-button" onClick={onClearSelectedTeacher}>
+                        <Icon name="chevron-left" size={16} /> Back to Teachers
+                    </button>
+                    <span className="profile-topbar-note">Anonymous student reviews</span>
                 </div>
+
+                <header className="profile-hero">
+                    <div className="profile-hero-row">
+                        {/* Always rendered: falls back to initials when there is no usable photo */}
+                        <Avatar
+                            name={selectedTeacher.name}
+                            imageUrl={selectedTeacher.image_url}
+                            className="teacher-detail-image"
+                            size={116}
+                            priority
+                        />
+                        <div className="profile-hero-main">
+                            <p className="profile-eyebrow">{selectedTeacher.department || 'UMT Faculty'}</p>
+                            <h1>{selectedTeacher.name}</h1>
+                        </div>
+                        <div className="profile-hero-actions">
+                            <button className="btn-write-review profile-cta" onClick={onShowReviewForm}>
+                                <Icon name="edit" size={16} /> Write a review
+                            </button>
+                            <span className="profile-cta-note">Anonymous by default</span>
+                        </div>
+                    </div>
+
+                    <div className="profile-stats">
+                        <div className="profile-stat">
+                            <span className="profile-stat-value">{reviewCount}</span>
+                            <span className="profile-stat-label">{reviewCount === 1 ? 'Review' : 'Reviews'}</span>
+                        </div>
+                        <div className="profile-stat">
+                            <span className="profile-stat-value">{courseCount}</span>
+                            <span className="profile-stat-label">{courseCount === 1 ? 'Course mentioned' : 'Courses mentioned'}</span>
+                        </div>
+                        <div className="profile-stat">
+                            <span className="profile-stat-value profile-stat-date">{latestReview}</span>
+                            <span className="profile-stat-label">Latest review</span>
+                        </div>
+                    </div>
+                </header>
 
                 {reviewSuccess && <div className="success-message">{reviewSuccess}</div>}
                 {reviewError && <div className="error-message">{reviewError}</div>}
 
-                <button className="btn-write-review" onClick={onShowReviewForm}>
-                    <Icon name="edit" size={16} /> Write a Review
-                </button>
-
                 <div className="reviews-section">
-                    <h2>Student Reviews</h2>
+                    <div className="section-head">
+                        <div>
+                            <p className="section-eyebrow">What students say</p>
+                            <h2>Student Reviews</h2>
+                        </div>
+                        <span className="section-pill">{reviewCount} {reviewCount === 1 ? 'review' : 'reviews'}</span>
+                    </div>
                     {sortedReviews.length === 0 ? (
-                        <p className="no-reviews">No reviews yet. Be the first to share your experience!</p>
+                        <div className="reviews-empty">
+                            <p className="reviews-empty-title">No reviews yet</p>
+                            <p className="reviews-empty-text">Be the first to share what this class is really like.</p>
+                            <button type="button" className="profile-cta profile-cta-small" onClick={onShowReviewForm}>
+                                <Icon name="edit" size={15} /> Write the first review
+                            </button>
+                        </div>
                     ) : (
                         sortedReviews.map((review: Review) => {
                             const courses = extractCourses(review);
                             return (
-                                <div key={review.id} className="review-card">
+                                <article key={review.id} className="review-card">
                                     <div className="review-header">
+                                        <span className="reviewer-badge" aria-hidden="true">
+                                            {(review.user_name || 'A').trim().charAt(0).toUpperCase()}
+                                        </span>
                                         <span className="reviewer-name">
-                                            <Icon name="user" size={13} /> {review.user_name || 'Anonymous'}
+                                            {review.user_name || 'Anonymous'}
                                         </span>
                                         <span className="review-date">
                                             <Icon name="calendar" size={13} /> {new Date(review.created_at).toLocaleDateString()}
@@ -145,7 +194,7 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                                             ))}
                                         </div>
                                     )}
-                                    <p className="review-comment">"{review.comment}"</p>
+                                    <p className="review-comment">{review.comment}</p>
                                     <div className="review-footer">
                                         {reportedIds.includes(review.id) ? (
                                             <span className="review-reported">
@@ -191,7 +240,7 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                                             </button>
                                         )}
                                     </div>
-                                </div>
+                                </article>
                             );
                         })
                     )}
@@ -212,7 +261,12 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                 placeholder={<div className="related-teachers" style={{ minHeight: '60px' }} />}
             >
                 <div className="related-teachers">
-                    <h3>Related Teachers</h3>
+                    <div className="section-head">
+                        <div>
+                            <p className="section-eyebrow">Keep exploring</p>
+                            <h3>Related Teachers</h3>
+                        </div>
+                    </div>
                     <div className="related-teachers-list">
                         {relatedTeachers.map((teacher) => (
                             <button
@@ -228,7 +282,7 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                 </div>
             </LazySection>
         )}
-    </>
+        </>
     );
 };
 

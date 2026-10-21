@@ -131,14 +131,6 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
                     icon="help"
                     title="No questions yet"
                     message="Ask other students about this teacher!"
-                    action={
-                        !showAskForm ? (
-                            <button onClick={() => setShowAskForm(true)} className="btn-write-review qa-ask-btn">
-                                <Icon name="plus" size={16} />
-                                <span>Ask a Question</span>
-                            </button>
-                        ) : undefined
-                    }
                 />
             ) : (
                 <div className="qa-list">

@@ -1301,7 +1301,7 @@ const App: React.FC = () => {
                     </div>
                 </header>
 
-                <div className="container">
+                <div className={`container${selectedTeacher && !isComparing ? ' container-detail' : ''}`}>
                 <div className={`sidebar${(selectedTeacher || isComparing) && isMobileViewport ? ' sidebar-hidden-mobile' : ''}`}>
                     <div className="search-box">
                         <TeacherAutocomplete
@@ -1432,7 +1432,7 @@ const App: React.FC = () => {
                     </div>
                 </div>
 
-                <main className="main-content" id="main-content" ref={mainContentRef}>
+                <main className={`main-content${selectedTeacher && !isComparing ? ' main-content-detail' : ''}`} id="main-content" ref={mainContentRef}>
                 <ErrorBoundary>
                     {isComparing ? (
                         <CompareView
