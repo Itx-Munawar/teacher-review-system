@@ -7174,27 +7174,26 @@ select:focus-visible {
     max-width: 22ch;
 }
 
-/* The UMT mark sits on a small ivory plate so it reads on plum. */
+/* The official UMT crest is navy artwork, so it sits on a small ivory
+   plate with a champagne rim to read against the plum header. */
 .header .header-logo,
 .header > div > img {
-    width: 44px !important;
-    height: 44px !important;
-    padding: 5px;
+    width: 48px !important;
+    height: 48px !important;
+    padding: 4px;
     object-fit: contain;
     border-radius: 50%;
-    /* The UMT mark is white artwork: give it a dark medallion and a
-       champagne rim rather than an ivory plate that hides it. */
-    background: rgba(253, 250, 244, 0.07);
+    background: #fdfaf4;
     box-shadow:
-        0 0 0 1px rgba(232, 207, 154, 0.55),
-        0 10px 22px -12px rgba(0, 0, 0, 0.8);
+        0 0 0 1px rgba(232, 207, 154, 0.75),
+        0 10px 22px -14px rgba(0, 0, 0, 0.7);
     flex: 0 0 auto;
 }
 
 .header:not(:has(.header-top)) > div > img {
-    width: 52px !important;
-    height: 52px !important;
-    padding: 6px;
+    width: 54px !important;
+    height: 54px !important;
+    padding: 5px;
 }
 
 .header-tagline,
@@ -7212,7 +7211,7 @@ select:focus-visible {
 
 .header:has(.header-top) .header-tagline {
     grid-area: tagline;
-    margin: 3px 0 0 58px;
+    margin: 3px 0 0 62px;
     font-size: 0.84rem;
 }
 
@@ -9306,9 +9305,9 @@ select:focus-visible {
     }
 
     .header .header-logo {
-        width: 36px !important;
-        height: 36px !important;
-        padding: 4px;
+        width: 40px !important;
+        height: 40px !important;
+        padding: 3px;
     }
 
     .header:not(:has(.header-top)) {
@@ -9647,14 +9646,14 @@ a.header-brand:focus-visible {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 88px;
-    height: 88px;
-    padding: 13px;
+    width: 96px;
+    height: 96px;
+    padding: 12px;
     border-radius: 50%;
-    background: radial-gradient(122% 122% at 30% 18%, #3b2250 0%, #170d21 76%);
+    background: #fffdfa;
     box-shadow:
-        inset 0 0 0 1px rgba(198, 161, 91, 0.5),
-        0 24px 48px -32px rgba(23, 13, 33, 0.9);
+        inset 0 0 0 1px rgba(198, 161, 91, 0.55),
+        0 20px 40px -28px rgba(23, 13, 33, 0.75);
 }
 
 .welcome-crest-img {
@@ -9700,9 +9699,9 @@ a.header-brand:focus-visible {
     }
 
     .welcome-crest-plate {
-        width: 74px;
-        height: 74px;
-        padding: 11px;
+        width: 84px;
+        height: 84px;
+        padding: 10px;
     }
 
     .welcome-message .welcome-eyebrow {

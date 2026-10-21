@@ -1292,8 +1292,8 @@ const App: React.FC = () => {
                                 src={`${process.env.PUBLIC_URL}/umt-logo.png`}
                                 alt="UMT Logo"
                                 className="header-logo"
-                                width={60}
-                                height={57}
+                                width={48}
+                                height={48}
                                 decoding="async"
                             />
                             <h1 style={{ margin: 0 }}>UMT Teacher Reviews</h1>
@@ -1499,8 +1499,8 @@ const App: React.FC = () => {
                                         src={`${process.env.PUBLIC_URL}/umt-logo.png`}
                                         alt="University of Management and Technology"
                                         className="welcome-crest-img"
-                                        width={86}
-                                        height={86}
+                                        width={96}
+                                        height={96}
                                         decoding="async"
                                     />
                                 </span>
