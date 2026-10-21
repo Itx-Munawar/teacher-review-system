@@ -3862,8 +3862,11 @@ body {
 .install-prompt {
     position: fixed;
     bottom: 16px;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 0;
+    right: 0;
+    margin: 0 auto;
+    /* No translateX centring: the fadeInUp animation ends on translateY(0),
+       which would wipe the horizontal shift and leave the card half off-screen. */
     z-index: 1600;
     width: min(94vw, 420px);
     animation: fadeInUp 0.3s ease-out both;
@@ -3887,6 +3890,11 @@ body {
     min-width: 180px;
     color: #ece2d0;
     font-size: 0.9rem;
+}
+
+.install-prompt-text .icon {
+    margin-right: 6px;
+    vertical-align: -3px;
 }
 
 .install-prompt-btn {

@@ -96,7 +96,7 @@ const DepartmentPage: React.FC = () => {
                                             <div className="teacher-card-info">
                                                 <h3>{teacher.name}</h3>
                                                 <p className="department">{teacher.department}</p>
-                                                <span className="reviews-count">({teacher.review_count} reviews)</span>
+                                                <span className="reviews-count">({teacher.review_count} {teacher.review_count === 1 ? 'review' : 'reviews'})</span>
                                             </div>
                                         </Link>
                                     </TiltCard>
