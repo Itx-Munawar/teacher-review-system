@@ -59,13 +59,13 @@ export const getRelatedTeachers = (id: number) => {
     return api.get(`/teachers/${id}/related`);
 };
 
-export const searchAllTeachers = (query: string, limit?: number) => {
+export const searchAllTeachers = (query: string, limit?: number, signal?: AbortSignal) => {
     if (!query || query.trim() === '') {
         return Promise.resolve({ data: [] });
     }
     const params = new URLSearchParams({ q: query });
     if (limit) params.set('limit', String(limit));
-    return api.get(`/teachers/search?${params.toString()}`);
+    return api.get(`/teachers/search?${params.toString()}`, { signal });
 };
 
 export const getTeacherDetail = (id: number) => {

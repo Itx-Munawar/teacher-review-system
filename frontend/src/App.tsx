@@ -225,19 +225,21 @@ const App: React.FC = () => {
         }
     }, []);
 
-    const handleSearch = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value;
+    const handleSearch = useCallback((value: string) => {
         setSearchTerm(value);
 
-        if (value) {
-            setSearchParams({ search: value });
-        } else {
-            setSearchParams((prev) => {
-                const next = new URLSearchParams(prev);
+        // The autocomplete reports the settled query (not every keystroke), so
+        // the URL only updates once typing pauses. `replace` keeps the browser
+        // history clean instead of adding one entry per character.
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            if (value) {
+                next.set('search', value);
+            } else {
                 next.delete('search');
-                return next;
-            });
-        }
+            }
+            return next;
+        }, { replace: true });
 
         // Do NOT replace the sidebar list while typing – the autocomplete
         // dropdown handles suggestions. Only reload the full list on clear.
@@ -246,6 +248,11 @@ const App: React.FC = () => {
             setSearchResults([]);
             setCurrentPage(1);
             loadTeachers(1);
+        } else {
+            // Leaving a shared/deep-linked result list? Typing now drives the
+            // dropdown, so show the regular sidebar list again.
+            setIsSearching(false);
+            setSearchResults([]);
         }
     }, [setSearchParams, loadTeachers]);
 
@@ -1306,7 +1313,7 @@ const App: React.FC = () => {
                     <div className="search-box">
                         <TeacherAutocomplete
                             value={searchTerm}
-                            onInputChange={handleSearch}
+                            onQueryChange={handleSearch}
                             inputRef={searchInputRef}
                             onSelect={(teacher) => {
                                 setSearchTerm('');
@@ -1316,7 +1323,7 @@ const App: React.FC = () => {
                                     const next = new URLSearchParams(prev);
                                     next.delete('search');
                                     return next;
-                                });
+                                }, { replace: true });
                                 handleTeacherClick(teacher);
                             }}
                             onCompare={(teacher) => {
@@ -1327,7 +1334,6 @@ const App: React.FC = () => {
                                 }
                             }}
                             isInCompare={(teacher) => compareList.some(t => t.id === teacher.id)}
-                            onClear={() => handleSearch({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
                         />
                         {isSearching && searchTerm && (
                             <div className="search-info">

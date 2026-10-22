@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { searchAllTeachers } from '../services/api';
 import { debounce } from '../utils/debounce';
+import type { DebouncedFunction } from '../utils/debounce';
 import Avatar from './Avatar';
 import Icon from './Icon';
 import { useRecentSearches } from '../hooks/useRecentSearches';
@@ -8,9 +9,8 @@ import type { Teacher } from '../types';
 
 interface TeacherAutocompleteProps {
     value: string;
-    onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    onQueryChange: (value: string) => void;
     onSelect: (teacher: Teacher) => void;
-    onClear: () => void;
     onCompare?: (teacher: Teacher) => void;
     isInCompare?: (teacher: Teacher) => boolean;
     placeholder?: string;
@@ -19,9 +19,8 @@ interface TeacherAutocompleteProps {
 
 const TeacherAutocomplete: React.FC<TeacherAutocompleteProps> = ({
     value,
-    onInputChange,
+    onQueryChange,
     onSelect,
-    onClear,
     onCompare,
     isInCompare,
     // The sidebar input is ~180px of usable width on a small laptop; a long
@@ -29,37 +28,89 @@ const TeacherAutocomplete: React.FC<TeacherAutocompleteProps> = ({
     placeholder = 'Search by teacher or department',
     inputRef
 }) => {
+    // The input owns its text while the user types. Updating App state on every
+    // keystroke re-rendered the whole page (and pushed a history entry per key
+    // on mobile), which made typing feel delayed. Local state keeps each
+    // keystroke inside this component; the parent is notified once the user
+    // pauses.
+    const [query, setQuery] = useState(value);
     const [suggestions, setSuggestions] = useState<Teacher[]>([]);
     const [open, setOpen] = useState(false);
     const [activeIndex, setActiveIndex] = useState(-1);
     const [showRecent, setShowRecent] = useState(false);
     const boxRef = useRef<HTMLDivElement>(null);
+    const onQueryChangeRef = useRef(onQueryChange);
+
+    // Last value sent to (or received from) the parent, so the controlled-prop
+    // echo does not overwrite text typed during the debounce window.
+    const lastNotifiedValue = useRef(value);
+    const requestIdRef = useRef(0);
+    const abortRef = useRef<AbortController | null>(null);
+    const debouncedSuggest = useRef<DebouncedFunction<[string]> | null>(null);
+    const notifyParent = useRef<DebouncedFunction<[string]> | null>(null);
+
+    if (debouncedSuggest.current === null) {
+        debouncedSuggest.current = debounce(async (rawQuery: string) => {
+            const requestId = ++requestIdRef.current;
+            abortRef.current?.abort();
+            const controller = new AbortController();
+            abortRef.current = controller;
+
+            try {
+                const res = await searchAllTeachers(rawQuery, 8, controller.signal);
+                if (requestId !== requestIdRef.current || controller.signal.aborted) return;
+                setSuggestions(res.data || []);
+                setActiveIndex(-1);
+                // Don't pop the dropdown open if the user has already left.
+                if (boxRef.current && boxRef.current.contains(document.activeElement)) {
+                    setOpen(true);
+                }
+            } catch {
+                if (requestId !== requestIdRef.current || controller.signal.aborted) return;
+                setSuggestions([]);
+                setOpen(false);
+            }
+        }, 250);
+    }
+
+    if (notifyParent.current === null) {
+        notifyParent.current = debounce((next: string) => {
+            lastNotifiedValue.current = next;
+            onQueryChangeRef.current(next);
+        }, 400);
+    }
+
     const { recentSearches, addSearch, removeSearch, clearSearches } = useRecentSearches();
 
-    const debouncedSuggest = useRef(debounce(async (query: string) => {
-        try {
-            const res = await searchAllTeachers(query, 8);
-            setSuggestions(res.data || []);
-            setOpen(true);
-            setActiveIndex(-1);
-        } catch {
+    useEffect(() => {
+        onQueryChangeRef.current = onQueryChange;
+    }, [onQueryChange]);
+
+    // Sync only genuine external changes (deep links, clearing after a
+    // selection). Echoes of our own debounced update are ignored.
+    useEffect(() => {
+        if (value === lastNotifiedValue.current) return;
+        notifyParent.current?.cancel();
+        debouncedSuggest.current?.cancel();
+        abortRef.current?.abort();
+        requestIdRef.current += 1;
+        lastNotifiedValue.current = value;
+        setQuery(value);
+
+        if (!value.trim()) {
             setSuggestions([]);
             setOpen(false);
+            setShowRecent(false);
+            setActiveIndex(-1);
         }
-    }, 250));
+    }, [value]);
 
     useEffect(() => {
-        const query = value.trim();
-        if (!query) {
-            // Clearing the input closes the suggestion list; recent searches
-            // are opened separately on focus (see handleFocus).
-            setSuggestions([]);
-            setOpen(false);
-            return;
-        }
+        const trimmed = query.trim();
+        if (!trimmed) return;
         setShowRecent(false);
-        debouncedSuggest.current(query);
-    }, [value]);
+        debouncedSuggest.current?.(trimmed);
+    }, [query]);
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -73,8 +124,37 @@ const TeacherAutocomplete: React.FC<TeacherAutocompleteProps> = ({
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    useEffect(() => () => {
+        debouncedSuggest.current?.cancel();
+        notifyParent.current?.cancel();
+        abortRef.current?.abort();
+    }, []);
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const next = e.target.value;
+        setQuery(next);
+        setActiveIndex(-1);
+        setShowRecent(false);
+
+        // A newer keystroke makes any in-flight suggestion request stale.
+        abortRef.current?.abort();
+        requestIdRef.current += 1;
+
+        if (!next.trim()) {
+            debouncedSuggest.current?.cancel();
+            notifyParent.current?.cancel();
+            lastNotifiedValue.current = '';
+            setSuggestions([]);
+            setOpen(false);
+            onQueryChangeRef.current('');
+            return;
+        }
+
+        notifyParent.current?.(next);
+    };
+
     const handleFocus = () => {
-        if (value.trim()) {
+        if (query.trim()) {
             if (suggestions.length > 0) setOpen(true);
         } else {
             // Show recent searches when focused with empty input
@@ -87,16 +167,31 @@ const TeacherAutocomplete: React.FC<TeacherAutocompleteProps> = ({
     const handleRecentSelect = (term: string) => {
         addSearch(term);
         setShowRecent(false);
-        // Trigger search with this term
-        const syntheticEvent = {
-            target: { value: term }
-        } as React.ChangeEvent<HTMLInputElement>;
-        onInputChange(syntheticEvent);
+        setActiveIndex(-1);
+        setQuery(term);
+        notifyParent.current?.cancel();
+        lastNotifiedValue.current = term;
+        onQueryChangeRef.current(term);
     };
 
     const handleRecentRemove = (e: React.MouseEvent, term: string) => {
         e.stopPropagation();
         removeSearch(term);
+    };
+
+    const selectTeacher = (teacher: Teacher) => {
+        addSearch(query.trim());
+        debouncedSuggest.current?.cancel();
+        notifyParent.current?.cancel();
+        abortRef.current?.abort();
+        requestIdRef.current += 1;
+        lastNotifiedValue.current = '';
+        setQuery('');
+        setSuggestions([]);
+        setOpen(false);
+        setShowRecent(false);
+        setActiveIndex(-1);
+        onSelect(teacher);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -115,8 +210,7 @@ const TeacherAutocomplete: React.FC<TeacherAutocompleteProps> = ({
                 handleRecentSelect(recentSearches[activeIndex]);
             } else if (!showRecent && activeIndex >= 0 && suggestions[activeIndex]) {
                 e.preventDefault();
-                addSearch(value.trim());
-                onSelect(suggestions[activeIndex]);
+                selectTeacher(suggestions[activeIndex]);
             }
         } else if (e.key === 'Escape') {
             setOpen(false);
@@ -133,8 +227,8 @@ const TeacherAutocomplete: React.FC<TeacherAutocompleteProps> = ({
                 type="text"
                 placeholder={placeholder}
                 aria-label={placeholder}
-                value={value}
-                onChange={onInputChange}
+                value={query}
+                onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
                 onFocus={handleFocus}
                 className="search-input"
@@ -188,8 +282,7 @@ const TeacherAutocomplete: React.FC<TeacherAutocompleteProps> = ({
                             className={`autocomplete-item ${idx === activeIndex ? 'autocomplete-item-active' : ''}`}
                             onMouseDown={(e) => {
                                 e.preventDefault();
-                                addSearch(value.trim());
-                                onSelect(t);
+                                selectTeacher(t);
                             }}
                             onMouseEnter={() => setActiveIndex(idx)}
                         >

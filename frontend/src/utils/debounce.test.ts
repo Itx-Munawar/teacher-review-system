@@ -34,4 +34,24 @@ describe('debounce', () => {
 
         jest.useRealTimers();
     });
+
+    it('can cancel a pending call', () => {
+        jest.useFakeTimers();
+        const fn = jest.fn();
+        const debounced = debounce(fn, 200);
+
+        debounced('pending');
+        debounced.cancel();
+
+        jest.advanceTimersByTime(200);
+        expect(fn).not.toHaveBeenCalled();
+
+        // A later call still works normally.
+        debounced('after-cancel');
+        jest.advanceTimersByTime(200);
+        expect(fn).toHaveBeenCalledTimes(1);
+        expect(fn).toHaveBeenCalledWith('after-cancel');
+
+        jest.useRealTimers();
+    });
 });

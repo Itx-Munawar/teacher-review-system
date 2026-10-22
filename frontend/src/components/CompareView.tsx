@@ -51,13 +51,12 @@ const CompareView: React.FC<CompareViewProps> = ({
             <div className="compare-search">
                 <TeacherAutocomplete
                     value={compareSearchTerm}
-                    onInputChange={(e) => setCompareSearchTerm(e.target.value)}
+                    onQueryChange={setCompareSearchTerm}
                     inputRef={compareSearchInputRef}
                     onSelect={(teacher) => {
                         setCompareSearchTerm('');
                         handleCompareAdd(teacher);
                     }}
-                    onClear={() => setCompareSearchTerm('')}
                     placeholder="Search and add a teacher to compare..."
                 />
                 <p className="compare-search-hint">{compareList.length}/3 selected — tap a result to add it to the comparison.</p>
