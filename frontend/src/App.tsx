@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useSearchParams, useParams, useNavigate, Link } from 'react-router-dom';
+import { useSearchParams, useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
     getTeachers,
     getDepartments,
@@ -72,6 +72,7 @@ const App: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const { id: teacherIdParam } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
 
     // State
     const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -102,8 +103,10 @@ const App: React.FC = () => {
     const [reviewSuccess, setReviewSuccess] = useState('');
 
     const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
+    const [adminAuthChecked, setAdminAuthChecked] = useState(false);
     const [adminMutationLoading, setAdminMutationLoading] = useState(false);
-    const [showAdminPanel, setShowAdminPanel] = useState(false);
+    // Keep the admin panel open across a refresh by backing it with /admin.
+    const [showAdminPanel, setShowAdminPanel] = useState(() => location.pathname === '/admin');
     const [adminUsername, setAdminUsername] = useState('');
     const [adminPassword, setAdminPassword] = useState('');
     const [adminError, setAdminError] = useState('');
@@ -122,6 +125,8 @@ const App: React.FC = () => {
     const listScrollPosRef = useRef(0);
     const searchInputRef = useRef<HTMLInputElement>(null);
     const compareSearchInputRef = useRef<HTMLInputElement>(null);
+    // Where "Back to Site" should return after visiting /admin.
+    const adminReturnPathRef = useRef('/');
 
     const [showAboutModal, setShowAboutModal] = useState(false);
     const [showContactModal, setShowContactModal] = useState(false);
@@ -145,6 +150,26 @@ const App: React.FC = () => {
     const [sortBy, setSortBy] = useState('name');
     const [departmentFilter, setDepartmentFilter] = useState('');
     const [departments, setDepartments] = useState<{ department: string; teacher_count: number }[]>([]);
+
+    // /admin is a real URL so a refresh stays in the admin panel. Remember the
+    // page we came from so "Back to Site" returns there instead of always home.
+    const openAdminPanel = useCallback(() => {
+        if (location.pathname !== '/admin') {
+            adminReturnPathRef.current = `${location.pathname}${location.search}`;
+        }
+        setShowAdminPanel(true);
+        navigate('/admin');
+    }, [location.pathname, location.search, navigate]);
+
+    const closeAdminPanel = useCallback(() => {
+        setShowAdminPanel(false);
+        navigate(adminReturnPathRef.current || '/');
+    }, [navigate]);
+
+    // Keep the panel in sync with the URL (browser back/forward, direct links).
+    useEffect(() => {
+        setShowAdminPanel(location.pathname === '/admin');
+    }, [location.pathname]);
 
     // ========== TOASTS ==========
     const showToast = useCallback((message: string, type: Toast['type'] = 'info') => {
@@ -588,11 +613,14 @@ const App: React.FC = () => {
         }
     }, [selectedTeacher, searchTerm]);
 
-    const checkAdminLogin = useCallback(async () => {        try {
+    const checkAdminLogin = useCallback(async () => {
+        try {
             await adminMe();
             setIsAdminLoggedIn(true);
         } catch {
             setIsAdminLoggedIn(false);
+        } finally {
+            setAdminAuthChecked(true);
         }
     }, []);
 
@@ -620,11 +648,11 @@ const App: React.FC = () => {
             console.error('Logout error:', error);
         }
         setIsAdminLoggedIn(false);
-        setShowAdminPanel(false);
+        closeAdminPanel();
         setShowAddTeacherForm(false);
         if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
         showToast('Logged out successfully', 'info');
-    }, [showToast]);
+    }, [closeAdminPanel, showToast]);
 
     // ---------- Auto-logout timer (admin only) ----------
     const startLogoutTimer = useCallback(() => {
@@ -633,7 +661,6 @@ const App: React.FC = () => {
             if (isAdminLoggedIn && showAdminPanel) {
                 console.log('Auto-logging out due to inactivity');
                 handleAdminLogout();
-                setShowAdminPanel(false);
                 showToast('You have been logged out due to inactivity.', 'info');
             }
         }, 30 * 60 * 1000);
@@ -662,7 +689,6 @@ const App: React.FC = () => {
             if (isAdminLoggedIn) {
                 showToast('Your admin session has expired. Please log in again.', 'error');
                 handleAdminLogout();
-                setShowAdminPanel(false);
             }
         };
         window.addEventListener('admin-session-expired', handleSessionExpired);
@@ -1153,22 +1179,38 @@ const App: React.FC = () => {
     const handleTabAdmin = useCallback(() => {
         haptic(10);
         setShowMobileMenu(false);
-        setShowAdminPanel(true);
+        openAdminPanel();
         if (isAdminLoggedIn) {
             loadAdminData();
             loadTeachers(1);
         }
-    }, [isAdminLoggedIn, loadAdminData, loadTeachers]);
+    }, [isAdminLoggedIn, loadAdminData, loadTeachers, openAdminPanel]);
 
     // ========== RENDER ==========
     if (showAdminPanel) {
         if (!isAdminLoggedIn) {
+            // On a refresh at /admin the cookie check needs a moment; don't
+            // flash the login form (or the public site) in the meantime.
+            if (!adminAuthChecked) {
+                return (
+                    <div className="app">
+                        <ToastHost toasts={toasts} onDismiss={dismissToast} />
+                        <header className={`header${headerScrolled ? ' header-scrolled' : ''}`}>
+                            <h1>Teacher Review System - Admin</h1>
+                            <button onClick={closeAdminPanel} className="back-to-site-btn">← Back to Site</button>
+                        </header>
+                        <div className="container">
+                            <div className="loading" role="status">Checking admin session…</div>
+                        </div>
+                    </div>
+                );
+            }
             return (
                 <div className="app">
                     <ToastHost toasts={toasts} onDismiss={dismissToast} />
                 <header className={`header${headerScrolled ? ' header-scrolled' : ''}`}>
                         <h1>Teacher Review System - Admin</h1>
-                        <button onClick={() => setShowAdminPanel(false)} className="back-to-site-btn">← Back to Site</button>
+                        <button onClick={closeAdminPanel} className="back-to-site-btn">← Back to Site</button>
                     </header>
                     <div className="container">
                         <ErrorBoundary>
@@ -1190,7 +1232,7 @@ const App: React.FC = () => {
                 <ToastHost toasts={toasts} onDismiss={dismissToast} />
                 <header className="header">
                     <h1>Teacher Review System - Admin Panel</h1>
-                    <button onClick={() => setShowAdminPanel(false)} className="back-to-site-btn">← Back to Site</button>
+                    <button onClick={closeAdminPanel} className="back-to-site-btn">← Back to Site</button>
                 </header>
                 <div className="container">
                     <ErrorBoundary>
@@ -1286,14 +1328,7 @@ const App: React.FC = () => {
                     </div>
                     <p className="header-tagline">Reviews from UMT students, for UMT students.</p>
                     <div className={`header-actions${showMobileMenu ? ' header-actions-open' : ''}`}>
-                        <button onClick={() => {
-                            setShowAdminPanel(true);
-                            setShowMobileMenu(false);
-                            if (isAdminLoggedIn) {
-                                loadAdminData();
-                                loadTeachers(1);
-                            }
-                        }} className="admin-login-btn">
+                        <button onClick={handleTabAdmin} className="admin-login-btn">
                             <Icon name="lock" size={16} /> Admin login
                         </button>
                         <button onClick={handleOpenQnA} className="admin-login-btn">
