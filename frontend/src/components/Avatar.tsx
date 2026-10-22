@@ -8,7 +8,7 @@ const getInitials = (name: string) =>
 // circle is on screen immediately while the photo downloads (on a slow
 // connection that can be seconds), instead of an empty gap.
 const PLACEHOLDER_STYLE: React.CSSProperties = {
-    background: 'linear-gradient(135deg, #7d4a5f, #5e3a72, #3f6360)',
+    background: '#F7F1E6',
 };
 
 interface AvatarProps {

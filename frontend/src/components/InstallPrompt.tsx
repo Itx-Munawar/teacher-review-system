@@ -12,9 +12,16 @@ const InstallPrompt: React.FC = () => {
     const [isIOS, setIsIOS] = useState(false);
 
     useEffect(() => {
-        // iOS Safari doesn't fire beforeinstallprompt; show a manual hint instead
+        // iOS Safari doesn't fire beforeinstallprompt; show a manual hint instead.
         const ua = navigator.userAgent;
-        setIsIOS(/iphone|ipad|ipod/i.test(ua) && !(window as any).MSStream);
+        const ios = /iphone|ipad|ipod/i.test(ua) && !(window as any).MSStream;
+        setIsIOS(ios);
+
+        // This component is only mounted after a review is submitted, so it is
+        // safe to offer installation now. If the browser already fired its
+        // install event before mount, show the manual path instead of nothing.
+        const standalone = window.matchMedia('(display-mode: standalone)').matches;
+        if (!standalone) setVisible(true);
 
         const handleBeforeInstallPrompt = (e: Event) => {
             e.preventDefault();
@@ -61,27 +68,32 @@ const InstallPrompt: React.FC = () => {
     const dismiss = () => setVisible(false);
 
     return (
-        <div className="install-prompt" role="dialog" aria-label="Install app">
+        <div className="install-prompt" role="region" aria-label="Add to home screen">
             <div className="install-prompt-content">
                 {isIOS ? (
                     <p className="install-prompt-text">
                         <Icon name="download" size={18} />
-                        <span>Install <strong>UMT Teacher Reviews</strong> on your home screen: tap the Share button, then
+                        <span>Add <strong>UMT Teacher Reviews</strong> to your home screen: tap the Share button, then
                         "Add to Home Screen".</span>
+                    </p>
+                ) : deferredPrompt ? (
+                    <p className="install-prompt-text">
+                        <Icon name="download" size={18} />
+                        <span>Add <strong>UMT Teacher Reviews</strong> to your home screen. It opens like an app, with no download.</span>
                     </p>
                 ) : (
                     <p className="install-prompt-text">
                         <Icon name="download" size={18} />
-                        <span>Install <strong>UMT Teacher Reviews</strong> for quick access and offline use.</span>
+                        <span>Add <strong>UMT Teacher Reviews</strong> to your home screen from your browser menu — “Add to Home screen”.</span>
                     </p>
                 )}
-                {!isIOS && (
+                {!isIOS && deferredPrompt && (
                     <button onClick={handleInstall} className="install-prompt-btn">
-                        Install
+                        Add to home screen
                     </button>
                 )}
-                <button onClick={dismiss} className="install-prompt-close" aria-label="Dismiss install prompt">
-                    ✕
+                <button onClick={dismiss} className="install-prompt-close" aria-label="Not now">
+                    Not now
                 </button>
             </div>
         </div>

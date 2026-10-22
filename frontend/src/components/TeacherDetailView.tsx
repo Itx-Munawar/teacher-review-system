@@ -107,7 +107,7 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
             <div className="teacher-detail">
                 <div className="profile-topbar">
                     <button className="back-button" onClick={onClearSelectedTeacher}>
-                        <Icon name="chevron-left" size={16} /> Back to Teachers
+                        <Icon name="chevron-left" size={16} /> Back to teachers
                     </button>
                     <span className="profile-topbar-note">Anonymous student reviews</span>
                 </div>
@@ -141,7 +141,7 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                         </div>
                         <div className="profile-stat">
                             <span className="profile-stat-value">{courseCount}</span>
-                            <span className="profile-stat-label">{courseCount === 1 ? 'Course mentioned' : 'Courses mentioned'}</span>
+                            <span className="profile-stat-label">{courseCount === 1 ? 'Course' : 'Courses'}</span>
                         </div>
                         <div className="profile-stat">
                             <span className="profile-stat-value profile-stat-date">{latestReview}</span>
@@ -157,14 +157,15 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                     <div className="section-head">
                         <div>
                             <p className="section-eyebrow">What students say</p>
-                            <h2>Student Reviews</h2>
+                            <h2>Student reviews</h2>
                         </div>
                         <span className="section-pill">{reviewCount} {reviewCount === 1 ? 'review' : 'reviews'}</span>
                     </div>
+                    <p className="moderation-note">Every review is read by a moderator before it appears.</p>
                     {sortedReviews.length === 0 ? (
                         <div className="reviews-empty">
                             <p className="reviews-empty-title">No reviews yet</p>
-                            <p className="reviews-empty-text">Be the first to share what this class is really like.</p>
+                            <p className="reviews-empty-text">If you took this class, yours can be the first.</p>
                             <button type="button" className="profile-cta profile-cta-small" onClick={onShowReviewForm}>
                                 <Icon name="edit" size={15} /> Write the first review
                             </button>
@@ -264,7 +265,7 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                     <div className="section-head">
                         <div>
                             <p className="section-eyebrow">Keep exploring</p>
-                            <h3>Related Teachers</h3>
+                            <h3>Related teachers</h3>
                         </div>
                     </div>
                     <div className="related-teachers-list">

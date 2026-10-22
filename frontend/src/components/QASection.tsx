@@ -86,7 +86,7 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
                 {!showAskForm ? (
                     <button type="button" onClick={() => setShowAskForm(true)} className="btn-write-review qa-ask-btn">
                         <Icon name="plus" size={16} />
-                        <span>Ask a Question</span>
+                        <span>Ask a question</span>
                     </button>
                 ) : (
                     <button type="button" onClick={() => setShowAskForm(false)} className="btn-cancel qa-ask-btn">
@@ -103,7 +103,7 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
                     <section className="form-section" aria-label="Your question">
                         <div className="form-section-head">
                             <span className="form-section-num">1</span>
-                            <h4 className="form-section-title">Your Question</h4>
+                            <h4 className="form-section-title">Your question</h4>
                             <span className="form-section-hint">required</span>
                         </div>
                         <textarea
@@ -118,7 +118,7 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
                     </section>
                     <div className="form-buttons qa-form-buttons">
                         <button type="submit" disabled={submitting} className="btn-submit qa-submit" aria-busy={submitting}>
-                            {submitting ? 'Posting...' : 'Post Question'}
+                            {submitting ? 'Sending...' : 'Send question'}
                         </button>
                     </div>
                 </form>
@@ -130,7 +130,7 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
                 <EmptyState
                     icon="help"
                     title="No questions yet"
-                    message="Ask other students about this teacher!"
+                    message="Ask the first question about this teacher."
                 />
             ) : (
                 <div className="qa-list">

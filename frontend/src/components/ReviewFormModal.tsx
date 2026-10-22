@@ -200,7 +200,7 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
             >
                 {!coursePageOpen && (
                     <h3 className="review-form-title" id="review-modal-title">
-                        <Icon name="edit" size={20} /> Write a Review for {selectedTeacher.name}
+                        <Icon name="edit" size={20} /> Write a review for {selectedTeacher.name}
                     </h3>
                 )}
                 {reviewError && (
@@ -219,7 +219,7 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                             >
                                 ‹ Back
                             </button>
-                            <span className="course-picker-title">Select Courses</span>
+                            <span className="course-picker-title">Select courses</span>
                             {reviewCourses.length > 0 && (
                                 <span className="course-picker-count">{reviewCourses.length}</span>
                             )}
@@ -237,10 +237,12 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                 ) : (
                 <form className="review-form" onSubmit={onSubmit} aria-labelledby="review-modal-title">
                     <div className="review-form-body">
+                    <p className="review-form-intro">Anonymous by default. Your name is optional.</p>
+                    <p className="review-form-moderation">Every review is read by a moderator before it appears.</p>
                     <section className="form-section" aria-label="Step 1: your name">
                         <div className="form-section-head">
                             <span className="form-section-num">1</span>
-                            <h4 className="form-section-title">Your Name</h4>
+                            <h4 className="form-section-title">Your name</h4>
                             <span className="form-section-hint">optional</span>
                         </div>
                         <input
@@ -248,7 +250,7 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                             type="text"
                             value={reviewUserName}
                             onChange={(e) => setReviewUserName(e.target.value)}
-                            placeholder="Leave blank to post anonymously"
+                            placeholder="Leave blank to stay anonymous"
                             autoComplete="name"
                         />
                     </section>
@@ -290,7 +292,7 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                     <section className="form-section" aria-label="Step 3: your review">
                         <div className="form-section-head">
                             <span className="form-section-num">3</span>
-                            <h4 className="form-section-title">Your Review</h4>
+                            <h4 className="form-section-title">Your review</h4>
                             <span className="form-section-hint">required</span>
                         </div>
                         <textarea
@@ -298,7 +300,7 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                             rows={5}
                             value={reviewComment}
                             onChange={(e) => setReviewComment(e.target.value)}
-                            placeholder="Share your experience with this teacher..."
+                            placeholder="Be specific: the course, the workload, how explanations landed."
                             required
                             minLength={15}
                             maxLength={1000}
@@ -313,10 +315,9 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                             </span>
                         </div>
                         <p className="review-form-disclaimer">
-                            Reviews are student opinions and are not verified by the university.
-                            Please describe your experience with the teaching, not the person&apos;s
-                            private life. Allegations of misconduct are reviewed by a moderator
-                            before they appear.
+                            A moderator reads every review before it appears. Write about the
+                            class, not the person. Reviews are student opinions and are not
+                            verified by the university.
                         </p>
                     </section>
 
@@ -336,7 +337,7 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                                     <span>Submitting...</span>
                                 </>
                             ) : (
-                                'Submit Review'
+                                'Submit for review'
                             )}
                         </button>
                     </div>

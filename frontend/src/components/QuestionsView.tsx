@@ -92,7 +92,7 @@ const QuestionsView: React.FC<QuestionsViewProps> = ({ onOpenTeacher, onBack }) 
                 <p className="questions-view-eyebrow">UMT · Community Q&amp;A</p>
                 <h1 className="questions-view-title">
                     <Icon name="message-square" size={26} />
-                    <span>Questions &amp; Answers</span>
+                    <span>Questions &amp; answers</span>
                 </h1>
                 <p className="questions-view-lead">
                     Answer what fellow students are asking about their professors. Every answer is
@@ -114,7 +114,7 @@ const QuestionsView: React.FC<QuestionsViewProps> = ({ onOpenTeacher, onBack }) 
                 <EmptyState
                     icon="help"
                     title="No questions yet"
-                    message="Once students start asking questions about their teachers, they'll appear here for you to answer."
+                    message="Once students ask about a teacher, their questions appear here."
                 />
             ) : (
                 <div className="qa-list questions-list">

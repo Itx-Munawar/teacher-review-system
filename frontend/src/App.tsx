@@ -884,7 +884,7 @@ const App: React.FC = () => {
             return;
         }
         if (!reviewComment.trim()) {
-            setReviewError('Please write a review');
+            setReviewError('Please write at least 15 characters so your review is useful.');
             return;
         }
         if (reviewComment.trim().length < 15) {
@@ -904,23 +904,14 @@ const App: React.FC = () => {
             const pendingReview = Boolean(res.data?.pending);
             showToast(res.data?.message || 'Review submitted successfully!', pendingReview ? 'info' : 'success');
             haptic([12, 40, 12]);
-            // Confetti
-            if ((window as any).canvasConfetti) {
-                (window as any).canvasConfetti({
-                    particleCount: 100,
-                    spread: 70,
-                    origin: { y: 0.6 },
-                    colors: ['#c6a15b', '#9a742f', '#e8cf9a']
-                });
-            }
             setShowReviewForm(false);
             setReviewComment('');
             setReviewUserName('');
             setReviewCourses([]);
             setReviewError('');
             setReviewSuccess(pendingReview
-                ? `Your review for ${selectedTeacher.name} has been received and will appear once approved.`
-                : `Your review for ${selectedTeacher.name} has been submitted. Thank you!`);
+                ? `Thank you. Your review of ${selectedTeacher.name} is with a moderator and will appear once approved.`
+                : `Thank you. Your review of ${selectedTeacher.name} has been received.`);
 
             const response = await getTeacherDetail(selectedTeacher.id);
             setSelectedTeacher(mapTeacherDetail(response.data, selectedTeacher));
@@ -1103,13 +1094,6 @@ const App: React.FC = () => {
     }, [loadingMore]);
 
     // ========== BOTTOM NAV (mobile) ==========
-    const scrollListIntoView = useCallback(() => {
-        if (window.innerWidth <= 768) {
-            const sidebar = document.querySelector('.sidebar');
-            sidebar?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-    }, []);
-
     const handleTabHome = useCallback(() => {
         haptic(10);
         setShowMobileMenu(false);
@@ -1134,20 +1118,6 @@ const App: React.FC = () => {
         navigate('/questions');
         setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 80);
     }, [navigate]);
-
-    const handleTabSearch = useCallback(() => {
-        haptic(10);
-        setShowMobileMenu(false);
-        setSelectedTeacher(null);
-        setIsComparing(false);
-        setShowQnA(false);
-        setShowReviewForm(false);
-        navigate('/');
-        setTimeout(() => {
-            scrollListIntoView();
-            searchInputRef.current?.focus();
-        }, 140);
-    }, [navigate, scrollListIntoView]);
 
     const handleTabCompare = useCallback(() => {
         haptic(10);
@@ -1277,7 +1247,7 @@ const App: React.FC = () => {
         <div className="app">
             <a href="#main-content" className="skip-link">Skip to main content</a>
             <ToastHost toasts={toasts} onDismiss={dismissToast} />
-            {compareList.length === 0 && !isComparing && !showQnA && <InstallPrompt />}
+            {reviewSuccess && compareList.length === 0 && !isComparing && !showQnA && <InstallPrompt />}
             <PullToRefresh onRefresh={handlePullRefresh}>
                 <header className="header" role="banner">
                     <div className="header-top">
@@ -1307,7 +1277,7 @@ const App: React.FC = () => {
                             {showMobileMenu ? <Icon name="x" size={22} /> : <Icon name="menu" size={22} />}
                         </button>
                     </div>
-                    <p className="header-tagline">Read and write reviews about your professors anonymously</p>
+                    <p className="header-tagline">Reviews from UMT students, for UMT students.</p>
                     <div className={`header-actions${showMobileMenu ? ' header-actions-open' : ''}`}>
                         <button onClick={() => {
                             setShowAdminPanel(true);
@@ -1317,13 +1287,13 @@ const App: React.FC = () => {
                                 loadTeachers(1);
                             }
                         }} className="admin-login-btn">
-                            <Icon name="lock" size={16} /> Admin Login
+                            <Icon name="lock" size={16} /> Admin login
                         </button>
                         <button onClick={handleOpenQnA} className="admin-login-btn">
                             <Icon name="message-square" size={16} /> Q&amp;A
                         </button>
                         <button onClick={() => { setShowContactModal(true); setShowMobileMenu(false); }} className="admin-login-btn">
-                            <Icon name="mail" size={16} /> Contact Us
+                            <Icon name="mail" size={16} /> Contact us
                         </button>
                         <button onClick={() => { setShowAboutModal(true); setShowMobileMenu(false); }} className="admin-login-btn">
                             <Icon name="info" size={16} /> About
@@ -1406,7 +1376,7 @@ const App: React.FC = () => {
                                 {error} <button onClick={() => loadTeachers(1)} className="retry-btn">Retry</button>
                             </div>
                         ) : displayTeachers.length === 0 ? (
-                            <div className="no-results">No teachers found</div>
+                            <div className="no-results">No teachers match your search. Try a shorter name or a department.</div>
                         ) : (
                             <>
                                 {displayTeachers.map((teacher: Teacher, index: number) => (
@@ -1450,7 +1420,7 @@ const App: React.FC = () => {
                                 {!isSearching && hasMore && !loadingMore && (
                                     <div className="load-more-container">
                                         <button onClick={loadMore} className="load-more-btn">
-                                            Load More ({teachers.length} / {totalTeachersCount})
+                                            Show more teachers ({teachers.length} / {totalTeachersCount})
                                         </button>
                                     </div>
                                 )}
@@ -1506,12 +1476,13 @@ const App: React.FC = () => {
                                 </span>
                             </div>
                             <p className="welcome-eyebrow">University of Management and Technology · Lahore</p>
-                            <h2 className="gradient-text">Welcome to Teacher Reviews</h2>
-                            <p className="welcome-hint-desktop">Select a teacher from the left to read reviews or submit your own.</p>
-                            <p className="welcome-hint-mobile">Select a teacher from the list above to read reviews or submit your own.</p>
+                            <h2 className="welcome-title">Reviews from UMT students, for UMT students.</h2>
+                            <p className="welcome-hint-desktop">Find a teacher to read reviews, or add what you know about a class.</p>
+                            <p className="welcome-hint-mobile">Find a teacher above to read reviews, or add what you know about a class.</p>
+                            <p className="welcome-trust">Anonymous. Moderated. Free.</p>
                             {departments.length > 0 && (
                                 <div className="department-links">
-                                    <h3>Browse by Department</h3>
+                                    <h3>Browse by department</h3>
                                     <div className="department-links-list">
                                         {departments.map((d) => (
                                             <Link key={d.department} to={`/department/${encodeURIComponent(d.department)}`} className="department-link-chip">
@@ -1595,8 +1566,7 @@ const App: React.FC = () => {
             )}
             <BottomNav
                 items={[
-                    { key: 'home', label: 'Home', icon: 'home', active: !isComparing && !showQnA, onClick: handleTabHome },
-                    { key: 'search', label: 'Search', icon: 'search', active: isSearching && !!searchTerm && !showQnA, onClick: handleTabSearch },
+                    { key: 'home', label: 'Home', icon: 'home', active: !isComparing && !showQnA && !selectedTeacher, onClick: handleTabHome },
                     { key: 'qna', label: 'Q&A', icon: 'message-square', active: showQnA, onClick: handleOpenQnA },
                     { key: 'compare', label: 'Compare', icon: 'compare', active: isComparing, onClick: handleTabCompare },
                     { key: 'admin', label: 'Admin', icon: 'lock', onClick: handleTabAdmin },
