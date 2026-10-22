@@ -109,14 +109,14 @@ describe('Avatar — perceived speed', () => {
         expect(img()!.getAttribute('fetchpriority')).toBe('high');
     });
 
-    it('paints a coloured placeholder behind the photo while it downloads', () => {
-        // jsdom's CSS parser drops gradients, so check the serialised markup instead
+    it('paints a placeholder behind the photo while it downloads', () => {
         const { TextEncoder: NodeTextEncoder } = require('util');
         (globalThis as any).TextEncoder = (globalThis as any).TextEncoder || NodeTextEncoder;
         const { renderToStaticMarkup } = require('react-dom/server');
         const html = renderToStaticMarkup(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className="teacher-card-image" />);
         expect(html).toContain('<img');
-        expect(html).toContain('linear-gradient(135deg');
+        // Matches the flat cream used by the editorial theme's avatar fallback.
+        expect(html).toContain('background:#F7F1E6');
     });
 
     it('keeps list thumbnails small: a ~60px circle must not request more than 80px (1x) / 160px (2x)', () => {
