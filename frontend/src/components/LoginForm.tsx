@@ -25,6 +25,8 @@ const LoginForm = memo(({
                     type="text"
                     placeholder="Username"
                     aria-label="Username"
+                    autoComplete="username"
+                    maxLength={60}
                     value={adminUsername}
                     onChange={(e) => setAdminUsername(e.target.value)}
                     required
@@ -34,6 +36,8 @@ const LoginForm = memo(({
                     type="password"
                     placeholder="Password"
                     aria-label="Password"
+                    autoComplete="current-password"
+                    maxLength={200}
                     value={adminPassword}
                     onChange={(e) => setAdminPassword(e.target.value)}
                     required

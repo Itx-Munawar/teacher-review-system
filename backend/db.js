@@ -1,11 +1,44 @@
 require('dotenv').config();
+const fs = require('fs');
 const mysql = require('mysql2');
 
-// SSL configuration – required by cloud MySQL providers such as Aiven,
-// which enforce TLS (set DB_SSL=true). Aiven's certificates chain to a
-// private CA that isn't in the system store, so the server certificate is
-// accepted without local verification.
-const sslConfig = process.env.DB_SSL === 'true' ? { ssl: { rejectUnauthorized: false } } : {};
+// TLS. Cloud providers such as Aiven enforce TLS (DB_SSL=true) and chain to a
+// private CA that is not in the system trust store.
+//
+// rejectUnauthorized:false encrypts the connection but does not verify who is
+// on the other end, so an on-path attacker could read the DB credentials this
+// pool sends on every connection. Point DB_SSL_CA at the provider's CA - either
+// the inline PEM text or a path to the file - and verification switches itself
+// on. Without a CA there is nothing to verify against for a private-CA
+// provider, so the previous behaviour is kept, but it is called out in the logs
+// rather than being silent.
+const buildSslConfig = () => {
+    if (process.env.DB_SSL !== 'true') return {};
+
+    const rawCa = process.env.DB_SSL_CA;
+    let ca;
+    if (rawCa) {
+        ca = rawCa.includes('-----BEGIN CERTIFICATE-----')
+            ? rawCa
+            : fs.readFileSync(rawCa, 'utf8');
+    }
+
+    if (!ca) {
+        console.warn('⚠️ DB_SSL is on but DB_SSL_CA is not set - the server certificate is NOT verified. Add your provider CA to enable verification.');
+    } else {
+        console.log('✅ DB server certificate verification is enabled');
+    }
+
+    return {
+        ssl: {
+            ca,
+            rejectUnauthorized: Boolean(ca),
+            servername: process.env.DB_HOST
+        }
+    };
+};
+
+const sslConfig = buildSslConfig();
 
 const pool = mysql.createPool({
     host: process.env.DB_HOST,

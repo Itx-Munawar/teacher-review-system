@@ -9,13 +9,18 @@ const { body, validationResult } = require('express-validator');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const db = require('./db');
-const { csrfSetCookie, csrfValidate } = require('./csrf');
+// sameSiteFor is shared with the CSRF cookie so both cookies always agree.
+const { csrfSetCookie, csrfValidate, sameSiteFor } = require('./csrf');
 const { detectFlaggedText, moderationFlagFor, sweepExistingReviews, sweepExistingQa } = require('./contentFilter');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET;
-const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS) || 10;
+// Cost 12 is 4x the work of 10 and still only a couple of hundred ms, which is
+// what keeps a stolen hash expensive to crack. Clamped so a typo in the env
+// cannot silently weaken it, and existing cost-10 hashes still verify because
+// bcrypt stores the cost inside the hash itself.
+const BCRYPT_ROUNDS = Math.min(15, Math.max(10, parseInt(process.env.BCRYPT_ROUNDS, 10) || 12));
 
 // ========== ENV VALIDATION ==========
 const missingVars = [];
@@ -37,19 +42,28 @@ const parseCookies = (req) => {
     header.split(';').forEach((part) => {
         const idx = part.indexOf('=');
         if (idx === -1) return;
-        cookies[part.slice(0, idx).trim()] = decodeURIComponent(part.slice(idx + 1).trim());
+        const key = part.slice(0, idx).trim();
+        const raw = part.slice(idx + 1).trim();
+        // A malformed %XX escape must not throw: that would turn one bad
+        // cookie header into a 500 on every request.
+        try {
+            cookies[key] = decodeURIComponent(raw);
+        } catch (err) {
+            cookies[key] = raw;
+        }
     });
     return cookies;
 };
 
 const buildCookieOptions = (req) => {
-    // Derive from the actual request protocol (trust proxy is enabled),
-    // not from NODE_ENV, so cross-site HTTPS deployments get SameSite=None.
+    // Derive the protocol from the actual request (trust proxy is enabled),
+    // not from NODE_ENV, so HTTPS deployments always get a Secure cookie.
+    // SameSite itself comes from the shared helper in csrf.js.
     const secure = req.secure || req.headers['x-forwarded-proto'] === 'https';
     return {
         httpOnly: true,
         secure,
-        sameSite: secure ? 'none' : 'lax',
+        sameSite: sameSiteFor(req, secure),
         maxAge: 24 * 60 * 60 * 1000,
         path: '/'
     };
@@ -58,23 +72,54 @@ const buildCookieOptions = (req) => {
 // Security Middleware
 app.set('trust proxy', 1);
 app.use(helmet());
-const allowedOrigins = [
-    'https://teacher-review-system-zeta.vercel.app',
-    'http://localhost:3000'
-];
-app.use(cors({
-    origin: (origin, cb) => {
-        // Allow non-browser requests (curl, health checks) and known/monkeycode preview origins
-        if (!origin) return cb(null, true);
-        const allowed = allowedOrigins.includes(origin) || /^https:\/\/[\w-]+\.monkeycode-ai\.live$/.test(origin);
-        cb(null, allowed);
-    },
-    credentials: true
-}));
-app.use(express.json({ limit: '10mb' }));
+
+// Exact origins that may send the admin cookie. Configurable so a new
+// deployment does not need a code change; the defaults cover prod + dev.
+const allowedOrigins = new Set(
+    (process.env.CORS_ALLOWED_ORIGINS || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .concat([
+            'https://teacher-review-system-zeta.vercel.app',
+            'http://localhost:3000'
+        ])
+);
+
+// Ephemeral preview origins (monkeycode/deploy previews) may read PUBLIC data
+// only. They get CORS without Allow-Credentials, so a page on someone else's
+// preview host can never read an admin-authenticated response - previously
+// every *.monkeycode-ai.live subdomain had credentialed access to /api/admin.
+const previewOrigin = (origin) => /^https:\/\/[\w-]+\.(monkeycode-ai\.live|vercel\.app)$/.test(origin);
+
+const credentialedCors = cors({ origin: true, credentials: true });
+const publicCors = cors({ origin: true, credentials: false });
+
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    // No Origin header: curl/health checks/server-to-server. CORS does not
+    // apply, so we deliberately add no headers (and no Vary churn).
+    if (!origin || origin === 'null') return next();
+    if (allowedOrigins.has(origin)) return credentialedCors(req, res, next);
+    if (previewOrigin(origin)) return publicCors(req, res, next);
+    // Unlisted origin: no CORS headers -> browser blocks the response.
+    return next();
+});
+
+// Public payloads are tiny (a review is <=1000 chars). The old 10mb limit
+// turned every request into a cheap memory-exhaustion vector.
+app.use(express.json({ limit: '100kb' }));
 
 // CSRF: set cookie on every response so the frontend can read it
 app.use(csrfSetCookie);
+
+// Admin responses carry moderation data about real people. A shared cache or a
+// browser back-forward cache must never keep them.
+app.use('/api/admin', (req, res, next) => {
+    res.set('Cache-Control', 'no-store');
+    res.set('Pragma', 'no-cache');
+    next();
+});
 
 // Rate limiting
 const reviewLimiter = rateLimit({
@@ -115,6 +160,23 @@ const reportLimiter = rateLimit({
     message: { error: 'Too many reports. Please try again later.' }
 });
 
+// Admin account creation must not be reachable by a scanner. One attempt per
+// hour per IP is plenty for a legitimate first-run setup.
+const setupLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 5,
+    message: { error: 'Too many setup attempts. Try again later.' }
+});
+
+// Consuming a reset token is bounded separately from requesting one, so a
+// mistyped link does not burn the forgot-password budget while token guessing
+// still stays expensive.
+const resetUseLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 10,
+    message: { error: 'Too many reset attempts. Try again later.' }
+});
+
 // Email transporter
 const transporter = nodemailer.createTransport({
     service: 'gmail',
@@ -141,19 +203,59 @@ const sendEmail = async (to, subject, html) => {
 };
 
 // ========== HELPER FUNCTIONS ==========
+
+// JWTs are stateless, so a stolen token would otherwise stay valid until it
+// expires. admins.token_version is the revocation switch: it is baked into the
+// token as `tv` and compared on every admin request, so bumping the column
+// (password reset) invalidates every outstanding session at once. The check is
+// skipped if the column is not present yet, so a failed migration can never
+// lock the admin out of their own panel.
+let adminTokenVersionReady = false;
+
 const verifyAdmin = (req, res, next) => {
     const cookies = parseCookies(req);
     const headerToken = req.headers.authorization?.split(' ')[1];
     const token = headerToken || cookies.admin_token;
     if (!token) return res.status(401).json({ error: 'No token provided' });
+
+    let decoded;
     try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        req.admin = decoded;
-        next();
+        // Pinning the algorithm stops any "alg: none" / algorithm-confusion
+        // forgery, and rejects a token signed for another purpose.
+        decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     } catch (error) {
-        res.status(403).json({ error: 'Invalid token' });
+        return res.status(403).json({ error: 'Invalid token' });
     }
+
+    if (!adminTokenVersionReady) {
+        req.admin = decoded;
+        return next();
+    }
+
+    db.query('SELECT token_version FROM admins WHERE id = ?', [decoded.id])
+        .then(([rows]) => {
+            if (rows.length === 0 || rows[0].token_version !== (decoded.tv || 0)) {
+                return res.status(403).json({ error: 'Session revoked' });
+            }
+            req.admin = decoded;
+            next();
+        })
+        .catch((error) => {
+            // Fail closed: an unknown session state must not read as "admin".
+            console.error('Admin session check failed:', error.message);
+            res.status(500).json({ error: 'Session check failed' });
+        });
 };
+
+// Body fields arrive from the network, so never assume a type: an object or
+// array handed to bcrypt or a SQL parameter is both a bug and an attack
+// surface. The length caps also stop a large payload from becoming a bcrypt
+// cost amplifier.
+const isText = (value, maxLen) => typeof value === 'string' && value.length > 0 && value.length <= maxLen;
+
+// Constant work per login attempt: comparing against a fixed dummy hash keeps
+// "no such user" and "wrong password" indistinguishable by response timing.
+const DUMMY_HASH = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), BCRYPT_ROUNDS);
 
 const createAuditLog = async (adminId, action, details, ip = 'unknown') => {
     try {
@@ -459,6 +561,20 @@ const runSchemaBootstrap = async () => {
             reviewReportsReady = true;
         } catch (reportsErr) {
             console.error('⚠️ Could not ensure review_reports table:', reportsErr.message);
+        }
+
+        // Session revocation switch (see verifyAdmin). Existing admins start at
+        // 0, which matches tokens issued before this column existed, so nobody
+        // is logged out by the migration itself.
+        try {
+            const [tvCol] = await db.query("SHOW COLUMNS FROM admins LIKE 'token_version'");
+            if (tvCol.length === 0) {
+                await db.query('ALTER TABLE admins ADD COLUMN token_version INT UNSIGNED NOT NULL DEFAULT 0');
+                console.log('✅ Added token_version column to admins table');
+            }
+            adminTokenVersionReady = true;
+        } catch (tvErr) {
+            console.error('⚠️ Could not ensure admins.token_version column:', tvErr.message);
         }
         schemaBootstrapError = null;
         schemaBootstrapDone = true;
@@ -1022,11 +1138,17 @@ app.post('/api/reviews/:id/report', reportLimiter, [
 // ========== ADMIN API ENDPOINTS ==========
 
 app.post('/api/admin/login', loginLimiter, csrfValidate, async (req, res) => {
-    // ... (your existing admin login code) ...
     try {
-        const { username, password } = req.body;
+        const { username, password } = req.body || {};
+        if (!isText(username, 100) || !isText(password, 200)) {
+            return res.status(400).json({ error: 'Username and password are required' });
+        }
         const [admins] = await db.query('SELECT * FROM admins WHERE username = ?', [username]);
-        if (admins.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
+        if (admins.length === 0) {
+            // Burn the same time a real comparison would take before answering.
+            await bcrypt.compare(password, DUMMY_HASH);
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
         const admin = admins[0];
         if (admin.locked_until && new Date(admin.locked_until) > new Date()) {
             return res.status(401).json({ error: 'Account locked. Try again later.' });
@@ -1040,7 +1162,13 @@ app.post('/api/admin/login', loginLimiter, csrfValidate, async (req, res) => {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
         await db.query('UPDATE admins SET failed_attempts = 0, locked_until = NULL WHERE id = ?', [admin.id]);
-        const token = jwt.sign({ id: admin.id, username: admin.username }, JWT_SECRET, { expiresIn: '24h' });
+        // `tv` ties the token to the current revocation counter, so a password
+        // reset (which bumps it) throws off every session issued before it.
+        const token = jwt.sign(
+            { id: admin.id, username: admin.username, tv: admin.token_version || 0 },
+            JWT_SECRET,
+            { algorithm: 'HS256', expiresIn: '24h' }
+        );
         await createAuditLog(admin.id, 'LOGIN', 'Admin logged in', req.ip);
         res.cookie('admin_token', token, buildCookieOptions(req));
         res.json({ success: true, admin: { id: admin.id, username: admin.username } });
@@ -1062,10 +1190,11 @@ app.post('/api/admin/logout', csrfValidate, (req, res) => {
 });
 
 app.post('/api/admin/forgot-password', resetLimiter, csrfValidate, async (req, res) => {
-    // ... (your existing forgot password code) ...
     try {
-        const { email } = req.body;
-        if (!email) return res.status(400).json({ error: 'Email is required' });
+        const { email } = req.body || {};
+        if (!isText(email, 254) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return res.status(400).json({ error: 'A valid email is required' });
+        }
         const [admins] = await db.query('SELECT id, username FROM admins WHERE email = ?', [email]);
         if (admins.length === 0) return res.json({ success: true, message: 'If that email exists, we sent a reset link.' });
         const admin = admins[0];
@@ -1075,7 +1204,11 @@ app.post('/api/admin/forgot-password', resetLimiter, csrfValidate, async (req, r
         const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
         await db.query('UPDATE admins SET reset_token = ?, reset_token_expires = ? WHERE id = ?', [resetTokenHash, tokenExpiry, admin.id]);
         const frontendUrl = process.env.FRONTEND_URL;
-        const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
+        // The token goes in the URL *fragment*, not the query string: fragments
+        // are never forwarded to the page's own scripts by a proxy, never logged
+        // by the server and never leaked in a Referer header when the page then
+        // loads an asset from another origin.
+        const resetLink = `${frontendUrl}/reset-password#token=${resetToken}`;
         await sendEmail(email, 'Password Reset Request', `<p>Click <a href="${resetLink}">here</a> to reset your password. Link expires in 1 hour.</p>`);
         res.json({ success: true, message: 'Reset link sent to email.' });
     } catch (error) {
@@ -1084,18 +1217,33 @@ app.post('/api/admin/forgot-password', resetLimiter, csrfValidate, async (req, r
     }
 });
 
-app.post('/api/admin/reset-password', csrfValidate, async (req, res) => {
-    // ... (your existing reset password code) ...
+app.post('/api/admin/reset-password', resetUseLimiter, csrfValidate, async (req, res) => {
     try {
-        const { token, newPassword } = req.body;
-        if (!token || typeof token !== 'string' || !newPassword || typeof newPassword !== 'string' || newPassword.length < 10) {
+        const { token, newPassword } = req.body || {};
+        if (!isText(token, 128) || !isText(newPassword, 200)) {
             return res.status(400).json({ error: 'Token and new password (min 10 chars) required' });
+        }
+        if (newPassword.length < 10) {
+            return res.status(400).json({ error: 'Password must be at least 10 characters' });
         }
         const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
         const [admins] = await db.query('SELECT id FROM admins WHERE reset_token = ? AND reset_token_expires > NOW()', [tokenHash]);
         if (admins.length === 0) return res.status(400).json({ error: 'Invalid or expired token' });
         const hashedPassword = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
-        await db.query('UPDATE admins SET password = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?', [hashedPassword, admins[0].id]);
+        // One-time token, cleared lockout state, and bump token_version so every
+        // JWT issued before this reset stops working - that is how a stolen
+        // session dies once the password is changed.
+        const revoke = adminTokenVersionReady
+            ? ', token_version = token_version + 1'
+            : '';
+        await db.query(
+            `UPDATE admins
+             SET password = ?, reset_token = NULL, reset_token_expires = NULL,
+                 failed_attempts = 0, locked_until = NULL${revoke}
+             WHERE id = ?`,
+            [hashedPassword, admins[0].id]
+        );
+        await createAuditLog(admins[0].id, 'PASSWORD_RESET', 'Password reset via emailed token', req.ip);
         res.json({ success: true, message: 'Password reset successfully. You can now login.' });
     } catch (error) {
         console.error('Reset password error:', error);
@@ -1103,15 +1251,39 @@ app.post('/api/admin/reset-password', csrfValidate, async (req, res) => {
     }
 });
 
-app.post('/api/admin/setup', csrfValidate, async (req, res) => {
-    // Require ADMIN_SETUP_KEY env var + x-setup-secret header (constant-time comparison)
-    const setupKey = process.env.ADMIN_SETUP_KEY;
+// Quietly answer "is this caller already an admin?" without producing a
+// response, so a route can require it as a second factor.
+const hasAdminSession = async (req) => {
+    const cookies = parseCookies(req);
+    const headerToken = req.headers.authorization?.split(' ')[1];
+    const token = headerToken || cookies.admin_token;
+    if (!token) return false;
+    let decoded;
+    try {
+        decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    } catch (error) {
+        return false;
+    }
+    if (!adminTokenVersionReady) return true;
+    try {
+        const [rows] = await db.query('SELECT token_version FROM admins WHERE id = ?', [decoded.id]);
+        return rows.length > 0 && rows[0].token_version === (decoded.tv || 0);
+    } catch (error) {
+        return false;
+    }
+};
+
+app.post('/api/admin/setup', setupLimiter, csrfValidate, async (req, res) => {
+    // Accept either env name: .env.example documented ADMIN_SETUP_SECRET while
+    // the code read ADMIN_SETUP_KEY, and a deployment that set the documented
+    // one silently got a 404.
+    const setupKey = process.env.ADMIN_SETUP_KEY || process.env.ADMIN_SETUP_SECRET;
     const providedHeader = req.headers['x-setup-secret'];
     if (!setupKey) {
         // Return 404 so the endpoint doesn't even register as existing when the key is unset
         return res.status(404).json({ error: 'Not found' });
     }
-    if (!providedHeader || typeof providedHeader !== 'string') {
+    if (!isText(providedHeader, 512)) {
         return res.status(401).json({ error: 'Setup token required' });
     }
     const keyBuffer = Buffer.from(setupKey, 'utf8');
@@ -1120,14 +1292,41 @@ app.post('/api/admin/setup', csrfValidate, async (req, res) => {
         return res.status(401).json({ error: 'Invalid setup token' });
     }
     try {
-        const { username, password, email } = req.body;
-        if (!username || !password || !email) return res.status(400).json({ error: 'Username, password, and email required' });
+        const { username, password, email } = req.body || {};
+        if (!isText(username, 60) || !isText(password, 200) || !isText(email, 254)) {
+            return res.status(400).json({ error: 'Username, password, and email required' });
+        }
+        if (password.length < 10) {
+            return res.status(400).json({ error: 'Password must be at least 10 characters' });
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return res.status(400).json({ error: 'A valid email is required' });
+        }
+
+        // This route used to be a permanent master key: with the right header it
+        // could overwrite any admin's password, forever, and log the real owner
+        // out. It now only bootstraps the first account. Changing an existing
+        // account needs an already-authenticated admin session, or the operator
+        // explicitly flipping ADMIN_SETUP_ALLOW_OVERWRITE=true for recovery.
+        const [existing] = await db.query('SELECT 1 FROM admins LIMIT 1');
+        if (existing.length > 0) {
+            const recoveryMode = process.env.ADMIN_SETUP_ALLOW_OVERWRITE === 'true';
+            if (!recoveryMode && !(await hasAdminSession(req))) {
+                return res.status(403).json({
+                    error: 'Admin accounts already exist. Log in first, or temporarily set ADMIN_SETUP_ALLOW_OVERWRITE=true to recover access.'
+                });
+            }
+        }
+
         const hashedPassword = await bcrypt.hash(password, BCRYPT_ROUNDS);
+        const bump = adminTokenVersionReady ? ', token_version = token_version + 1' : '';
         await db.query(
-            'INSERT INTO admins (username, password, email) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE password = ?, email = ?',
+            `INSERT INTO admins (username, password, email) VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE password = ?, email = ?${bump}`,
             [username, hashedPassword, email, hashedPassword, email]
         );
-        res.json({ success: true, message: 'Admin created. Use new credentials to login.' });
+        await createAuditLog(null, 'ADMIN_SETUP', `Setup wrote admin account: ${username}`, req.ip);
+        res.json({ success: true, message: 'Admin saved. Previous sessions were invalidated; use the new credentials to login.' });
     } catch (error) {
         console.error('Setup error:', error);
         res.status(500).json({ error: 'Server error' });
@@ -1879,6 +2078,29 @@ Sitemap: ${baseUrl}/sitemap.xml
 // Health check
 app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// Unknown route: answer JSON like every other API response. Express' default
+// page is HTML and echoes the requested path back into it.
+app.use((req, res) => {
+    res.status(404).json({ error: 'Not found' });
+});
+
+// Anything that escapes a route's own try/catch. Logged in full for the
+// operator, answered generically to the client: stack traces and driver
+// messages reveal internals and must never cross the wire.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+    if (res.headersSent) return next(err);
+    console.error(`Unhandled error on ${req.method} ${req.path}:`, err);
+    if (err.type === 'entity.parse.failed') {
+        return res.status(400).json({ error: 'Request body is not valid JSON' });
+    }
+    if (err.type === 'entity.too.large' || err.status === 413) {
+        return res.status(413).json({ error: 'Request body is too large' });
+    }
+    const status = Number.isInteger(err.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
+    res.status(status).json({ error: 'Server error' });
 });
 
 // Start server
