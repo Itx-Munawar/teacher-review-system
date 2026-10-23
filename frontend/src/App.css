@@ -10518,6 +10518,10 @@ body {
 
 .review-comment {
     max-width: 34rem;
+    margin-top: 0.75rem;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
     color: var(--ink-soft);
     font-size: 1rem;
     line-height: 1.7;
