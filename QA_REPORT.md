@@ -191,24 +191,27 @@ Roadmap: `ROADMAP.md`.
 
 ### Admin two-factor
 
-- Optional TOTP (RFC 6238) for admin accounts, implemented with native Node
-  `crypto` and no new dependencies: `generateTotpSecret`, `totpVerify`,
-  and `totpProvisioningUri` in `backend/server.js`.
-- `admins.totp_secret` (VARCHAR(64)) and `admins.totp_enabled` (TINYINT(1))
-  are added by the schema bootstrap so a cold deploy works without manual SQL.
-- Login is two-step when 2FA is enabled: the password is still checked first
-  (same timing profile), and only after that does the endpoint require a 6-digit
-  code. A wrong code logs a `2FA_FAILED` audit row.
-- New endpoints:
-  - `POST /api/admin/2fa/setup` — generates a fresh secret and returns it along
-    with an `otpauth://` URI.
-  - `POST /api/admin/2fa/enable` — confirms the enrollment with one live code;
-    bumps `totp_enabled` atomically so the account is unusable from login
-    immediately after this succeeds.
-  - `POST /api/admin/2fa/disable` — clears both columns; the audit row records
-    who disabled it and when.
-  - `GET /api/admin/me` now returns `totp_enabled`.
-- Frontend: the login form shows a 6-digit code input when `requires_totp`
-  is returned; a **Security** tab in the admin panel handles provisioning
-  (QR + manual secret), confirmation, and disabling.
+- `POST /api/admin/login` now accepts an optional `totp_code`. When the account
+  has a TOTP secret, the endpoint returns `{ requires_totp: true }` instead of
+  a session cookie, and the frontend asks the user for the code in the login
+  form before proceeding.
+- New endpoints: `POST /api/admin/2fa/setup` (generates a fresh secret and
+  returns a provisioning URI), `POST /api/admin/2fa/enable` (confirms the
+  enrollment by verifying a live code), `POST /api/admin/2fa/disable` (turns
+  2FA off; logged in audit). The schema bootstrap adds the `totp_secret` and
+  `totp_enabled` columns if they are missing.
+- `GET /api/admin/me` now includes `totp_enabled` so the security tab can
+  update immediately after a change.
+- Frontend: login form shows the TOTP field when `requires_totp`
+  is returned; a **Security** tab in the admin panel walks through QR code scanning, manual secret entry,
+  confirmation, and (optionally) disabling 2FA.
+- A bare `2FA_FAILED` action is logged when a wrong code is submitted.
+
+## Phase 4 — Product and architecture (planned)
+
+| # | Step | Status |
+| --- | --- | --- |
+| 22 | Course pages (`/course/:name`) | Planned |
+| 23 | Prerendered social/OG tags for teacher and department pages | Planned |
+| 24 | CRA → Vite migration | Planned |
 
