@@ -107,6 +107,23 @@ export interface AdminStats {
     last_sweep?: { scanned: number; queued: number; already_queued?: number; at: string } | null;
 }
 
+/** A row from the admin audit trail. ip_address is a keyed hash, not an IP. */
+export interface AdminAuditLog {
+    id: number;
+    action: string;
+    details: string | null;
+    ip_address: string | null;
+    created_at: string;
+    admin_username: string | null;
+}
+
+/** A teacher search that matched no one in the directory. */
+export interface SearchGap {
+    query: string;
+    times: number;
+    last_seen: string;
+}
+
 export interface Toast {
     id: number;
     message: string;

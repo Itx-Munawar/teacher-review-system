@@ -138,6 +138,35 @@ app.use(express.json({ limit: '100kb' }));
 // CSRF: set cookie on every response so the frontend can read it
 app.use(csrfSetCookie);
 
+// ========== STRUCTURED LOGGING ==========
+// One JSON object per line, so Render's log drains can be parsed and searched
+// (Render's console "search" is text-only, but a downloaded log or a drain to
+// a log service can filter on msg/level/status). Plain console.* stays for
+// errors because stack traces read better multiline.
+const logJson = (level, msg, fields = {}) => {
+    const line = JSON.stringify({ t: new Date().toISOString(), level, msg, ...fields });
+    if (level === 'error') console.error(line);
+    else console.log(line);
+};
+
+// Skip the endpoints a monitor hits every few minutes; logging them would be
+// the only thing in the log on a quiet day.
+const UNLOGGED_PATHS = new Set(['/api/health', '/api/ready']);
+app.use((req, res, next) => {
+    if (UNLOGGED_PATHS.has(req.path)) return next();
+    const start = process.hrtime.bigint();
+    res.on('finish', () => {
+        // res.getHeader is safe here: 'finish' fires after the response is sent.
+        logJson('info', 'http_request', {
+            method: req.method,
+            path: req.path,
+            status: res.statusCode,
+            ms: Number((process.hrtime.bigint() - start) / 1000000n)
+        });
+    });
+    next();
+});
+
 // Admin responses carry moderation data about real people. A shared cache or a
 // browser back-forward cache must never keep them.
 app.use('/api/admin', (req, res, next) => {
@@ -370,6 +399,107 @@ const createAuditLog = async (adminId, action, details, ip = 'unknown') => {
         );
     } catch (error) {
         console.error('Audit log error:', error);
+    }
+};
+
+// ========== ZERO-RESULT SEARCH LOG ==========
+// Students searching for a teacher who is not in the directory are telling us
+// who to add next. Only zero-result queries are stored (they carry content
+// information); successful searches are never logged, so the table is not a
+// record of what anyone looked up. Retention below keeps it small.
+const SEARCH_GAP_RETENTION_DAYS = 30;
+let searchGapsReady = false;
+
+const pruneSearchGaps = async () => {
+    try {
+        const cutoff = new Date(Date.now() - SEARCH_GAP_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+        const [result] = await db.query('DELETE FROM search_gaps WHERE created_at < ?', [cutoff]);
+        if (result.affectedRows > 0) {
+            logJson('info', 'search_gaps_pruned', { deleted: result.affectedRows });
+        }
+    } catch (error) {
+        console.error('Search gap prune error:', error.message);
+    }
+};
+
+const recordSearchGap = (rawTerm) => {
+    const term = String(rawTerm || '').trim().slice(0, 200);
+    if (!term) return;
+    db.query('INSERT INTO search_gaps (query) VALUES (?)', [term])
+        .then(() => {
+            logJson('info', 'search_zero_results', { query: term });
+        })
+        .catch((error) => {
+            // Table may not exist yet on a cold deploy; never fail a search.
+            console.error('Search gap log error:', error.message);
+        });
+};
+
+// ========== DAILY MODERATION DIGEST ==========
+// The free-tier backend sleeps, so pending items sit unseen until someone
+// opens the panel. One email per day (only when something is actually waiting)
+// keeps moderation from depending on remembering to look.
+const DIGEST_RECIPIENT = (process.env.MODERATION_DIGEST_EMAIL || process.env.EMAIL_USER || '').trim();
+let digestInFlight = false;
+
+const sendModerationDigest = async (force = false) => {
+    if (!DIGEST_RECIPIENT || digestInFlight) return;
+    digestInFlight = true;
+    try {
+        // Mark today's digest before sending so a restart mid-day cannot
+        // double-send; a failed send is retried on the next hourly tick only
+        // if the marker insert itself failed.
+        const today = new Date().toISOString().slice(0, 10);
+        const [marker] = await db.query(
+            "SELECT id FROM audit_logs WHERE action = 'DIGEST_SENT' AND details = ? LIMIT 1",
+            [today]
+        );
+        if (marker.length > 0 && !force) return;
+
+        const [pendingReviews] = await db.query('SELECT COUNT(*) as count FROM reviews WHERE is_approved = 0');
+        const [pendingQuestions] = await db.query('SELECT COUNT(*) as count FROM questions WHERE is_approved = 0');
+        const [pendingAnswers] = await db.query('SELECT COUNT(*) as count FROM question_answers WHERE is_approved = 0');
+        const [pendingCourses] = await db.query("SELECT COUNT(*) as count FROM custom_courses WHERE status = 'pending'");
+        let openReports = 0;
+        try {
+            const [rep] = await db.query("SELECT COUNT(*) as count FROM review_reports WHERE status = 'open'");
+            openReports = rep[0].count || 0;
+        } catch (_) { /* table may not exist yet */ }
+
+        const total = pendingReviews[0].count + pendingQuestions[0].count + pendingAnswers[0].count + openReports;
+        if (total === 0) {
+            await db.query(
+                "INSERT INTO audit_logs (action, details, ip_address) VALUES ('DIGEST_SENT', ?, 'system')",
+                [today]
+            );
+            return;
+        }
+
+        const rows = [
+            ['Reviews awaiting approval', pendingReviews[0].count],
+            ['Questions awaiting approval', pendingQuestions[0].count],
+            ['Answers awaiting approval', pendingAnswers[0].count],
+            ['Course names awaiting review', pendingCourses[0].count],
+            ['Open reader reports', openReports]
+        ].filter(([, n]) => n > 0);
+
+        const html = `
+            <h2 style="margin:0 0 12px">Moderation digest — ${new Date().toDateString()}</h2>
+            <table cellpadding="6" style="border-collapse:collapse">
+                ${rows.map(([label, n]) => `<tr><td style="border-bottom:1px solid #eee">${label}</td><td style="border-bottom:1px solid #eee;text-align:right"><strong>${n}</strong></td></tr>`).join('')}
+            </table>
+            <p style="color:#64748b">Open the admin panel to moderate: ${PUBLIC_SITE_URL}/admin</p>
+        `;
+        await sendEmail(DIGEST_RECIPIENT, `Moderation digest: ${total} item${total === 1 ? '' : 's'} waiting`, html);
+        await db.query(
+            "INSERT INTO audit_logs (action, details, ip_address) VALUES ('DIGEST_SENT', ?, 'system')",
+            [today]
+        );
+        logJson('info', 'digest_sent', { total, to: 'operator' });
+    } catch (error) {
+        console.error('Moderation digest error:', error.message);
+    } finally {
+        digestInFlight = false;
     }
 };
 
@@ -711,6 +841,23 @@ const runSchemaBootstrap = async () => {
         } catch (tvErr) {
             console.error('⚠️ Could not ensure admins.token_version column:', tvErr.message);
         }
+        // Zero-result search terms (content-gap signals). Pruned after 30 days.
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS search_gaps (
+                    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                    query VARCHAR(200) NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (id),
+                    KEY idx_search_gaps_created (created_at),
+                    KEY idx_search_gaps_query (query)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+            searchGapsReady = true;
+        } catch (gapsErr) {
+            console.error('⚠️ Could not ensure search_gaps table:', gapsErr.message);
+        }
+
         // Composite indexes for the two hottest list queries: department pages
         // (WHERE department = ? ORDER BY name) and the public Q&A board
         // (WHERE is_approved = 1 ORDER BY created_at DESC).
@@ -722,6 +869,7 @@ const runSchemaBootstrap = async () => {
         console.log('✅ Schema bootstrap complete (questions, question_answers, custom_courses, review_reports, cleanup)');
         // Keep the audit trail bounded (and the hashed IPs with it).
         pruneAuditLogs();
+        pruneSearchGaps();
         // Schema is up: retroactively filter any pre-existing reviews.
         runReviewFilterSweep();
         runQaFilterSweep();
@@ -745,6 +893,11 @@ ensureTables();
 // Render instances can stay up for weeks, so prune on a timer as well as on
 // boot. unref() keeps the timer from holding the process open.
 setInterval(pruneAuditLogs, 24 * 60 * 60 * 1000).unref();
+setInterval(pruneSearchGaps, 24 * 60 * 60 * 1000).unref();
+// Hourly check; the marker row makes it a at-most-once-per-day digest.
+setInterval(() => sendModerationDigest(), 60 * 60 * 1000).unref();
+// Give the schema bootstrap a moment on cold start, then try once today.
+setTimeout(() => sendModerationDigest(), 90 * 1000).unref();
 
 // ========== PUBLIC API ENDPOINTS ==========
 
@@ -882,6 +1035,11 @@ app.get('/api/teachers/search', searchLimiter, async (req, res) => {
             term, `${like}%`, `%${like}%`, term, term, `%${like}%`,
             ...(limit > 0 ? [limit] : [])
         ]);
+
+        // Zero-result searches are content-gap signals (see search_gaps).
+        if (teachers.length === 0 && searchGapsReady) {
+            recordSearchGap(term);
+        }
 
         res.set('Cache-Control', 'public, max-age=120');
         res.json(teachers);
@@ -2368,6 +2526,74 @@ app.get('/api/admin/stats', verifyAdmin, async (req, res) => {
         });
     } catch (error) {
         console.error('Error fetching stats:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// GET /api/admin/audit-logs - newest moderation actions, paginated.
+// Optional ?action= filters to one action type (the tab's filter dropdown
+// offers the handful that actually recur). IPs are stored hashed (see
+// hashIpForAudit) and are shown as-is: they correlate sessions, they do not
+// identify a person.
+app.get('/api/admin/audit-logs', verifyAdmin, async (req, res) => {
+    try {
+        const page = clampInt(req.query.page, 1, 1, 100000);
+        const limit = clampInt(req.query.limit, 25, 1, 100);
+        const offset = (page - 1) * limit;
+        const action = typeof req.query.action === 'string' ? req.query.action.slice(0, 50) : '';
+
+        const whereClause = action ? 'WHERE a.action = ?' : '';
+        const params = action ? [action] : [];
+
+        const [countRows] = await db.query(
+            `SELECT COUNT(*) as total FROM audit_logs a ${whereClause}`,
+            params
+        );
+        const total = countRows[0].total;
+
+        const [rows] = await db.query(`
+            SELECT a.id, a.action, a.details, a.ip_address, a.created_at,
+                   ad.username as admin_username
+            FROM audit_logs a
+            LEFT JOIN admins ad ON ad.id = a.admin_id
+            ${whereClause}
+            ORDER BY a.id DESC
+            LIMIT ? OFFSET ?
+        `, [...params, limit, offset]);
+
+        res.json({
+            logs: rows,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages: Math.max(1, Math.ceil(total / limit))
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching audit logs:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// GET /api/admin/search-gaps - the queries students typed that matched nobody
+// in the directory. Ordered by how often the term recurred, newest evidence
+// first; the point is deciding who to add next, not auditing individuals.
+app.get('/api/admin/search-gaps', verifyAdmin, async (req, res) => {
+    try {
+        if (!searchGapsReady) {
+            return res.json({ gaps: [] });
+        }
+        const [rows] = await db.query(`
+            SELECT query, COUNT(*) as times, MAX(created_at) as last_seen
+            FROM search_gaps
+            GROUP BY query
+            ORDER BY times DESC, last_seen DESC
+            LIMIT 50
+        `);
+        res.json({ gaps: rows });
+    } catch (error) {
+        console.error('Error fetching search gaps:', error);
         res.status(500).json({ error: 'Database error' });
     }
 });

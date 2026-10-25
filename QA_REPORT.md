@@ -160,3 +160,29 @@ Roadmap: `ROADMAP.md`.
 - `.env.example` blanks `ADMIN_SETUP_KEY` by default and documents the JWT
   length requirement.
 
+## Phase 2 follow-up (2026-10-25, branch `review/2026-10-phase1`)
+
+Roadmap: `ROADMAP.md`.
+
+### Observability
+
+- Every non-health request is logged as one JSON line
+  (`{"t","level","msg","method","path","status","ms"}`) so Render logs can be
+  parsed and filtered; `/api/health` and `/api/ready` are excluded on purpose.
+- Zero-result teacher searches are written to a new `search_gaps` table
+  (created by the schema bootstrap) and surfaced in the admin panel as a
+  "Content Gaps" list — the signal for which faculty members to add next.
+  Only zero-result queries are stored; successful searches are never logged.
+  Rows are pruned after 30 days.
+
+### Admin
+
+- New **Audit & Gaps** tab: paginated `GET /api/admin/audit-logs` (with an
+  action filter) plus `GET /api/admin/search-gaps`. Audit IPs stay the keyed
+  hashes described above.
+- Daily moderation digest: an hourly check (at most one email per day, tracked
+  in `audit_logs`) emails the pending counts for reviews, questions, answers,
+  courses and open reader reports — only when something is waiting. Recipient
+  is `MODERATION_DIGEST_EMAIL`, defaulting to `EMAIL_USER`.
+
+

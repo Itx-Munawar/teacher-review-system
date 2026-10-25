@@ -21,14 +21,14 @@ Status key: **Done** · **In progress** · **Planned** · **Needs input** (accou
 | 13 | CI workflow + Dependabot | Done |
 | 14 | Backup/restore runbook in README | Done |
 
-## Phase 2 — Admin and observability
+## Phase 2 — Admin and observability (done)
 
 | # | Step | Status |
 | --- | --- | --- |
-| 15 | Audit-log tab in the admin panel | Planned |
-| 16 | Daily pending-moderation digest email | Planned |
-| 17 | Zero-result search logging | Planned |
-| 18 | Structured request logging | Planned |
+| 15 | Audit-log tab in the admin panel | Done |
+| 16 | Daily pending-moderation digest email | Done |
+| 17 | Zero-result search logging | Done |
+| 18 | Structured request logging | Done |
 
 ## Phase 3 — Security
 

@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useMemo, memo } from 'react';
+import React, { useState, useEffect, useMemo, memo, useCallback } from 'react';
 import Icon from './Icon';
-import { getTeachers } from '../services/api';
+import { getTeachers, getAdminAuditLogs, getSearchGaps } from '../services/api';
 import { extractCourses } from '../utils/courses';
 import Avatar from './Avatar';
-import type { Teacher, AdminReview, AdminQuestion, CustomCourse, AdminTeacherDetail, AdminReport } from '../types';
+import type { Teacher, AdminReview, AdminQuestion, CustomCourse, AdminTeacherDetail, AdminReport, AdminAuditLog, SearchGap } from '../types';
 
-type AdminTab = 'teachers' | 'reviews' | 'qa' | 'courses' | 'reports';
+type AdminTab = 'teachers' | 'reviews' | 'qa' | 'courses' | 'reports' | 'audit';
 
 type TeacherSortKey = 'name' | 'department' | 'reviews' | 'newest';
 
@@ -255,6 +255,65 @@ const AdminPanel = memo(({
     const [detailTeacherId, setDetailTeacherId] = useState<number | null>(null);
     const [teacherDetail, setTeacherDetail] = useState<AdminTeacherDetail | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
+
+    // Audit tab state (fetched on demand, not on mount — the list can be large
+    // and most sessions never open it).
+    const [auditLogs, setAuditLogs] = useState<AdminAuditLog[]>([]);
+    const [auditAction, setAuditAction] = useState('');
+    const [auditActions, setAuditActions] = useState<string[]>([]);
+    const [auditLoading, setAuditLoading] = useState(false);
+    const [auditPage, setAuditPage] = useState(1);
+    const [auditTotalPages, setAuditTotalPages] = useState(1);
+    const [auditLoadingMore, setAuditLoadingMore] = useState(false);
+    const [searchGaps, setSearchGaps] = useState<SearchGap[]>([]);
+    const [gapsLoading, setGapsLoading] = useState(false);
+
+    const loadAuditPage = useCallback(async (page: number, action: string, append: boolean) => {
+        if (append) setAuditLoadingMore(true);
+        else setAuditLoading(true);
+        try {
+            const res = await getAdminAuditLogs(page, 25, action);
+            const rows: AdminAuditLog[] = res.data?.logs || [];
+            setAuditLogs((prev) => (append ? [...prev, ...rows] : rows));
+            setAuditPage(page);
+            setAuditTotalPages(res.data?.pagination?.totalPages || 1);
+            const seen = new Set<string>();
+            rows.forEach((r) => seen.add(r.action));
+            if (seen.size > 0) {
+                setAuditActions((prev) => Array.from(new Set([...prev, ...Array.from(seen)]))
+                    .sort((a, b) => a.localeCompare(b)));
+            }
+        } catch (err) {
+            console.error('Failed to load audit logs:', err);
+        } finally {
+            setAuditLoading(false);
+            setAuditLoadingMore(false);
+        }
+    }, []);
+
+    const loadSearchGaps = useCallback(async () => {
+        setGapsLoading(true);
+        try {
+            const res = await getSearchGaps();
+            setSearchGaps(res.data?.gaps || []);
+        } catch (err) {
+            console.error('Failed to load search gaps:', err);
+        } finally {
+            setGapsLoading(false);
+        }
+    }, []);
+
+    // Audit tab loads lazily: the list can be long and most sessions never
+    // open it. Re-fetch page 1 whenever the action filter changes.
+    const [auditLoadedFor, setAuditLoadedFor] = useState<string | null>(null);
+    useEffect(() => {
+        if (activeTab !== 'audit') return;
+        if (auditLoadedFor !== auditAction) {
+            loadAuditPage(1, auditAction, false)
+                .then(() => setAuditLoadedFor(auditAction));
+        }
+        loadSearchGaps();
+    }, [activeTab, auditAction, auditLoadedFor, loadAuditPage, loadSearchGaps]);
     // Edit handlers
     const startEdit = (teacher: Teacher) => {
         setEditingTeacherId(teacher.id);
@@ -505,6 +564,12 @@ const AdminPanel = memo(({
                     onClick={() => setActiveTab('reports')}
                 >
                     <Icon name="flag" size={15} /> Reports{openReportsCount > 0 ? ` (${openReportsCount})` : ''}
+                </button>
+                <button
+                    className={`admin-tab ${activeTab === 'audit' ? 'admin-tab-active' : ''}`}
+                    onClick={() => setActiveTab('audit')}
+                >
+                    <Icon name="file-text" size={15} /> Audit & Gaps
                 </button>
             </div>
 
@@ -1106,6 +1171,97 @@ const AdminPanel = memo(({
                 {adminReportsPage < adminReportsTotalPages && (
                     <button onClick={onLoadMoreReports} className="add-teacher-btn" disabled={adminLoadingMoreReports} style={{ marginTop: '12px' }}>
                         {adminLoadingMoreReports ? 'Loading…' : 'Load more reports'}
+                    </button>
+                )}
+            </div>
+            )}
+
+            {activeTab === 'audit' && (
+            <div className="admin-section">
+                <h3>Content Gaps (Missing Teachers)</h3>
+                <p style={{ color: '#64748b', fontSize: '0.85rem', margin: '0 0 12px' }}>
+                    Queries typed by students that matched nobody in the directory. Use this to decide which faculty members to add next.
+                </p>
+                {gapsLoading && searchGaps.length === 0 ? (
+                    <p style={{ padding: '12px', color: '#999' }}>Loading content gaps…</p>
+                ) : searchGaps.length === 0 ? (
+                    <p style={{ padding: '12px', color: '#999' }}>No unmatched searches recorded yet.</p>
+                ) : (
+                    <div className="admin-list" style={{ marginBottom: '24px' }}>
+                        {searchGaps.map((gap, idx) => (
+                            <div key={`${gap.query}-${idx}`} className="admin-item" style={{ padding: '8px 12px' }}>
+                                <div className="review-info">
+                                    <strong>&quot;{gap.query}&quot;</strong>
+                                    <small style={{ marginLeft: '12px', color: '#64748b' }}>
+                                        Searched {gap.times} time{gap.times === 1 ? '' : 's'} · last seen {new Date(gap.last_seen).toLocaleDateString()}
+                                    </small>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                <h3 style={{ marginTop: '24px' }}>Admin Audit Log</h3>
+                <p style={{ color: '#64748b', fontSize: '0.85rem', margin: '0 0 12px' }}>
+                    Record of admin moderation and configuration actions. IP addresses are stored as keyed hashes.
+                </p>
+                {auditActions.length > 0 && (
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '0.85rem', color: '#475569' }}>Filter action:</span>
+                        <select
+                            className="filter-select"
+                            value={auditAction}
+                            onChange={(e) => setAuditAction(e.target.value)}
+                            style={{ padding: '4px 8px', fontSize: '0.85rem' }}
+                        >
+                            <option value="">All actions</option>
+                            {auditActions.map((act) => (
+                                <option key={act} value={act}>{act}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+                {auditLoading && auditLogs.length === 0 ? (
+                    <p style={{ padding: '20px', textAlign: 'center', color: '#999' }}>Loading audit log…</p>
+                ) : auditLogs.length === 0 ? (
+                    <p style={{ padding: '20px', textAlign: 'center', color: '#999' }}>No audit log rows found.</p>
+                ) : (
+                    <div className="admin-list">
+                        {auditLogs.map((log) => (
+                            <div key={log.id} className="admin-item" style={{ alignItems: 'flex-start', padding: '10px 12px' }}>
+                                <div className="review-info">
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                        <span className="admin-pending-badge" style={{ background: '#e2e8f0', color: '#334155' }}>
+                                            {log.action}
+                                        </span>
+                                        <strong>{log.admin_username || 'System / Setup'}</strong>
+                                        <small style={{ color: '#64748b' }}>
+                                            {new Date(log.created_at).toLocaleString()}
+                                        </small>
+                                    </div>
+                                    {log.details && (
+                                        <p style={{ margin: '6px 0 0', color: '#334155', fontSize: '0.9rem' }}>
+                                            {log.details}
+                                        </p>
+                                    )}
+                                    {log.ip_address && (
+                                        <small style={{ color: '#94a3b8', fontSize: '0.75rem', fontFamily: 'monospace' }}>
+                                            IP: {log.ip_address}
+                                        </small>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+                {auditPage < auditTotalPages && (
+                    <button
+                        onClick={() => loadAuditPage(auditPage + 1, auditAction, true)}
+                        className="add-teacher-btn"
+                        disabled={auditLoadingMore}
+                        style={{ marginTop: '12px' }}
+                    >
+                        {auditLoadingMore ? 'Loading…' : 'Load more audit logs'}
                     </button>
                 )}
             </div>

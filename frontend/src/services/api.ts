@@ -255,6 +255,16 @@ export const getAdminStats = () => {
     return api.get('/admin/stats');
 };
 
+/** Paginated admin audit trail; pass an action name to filter. */
+export const getAdminAuditLogs = (page: number = 1, limit: number = 25, action: string = '') => {
+    return api.get(`/admin/audit-logs?page=${page}&limit=${limit}${action ? `&action=${encodeURIComponent(action)}` : ''}`);
+};
+
+/** Teacher search terms that returned zero results (content-gap signals). */
+export const getSearchGaps = () => {
+    return api.get('/admin/search-gaps');
+};
+
 /**
  * Clear teacher photo URLs that aren't real images (e.g. a bare directory URL
  * with no filename). Pass dryRun to preview without changing anything.
