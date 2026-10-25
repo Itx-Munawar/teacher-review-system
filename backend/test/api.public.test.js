@@ -259,6 +259,9 @@ describe('public API', { skip: SKIP }, () => {
             assert.match(res.text, /<urlset/);
             assert.ok(res.text.includes(`/teacher/${teacherA}`));
             assert.ok(res.text.includes('/department/'));
+            // Courses come from the JSON array in approved reviews only.
+            assert.ok(res.text.includes('/course/Calculus%20I'), 'approved course listed');
+            assert.ok(!res.text.includes('Marketing'), 'course from a pending review not listed');
         });
 
         it('answers unknown routes with JSON 404', async () => {
