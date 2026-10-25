@@ -1,88 +1,41 @@
 import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
-import { useSearchParams, useParams, useNavigate, useLocation, Link } from 'react-router-dom';
+import { useSearchParams, useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
     getTeachers,
     getDepartments,
     getRelatedTeachers,
     searchAllTeachers,
     getTeacherDetail,
-    adminLogin,
-    adminMe,
-    adminLogout,
-    addTeacher,
-    updateTeacher,
-    deleteTeacher,
-    deleteReview,
-    updateReview,
-    approveReview,
-    rejectReview,
-    getAdminReviews,
-    getAdminQuestions,
-    getAdminStats,
-    deleteQuestion,
-    updateQuestion,
-    updateAnswer,
-    deleteAnswer,
-    bulkReviewDecision,
-    submitReview,
-    getAdminCustomCourses,
-    reviewCustomCourse,
-    getAdminTeacherDetail,
-    cleanTeacherImages,
-    getAdminReports,
-    updateReportStatus
+    submitReview
 } from './services/api';
-import { debounce } from './utils/debounce';
 import { SITE_URL } from './utils/siteUrl';
 import { applySeo } from './utils/seo';
-import TiltCard from './components/TiltCard';
-import TeacherAutocomplete from './components/TeacherAutocomplete';
+import { mapTeacherDetail } from './utils/teacherDetail';
+import { useAdmin } from './hooks/useAdmin';
 import InstallPrompt from './components/InstallPrompt';
 import PullToRefresh from './components/PullToRefresh';
-import Icon from './components/Icon';
-import Avatar from './components/Avatar';
 import BottomNav from './components/BottomNav';
 import TeacherDetailView from './components/TeacherDetailView';
 import ReviewFormModal from './components/ReviewFormModal';
 import QuestionsView from './components/QuestionsView';
 import ErrorBoundary from './components/ErrorBoundary';
-import { TeacherCardSkeleton } from './components/Skeleton';
+import ChunkFallback from './components/ChunkFallback';
+import AdminScreen from './components/AdminScreen';
+import AppHeader from './components/AppHeader';
+import AppFooter from './components/AppFooter';
+import TeacherSidebar from './components/TeacherSidebar';
+import WelcomePanel from './components/WelcomePanel';
+import CompareBar from './components/CompareBar';
+import { AboutModal, ContactModal } from './components/InfoModals';
 import { ToastHost } from './components/Toast';
 import { haptic } from './utils/haptics';
-import type { Teacher, TeacherDetail, Review, AdminReview, AdminQuestion, CustomCourse, AdminTeacherDetail, AdminReport, AdminStats, Toast } from './types';
+import type { Teacher, TeacherDetail, Toast } from './types';
 import './App.css';
 
-// Admin and compare screens are rarely opened, so they are split into their
-// own chunks instead of shipping in the bundle every visitor downloads.
-const AdminPanel = lazy(() => import('./components/AdminPanel'));
-const LoginForm = lazy(() => import('./components/LoginForm'));
+// The compare screen is rarely opened, so it is split into its own chunk
+// instead of shipping in the bundle every visitor downloads (the admin
+// screens are split the same way inside AdminScreen).
 const CompareView = lazy(() => import('./components/CompareView'));
-
-const ChunkFallback = () => <div className="loading" role="status">Loading…</div>;
-
-// ========== HELPER: Map API response to TeacherDetail ==========
-interface TeacherDetailResponse {
-    teacher?: Teacher;
-    reviews?: Review[];
-    total_reviews?: number;
-    review_pagination?: TeacherDetail['review_pagination'];
-}
-
-const mapTeacherDetail = (data: TeacherDetailResponse, fallback?: TeacherDetail): TeacherDetail => {
-    const teacherInfo: Teacher = data.teacher || fallback || (data as unknown as Teacher);
-    const reviewsList = data.reviews || [];
-    const totalReviews = data.total_reviews || 0;
-    return {
-        id: teacherInfo.id,
-        name: teacherInfo.name,
-        department: teacherInfo.department,
-        review_count: totalReviews,
-        total_reviews: totalReviews,
-        image_url: teacherInfo.image_url || undefined,
-        reviews: reviewsList,
-        review_pagination: data.review_pagination,
-    };
-};
 
 // ========== MAIN APP ==========
 const App: React.FC = () => {
@@ -120,35 +73,13 @@ const App: React.FC = () => {
     const [reviewError, setReviewError] = useState('');
     const [reviewSuccess, setReviewSuccess] = useState('');
 
-    const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
-    const [adminAuthChecked, setAdminAuthChecked] = useState(false);
-    const [adminMutationLoading, setAdminMutationLoading] = useState(false);
-    // Keep the admin panel open across a refresh by backing it with /admin.
-    const [showAdminPanel, setShowAdminPanel] = useState(() => location.pathname === '/admin');
-    const [adminUsername, setAdminUsername] = useState('');
-    const [adminPassword, setAdminPassword] = useState('');
-    const [adminError, setAdminError] = useState('');
-    const [admin_totp_code, setAdmin_totp_code] = useState('');
-    /** When true, login was accepted but a TOTP code is still required. */
-    const [requires_totp, setRequires_totp] = useState(false);
-    const [showAddTeacherForm, setShowAddTeacherForm] = useState(false);
-    const [newTeacherName, setNewTeacherName] = useState('');
-    const [newTeacherDepartment, setNewTeacherDepartment] = useState('');
-    const [newTeacherImage, setNewTeacherImage] = useState('');
-    const [reviewsForModeration, setReviewsForModeration] = useState<AdminReview[]>([]);
-    const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
-    const [adminTotpEnabled, setAdminTotpEnabled] = useState(false);
-
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastIdRef = useRef(0);
 
     const mainContentRef = useRef<HTMLDivElement>(null);
-    const logoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const listScrollPosRef = useRef(0);
     const searchInputRef = useRef<HTMLInputElement>(null);
     const compareSearchInputRef = useRef<HTMLInputElement>(null);
-    // Where "Back to Site" should return after visiting /admin.
-    const adminReturnPathRef = useRef('/');
 
     const [showAboutModal, setShowAboutModal] = useState(false);
     const [showContactModal, setShowContactModal] = useState(false);
@@ -165,33 +96,9 @@ const App: React.FC = () => {
         return () => window.removeEventListener('scroll', onScroll);
     }, []);
 
-    const [adminSearchTerm, setAdminSearchTerm] = useState('');
-    const [adminSearchResults, setAdminSearchResults] = useState<Teacher[]>([]);
-    const [adminIsSearching, setAdminIsSearching] = useState(false);
-
     const [sortBy, setSortBy] = useState('name');
     const [departmentFilter, setDepartmentFilter] = useState('');
     const [departments, setDepartments] = useState<{ department: string; teacher_count: number }[]>([]);
-
-    // /admin is a real URL so a refresh stays in the admin panel. Remember the
-    // page we came from so "Back to Site" returns there instead of always home.
-    const openAdminPanel = useCallback(() => {
-        if (location.pathname !== '/admin') {
-            adminReturnPathRef.current = `${location.pathname}${location.search}`;
-        }
-        setShowAdminPanel(true);
-        navigate('/admin');
-    }, [location.pathname, location.search, navigate]);
-
-    const closeAdminPanel = useCallback(() => {
-        setShowAdminPanel(false);
-        navigate(adminReturnPathRef.current || '/');
-    }, [navigate]);
-
-    // Keep the panel in sync with the URL (browser back/forward, direct links).
-    useEffect(() => {
-        setShowAdminPanel(location.pathname === '/admin');
-    }, [location.pathname]);
 
     // ========== TOASTS ==========
     const showToast = useCallback((message: string, type: Toast['type'] = 'info') => {
@@ -251,6 +158,19 @@ const App: React.FC = () => {
         loadDepartments();
     }, [loadDepartments]);
 
+    // ========== ADMIN (session, moderation data and actions) ==========
+    const admin = useAdmin({
+        location,
+        navigate,
+        showToast,
+        loadTeachers,
+        loadDepartments,
+        selectedTeacher,
+        setSelectedTeacher,
+        setShowReviewForm,
+    });
+    const { isAdminLoggedIn, showAdminPanel, openAdminPanel, loadAdminData, checkAdminLogin } = admin;
+
     // Pull-to-refresh reloads the teacher list from page 1
     const handlePullRefresh = useCallback(() => loadTeachers(1), [loadTeachers]);
 
@@ -303,277 +223,6 @@ const App: React.FC = () => {
         }
     }, [setSearchParams, loadTeachers]);
 
-    const debouncedAdminSearch = useRef(debounce(async (value: string) => {
-        if (value.trim()) {
-            setAdminIsSearching(true);
-            try {
-                const res = await searchAllTeachers(value, 50);
-                setAdminSearchResults(res.data || []);
-            } catch (error) {
-                console.error('Admin search error:', error);
-                setAdminSearchResults([]);
-            } finally {
-                setAdminIsSearching(false);
-            }
-        } else {
-            setAdminIsSearching(false);
-            setAdminSearchResults([]);
-        }
-    }, 300));
-
-    const handleAdminSearch = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value;
-        setAdminSearchTerm(value);
-        debouncedAdminSearch.current(value);
-    }, []);
-
-    // ========== ADMIN DATA ==========
-    const [adminReviewsPage, setAdminReviewsPage] = useState(1);
-    const [adminReviewsTotalPages, setAdminReviewsTotalPages] = useState(1);
-    const [adminLoadingMoreReviews, setAdminLoadingMoreReviews] = useState(false);
-    const [adminQuestions, setAdminQuestions] = useState<AdminQuestion[]>([]);
-    const [adminQuestionsPage, setAdminQuestionsPage] = useState(1);
-    const [adminQuestionsTotalPages, setAdminQuestionsTotalPages] = useState(1);
-    const [adminLoadingMoreQuestions, setAdminLoadingMoreQuestions] = useState(false);
-    const [customCourses, setCustomCourses] = useState<CustomCourse[]>([]);
-    // When true, the admin reviews list fetches only pending (unapproved) rows.
-    const [reviewsPendingOnly, setReviewsPendingOnly] = useState(false);
-
-    // Reader reports (Reports tab)
-    const [adminReports, setAdminReports] = useState<AdminReport[]>([]);
-    const [adminReportsPage, setAdminReportsPage] = useState(1);
-    const [adminReportsTotalPages, setAdminReportsTotalPages] = useState(1);
-    const [adminLoadingMoreReports, setAdminLoadingMoreReports] = useState(false);
-    const [adminReportsStatus, setAdminReportsStatus] = useState<'open' | 'resolved' | 'dismissed'>('open');
-
-    // Mirror the loaded-page counters into refs so loadAdminData can reload
-    // every page the admin has open without re-creating the callback itself.
-    const adminReviewsPageRef = useRef(adminReviewsPage);
-    const adminQuestionsPageRef = useRef(adminQuestionsPage);
-    const adminReportsPageRef = useRef(adminReportsPage);
-    // Read inside loadAdminData without making it a dependency: the status
-    // switch already fetches page 1, and an identity change here would make
-    // the login effect fire a second, redundant round of requests.
-    const adminReportsStatusRef = useRef(adminReportsStatus);
-    useEffect(() => { adminReviewsPageRef.current = adminReviewsPage; }, [adminReviewsPage]);
-    useEffect(() => { adminQuestionsPageRef.current = adminQuestionsPage; }, [adminQuestionsPage]);
-    useEffect(() => { adminReportsPageRef.current = adminReportsPage; }, [adminReportsPage]);
-    useEffect(() => { adminReportsStatusRef.current = adminReportsStatus; }, [adminReportsStatus]);
-
-    const loadAdminData = useCallback(async () => {
-        // Re-fetch every review/Q&A/report page the admin already has open, not
-        // just page 1: resetting to a single page after a save collapsed the
-        // list and yanked the viewport to the top of the page.
-        const reviewPages = Array.from({ length: Math.max(adminReviewsPageRef.current, 1) }, (_, i) => i + 1);
-        const questionPages = Array.from({ length: Math.max(adminQuestionsPageRef.current, 1) }, (_, i) => i + 1);
-        const reportPages = Array.from({ length: Math.max(adminReportsPageRef.current, 1) }, (_, i) => i + 1);
-
-        const [reviewsResult, questionsResult, coursesResult, reportsResult] = await Promise.allSettled([
-            Promise.all(reviewPages.map((p) => getAdminReviews(p, 50, reviewsPendingOnly))),
-            Promise.all(questionPages.map((p) => getAdminQuestions(p, 50))),
-            getAdminCustomCourses(),
-            Promise.all(reportPages.map((p) => getAdminReports(p, 50, adminReportsStatusRef.current)))
-        ]);
-
-        let reviewsData: AdminReview[] = [];
-        let totalPages = 1;
-        if (reviewsResult.status === 'fulfilled') {
-            for (const reviewsRes of reviewsResult.value) {
-                const d = reviewsRes.data;
-                if (!d) continue;
-                if (Array.isArray(d)) {
-                    reviewsData = reviewsData.concat(d);
-                } else if (d.reviews) {
-                    reviewsData = reviewsData.concat(d.reviews);
-                    totalPages = d.pagination?.totalPages || 1;
-                } else if (d.data) {
-                    reviewsData = reviewsData.concat(d.data);
-                }
-            }
-        } else {
-            console.error('Error loading admin reviews:', reviewsResult.reason);
-        }
-
-        let questionsData: AdminQuestion[] = [];
-        let questionsTotalPages = 1;
-        if (questionsResult.status === 'fulfilled') {
-            for (const questionsRes of questionsResult.value) {
-                const d = questionsRes.data;
-                if (d?.questions) {
-                    questionsData = questionsData.concat(d.questions);
-                    questionsTotalPages = d.pagination?.totalPages || 1;
-                }
-            }
-        } else {
-            console.error('Error loading admin questions:', questionsResult.reason);
-        }
-
-        if (coursesResult.status === 'fulfilled') {
-            setCustomCourses(coursesResult.value.data?.courses || []);
-        } else {
-            console.error('Error loading custom courses:', coursesResult.reason);
-        }
-
-        let reportsData: AdminReport[] = [];
-        let reportsTotalPages = 1;
-        if (reportsResult.status === 'fulfilled') {
-            for (const reportsRes of reportsResult.value) {
-                const d = reportsRes.data;
-                if (!d) continue;
-                reportsData = reportsData.concat(d.reports || []);
-                reportsTotalPages = d.pagination?.totalPages || reportsTotalPages;
-            }
-        } else {
-            console.error('Error loading review reports:', reportsResult.reason);
-        }
-
-        setAdminReviewsTotalPages(totalPages);
-        setAdminQuestionsTotalPages(questionsTotalPages);
-        setAdminReportsTotalPages(reportsTotalPages);
-        setReviewsForModeration(reviewsData);
-        setAdminQuestions(questionsData);
-        setAdminReports(reportsData);
-        // No page-counter reset here: every already-loaded page was re-fetched
-        // above, so the list keeps its length and the viewport stays put.
-
-        // Fetch actual totals from the stats endpoint
-        try {
-            const statsRes = await getAdminStats();
-            setAdminStats(statsRes.data);
-        } catch (err) {
-            console.error('Error loading admin stats:', err);
-        }
-
-        // Check whether 2FA is enabled on this account (loaded with every
-        // data refresh so the security tab can update instantly after a change).
-        try {
-            const meRes = await adminMe();
-            const enabled = !!meRes.admin.totp_enabled;
-            setAdminTotpEnabled(enabled);
-        } catch (err) {
-            console.error('Error checking 2FA status:', err);
-        }
-    }, [reviewsPendingOnly]);
-
-    // Toggle the "pending only" review filter (dashboard pending counter).
-    // Fetches page 1 with the *next* flag explicitly to avoid stale state.
-    const handleTogglePendingOnly = useCallback(async () => {
-        const next = !reviewsPendingOnly;
-        setReviewsPendingOnly(next);
-        try {
-            const res = await getAdminReviews(1, 50, next);
-            const data = res.data?.reviews || [];
-            setReviewsForModeration(data);
-            setAdminReviewsTotalPages(res.data?.pagination?.totalPages || 1);
-            setAdminReviewsPage(1);
-        } catch (error) {
-            console.error('Error applying pending filter:', error);
-            showToast('Failed to filter reviews', 'error');
-        }
-    }, [reviewsPendingOnly, showToast]);
-
-    const handleLoadMoreReviews = useCallback(async () => {
-        const nextPage = adminReviewsPage + 1;
-        if (nextPage > adminReviewsTotalPages || adminLoadingMoreReviews) return;
-        setAdminLoadingMoreReviews(true);
-        try {
-            const reviewsRes = await getAdminReviews(nextPage, 50, reviewsPendingOnly);
-            const reviewsData = reviewsRes.data?.reviews || [];
-            setReviewsForModeration(prev => [...prev, ...reviewsData]);
-            setAdminReviewsPage(nextPage);
-        } catch (error) {
-            console.error('Error loading more reviews:', error);
-            showToast('Failed to load more reviews', 'error');
-        } finally {
-            setAdminLoadingMoreReviews(false);
-        }
-    }, [adminReviewsPage, adminReviewsTotalPages, adminLoadingMoreReviews, reviewsPendingOnly, showToast]);
-
-    const handleLoadMoreQuestions = useCallback(async () => {
-        const nextPage = adminQuestionsPage + 1;
-        if (nextPage > adminQuestionsTotalPages || adminLoadingMoreQuestions) return;
-        setAdminLoadingMoreQuestions(true);
-        try {
-            const questionsRes = await getAdminQuestions(nextPage, 50);
-            const questionsData = questionsRes.data?.questions || [];
-            setAdminQuestions(prev => [...prev, ...questionsData]);
-            setAdminQuestionsPage(nextPage);
-        } catch (error) {
-            console.error('Error loading more questions:', error);
-            showToast('Failed to load more questions', 'error');
-        } finally {
-            setAdminLoadingMoreQuestions(false);
-        }
-    }, [adminQuestionsPage, adminQuestionsTotalPages, adminLoadingMoreQuestions, showToast]);
-
-    const handleLoadMoreReports = useCallback(async () => {
-        const nextPage = adminReportsPage + 1;
-        if (nextPage > adminReportsTotalPages || adminLoadingMoreReports) return;
-        setAdminLoadingMoreReports(true);
-        try {
-            const reportsRes = await getAdminReports(nextPage, 50, adminReportsStatus);
-            const reportsData = reportsRes.data?.reports || [];
-            setAdminReports(prev => [...prev, ...reportsData]);
-            setAdminReportsPage(nextPage);
-        } catch (error) {
-            console.error('Error loading more reports:', error);
-            showToast('Failed to load more reports', 'error');
-        } finally {
-            setAdminLoadingMoreReports(false);
-        }
-    }, [adminReportsPage, adminReportsTotalPages, adminLoadingMoreReports, adminReportsStatus, showToast]);
-
-    const handleReportsStatusChange = useCallback(async (status: 'open' | 'resolved' | 'dismissed') => {
-        setAdminReportsStatus(status);
-        setAdminReportsPage(1);
-        try {
-            const res = await getAdminReports(1, 50, status);
-            setAdminReports(res.data?.reports || []);
-            setAdminReportsTotalPages(res.data?.pagination?.totalPages || 1);
-        } catch (error) {
-            console.error('Error filtering reports:', error);
-            showToast('Failed to load reports', 'error');
-        }
-    }, [showToast]);
-
-    const handleUpdateReportStatus = useCallback(async (id: number, status: 'open' | 'resolved' | 'dismissed') => {
-        setAdminMutationLoading(true);
-        try {
-            await updateReportStatus(id, status);
-            showToast(`Report marked ${status}`, 'success');
-            // The row leaves the current filter, so refresh both the list and
-            // the open-report badge rather than patching local state.
-            await loadAdminData();
-        } catch (error) {
-            console.error('Error updating report:', error);
-            showToast('Failed to update report', 'error');
-        } finally {
-            setAdminMutationLoading(false);
-        }
-    }, [loadAdminData, showToast]);
-
-    const handleReviewCustomCourse = useCallback(async (id: number, action: 'approve' | 'reject') => {
-        try {
-            await reviewCustomCourse(id, action);
-            setCustomCourses(prev => prev.map((c): CustomCourse => c.id === id ? { ...c, status: (action === 'approve' ? 'approved' : 'rejected') as CustomCourse['status'], reviewed_at: new Date().toISOString() } : c));
-            showToast(`Course ${action}d`, 'success');
-        } catch (error) {
-            console.error(`Error ${action}ing custom course:`, error);
-            showToast(`Failed to ${action} course`, 'error');
-        }
-    }, [showToast]);
-
-    const handleLoadTeacherDetail = useCallback(async (id: number): Promise<AdminTeacherDetail | null> => {
-        try {
-            const response = await getAdminTeacherDetail(id);
-            return response.data as AdminTeacherDetail;
-        } catch (error) {
-            console.error('Error loading teacher detail for admin:', error);
-            showToast('Failed to load teacher details', 'error');
-            return null;
-        }
-    }, [showToast]);
-
     // Track mobile viewport for hiding the list when a detail page is open
     useEffect(() => {
         const onResize = () => setIsMobileViewport(window.innerWidth <= 768);
@@ -602,13 +251,6 @@ const App: React.FC = () => {
         checkAdminLogin();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-
-    useEffect(() => {
-        if (isAdminLoggedIn) {
-            loadAdminData();
-            loadTeachers(1);
-        }
-    }, [isAdminLoggedIn, loadAdminData, loadTeachers]);
 
     // Restore state from URL on mount
     useEffect(() => {
@@ -731,334 +373,6 @@ const App: React.FC = () => {
             existingLd.remove();
         }
     }, [selectedTeacher, searchTerm, location.pathname]);
-
-    const checkAdminLogin = useCallback(async () => {
-        try {
-            await adminMe();
-            setIsAdminLoggedIn(true);
-        } catch {
-            setIsAdminLoggedIn(false);
-        } finally {
-            setAdminAuthChecked(true);
-        }
-    }, []);
-
-    const handleAdminLogin = useCallback(async (e: React.FormEvent) => {
-        e.preventDefault();
-        setAdminError('');
-        try {
-            const res = await adminLogin(adminUsername, adminPassword, admin_totp_code || undefined);
-            const data = res.data as any;
-            if (data?.requires_totp) {
-                setRequires_totp(true);
-                return;
-            }
-            setIsAdminLoggedIn(true);
-            setAdminUsername('');
-            setAdminPassword('');
-            setAdmin_totp_code('');
-            setRequires_totp(false);
-            showToast('Admin login successful!', 'success');
-        } catch (error: any) {
-            const errData = error?.response?.data;
-            setAdminError(errData?.error || 'Login failed');
-        }
-    }, [adminUsername, adminPassword, admin_totp_code, showToast]);
-
-    const logoutInFlightRef = useRef(false);
-
-    const handleAdminLogout = useCallback(async () => {
-        // Concurrent 401s used to fire several logouts, stacking toasts and
-        // re-running the panel teardown.
-        if (logoutInFlightRef.current) return;
-        logoutInFlightRef.current = true;
-        try {
-            await adminLogout();
-        } catch (error) {
-            console.error('Logout error:', error);
-        } finally {
-            logoutInFlightRef.current = false;
-        }
-        setIsAdminLoggedIn(false);
-        closeAdminPanel();
-        setShowAddTeacherForm(false);
-        if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
-        showToast('Logged out successfully', 'info');
-    }, [closeAdminPanel, showToast]);
-
-    // ---------- Auto-logout timer (admin only) ----------
-    const startLogoutTimer = useCallback(() => {
-        if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
-        logoutTimerRef.current = setTimeout(() => {
-            if (isAdminLoggedIn && showAdminPanel) {
-                console.log('Auto-logging out due to inactivity');
-                handleAdminLogout();
-                showToast('You have been logged out due to inactivity.', 'info');
-            }
-        }, 30 * 60 * 1000);
-    }, [isAdminLoggedIn, showAdminPanel, handleAdminLogout, showToast]);
-
-    const resetLogoutTimer = useCallback(() => {
-        if (isAdminLoggedIn && showAdminPanel) {
-            startLogoutTimer();
-        }
-    }, [isAdminLoggedIn, showAdminPanel, startLogoutTimer]);
-
-    useEffect(() => {
-        if (isAdminLoggedIn && showAdminPanel) {
-            startLogoutTimer();
-            const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
-            events.forEach(event => window.addEventListener(event, resetLogoutTimer));
-            return () => {
-                events.forEach(event => window.removeEventListener(event, resetLogoutTimer));
-                if (logoutTimerRef.current) clearTimeout(logoutTimerRef.current);
-            };
-        }
-    }, [isAdminLoggedIn, showAdminPanel, startLogoutTimer, resetLogoutTimer]);
-
-    useEffect(() => {
-        const handleSessionExpired = () => {
-            if (isAdminLoggedIn) {
-                showToast('Your admin session has expired. Please log in again.', 'error');
-                handleAdminLogout();
-            }
-        };
-        window.addEventListener('admin-session-expired', handleSessionExpired);
-        return () => window.removeEventListener('admin-session-expired', handleSessionExpired);
-    }, [isAdminLoggedIn, handleAdminLogout, showToast]);
-
-    // ---------- End of auto-logout code ----------
-
-    const handleUpdateTeacher = useCallback(async (id: number, data: { name: string; department: string; image_url?: string }) => {
-        setAdminMutationLoading(true);
-        try {
-            await updateTeacher(id, data);
-            showToast('Teacher updated successfully!', 'success');
-            loadTeachers(1);
-            loadDepartments();
-            await loadAdminData();
-        } catch (error) {
-            console.error('Update error:', error);
-            showToast('Failed to update teacher', 'error');
-        } finally {
-            setAdminMutationLoading(false);
-        }
-    }, [loadTeachers, loadDepartments, loadAdminData, showToast]);
-
-    const handleCleanTeacherImages = useCallback(async (dryRun: boolean) => {
-        try {
-            const res = await cleanTeacherImages(dryRun);
-            if (!dryRun) {
-                const cleaned = res.data?.cleaned ?? 0;
-                showToast(`Cleared ${cleaned} broken photo URL${cleaned === 1 ? '' : 's'}`, 'success');
-                loadTeachers(1);
-            }
-            return res.data || {};
-        } catch (error) {
-            console.error('Clean teacher images error:', error);
-            showToast('Failed to check teacher photos', 'error');
-            return {};
-        }
-    }, [loadTeachers, showToast]);
-
-    const handleAddTeacher = useCallback(async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!newTeacherName || !newTeacherDepartment) {
-            showToast('Please fill in all fields', 'error');
-            return;
-        }
-        setAdminMutationLoading(true);
-        try {
-            await addTeacher({
-                name: newTeacherName,
-                department: newTeacherDepartment,
-                image_url: newTeacherImage || undefined
-            });
-            showToast('Teacher added successfully!', 'success');
-            setNewTeacherName('');
-            setNewTeacherDepartment('');
-            setNewTeacherImage('');
-            setShowAddTeacherForm(false);
-            loadTeachers(1);
-            loadDepartments();
-            await loadAdminData();
-        } catch (error) {
-            showToast('Failed to add teacher', 'error');
-        } finally {
-            setAdminMutationLoading(false);
-        }
-    }, [newTeacherName, newTeacherDepartment, newTeacherImage, loadTeachers, loadDepartments, loadAdminData, showToast]);
-
-    const handleDeleteTeacher = useCallback(async (id: number) => {
-        if (window.confirm('Are you sure you want to delete this teacher? All reviews will also be deleted.')) {
-            setAdminMutationLoading(true);
-            try {
-                await deleteTeacher(id);
-                showToast('Teacher deleted successfully!', 'success');
-                loadTeachers(1);
-                loadDepartments();
-                if (selectedTeacher?.id === id) {
-                    setSelectedTeacher(null);
-                    setShowReviewForm(false);
-                }
-                await loadAdminData();
-            } catch (error) {
-                showToast('Failed to delete teacher', 'error');
-            } finally {
-                setAdminMutationLoading(false);
-            }
-        }
-    }, [selectedTeacher, loadTeachers, loadDepartments, loadAdminData, showToast]);
-
-    const handleDeleteReview = useCallback(async (id: number) => {
-        if (window.confirm('Are you sure you want to delete this review?')) {
-            setAdminMutationLoading(true);
-            try {
-                await deleteReview(id);
-                showToast('Review deleted successfully!', 'success');
-                await loadAdminData();
-                if (selectedTeacher) {
-                    const response = await getTeacherDetail(selectedTeacher.id);
-                    setSelectedTeacher(mapTeacherDetail(response.data, selectedTeacher));
-                }
-            } catch (error) {
-                showToast('Failed to delete review', 'error');
-            } finally {
-                setAdminMutationLoading(false);
-            }
-        }
-    }, [selectedTeacher, loadAdminData, showToast]);
-
-
-
-    const handleDeleteQuestion = useCallback(async (id: number) => {
-        if (window.confirm('Are you sure you want to delete this question and all its answers?')) {
-            setAdminMutationLoading(true);
-            try {
-                await deleteQuestion(id);
-                showToast('Question deleted successfully!', 'success');
-                await loadAdminData();
-                if (selectedTeacher) {
-                    const response = await getTeacherDetail(selectedTeacher.id);
-                    setSelectedTeacher(mapTeacherDetail(response.data, selectedTeacher));
-                }
-            } catch (error) {
-                showToast('Failed to delete question', 'error');
-            } finally {
-                setAdminMutationLoading(false);
-            }
-        }    }, [selectedTeacher, loadAdminData, showToast]);
-
-    const handleUpdateReview = useCallback(async (id: number, data: { comment: string; user_name?: string; is_approved?: boolean }) => {
-        setAdminMutationLoading(true);
-        try {
-            await updateReview(id, data);
-            showToast('Review updated successfully!', 'success');
-            await loadAdminData();
-            if (selectedTeacher) {
-                const response = await getTeacherDetail(selectedTeacher.id);
-                setSelectedTeacher(mapTeacherDetail(response.data, selectedTeacher));
-            }
-        } catch (error) {
-            showToast('Failed to update review', 'error');
-        } finally {
-            setAdminMutationLoading(false);
-        }
-    }, [selectedTeacher, loadAdminData, showToast]);
-
-    const handleApproveReview = useCallback(async (id: number) => {
-        setAdminMutationLoading(true);
-        try {
-            await approveReview(id);
-            showToast('Review approved!', 'success');
-            await loadAdminData();
-            if (selectedTeacher) {
-                const response = await getTeacherDetail(selectedTeacher.id);
-                setSelectedTeacher(mapTeacherDetail(response.data, selectedTeacher));
-            }
-        } catch (error) {
-            showToast('Failed to approve review', 'error');
-        } finally {
-            setAdminMutationLoading(false);
-        }
-    }, [selectedTeacher, loadAdminData, showToast]);
-
-    const handleRejectReview = useCallback(async (id: number) => {
-        setAdminMutationLoading(true);
-        try {
-            await rejectReview(id);
-            showToast('Review rejected!', 'success');
-            await loadAdminData();
-            if (selectedTeacher) {
-                const response = await getTeacherDetail(selectedTeacher.id);
-                setSelectedTeacher(mapTeacherDetail(response.data, selectedTeacher));
-            }
-        } catch (error) {
-            showToast('Failed to reject review', 'error');
-        } finally {
-            setAdminMutationLoading(false);
-        }
-    }, [selectedTeacher, loadAdminData, showToast]);
-
-
-
-    const handleUpdateQuestion = useCallback(async (id: number, data: { question?: string; is_approved?: boolean }) => {
-        setAdminMutationLoading(true);
-        try {
-            const res = await updateQuestion(id, data);
-            showToast(res.data?.message || 'Question updated', 'success');
-            await loadAdminData();
-        } catch (error) {
-            showToast('Failed to update question', 'error');
-        } finally {
-            setAdminMutationLoading(false);
-        }
-    }, [loadAdminData, showToast]);
-
-    const handleUpdateAnswer = useCallback(async (id: number, data: { answer?: string; is_approved?: boolean }) => {
-        setAdminMutationLoading(true);
-        try {
-            const res = await updateAnswer(id, data);
-            showToast(res.data?.message || 'Answer updated', 'success');
-            await loadAdminData();
-        } catch (error) {
-            showToast('Failed to update answer', 'error');
-        } finally {
-            setAdminMutationLoading(false);
-        }
-    }, [loadAdminData, showToast]);
-
-    const handleDeleteAnswer = useCallback(async (id: number) => {
-        if (!window.confirm('Delete this answer permanently? This cannot be undone.')) return;
-        setAdminMutationLoading(true);
-        try {
-            await deleteAnswer(id);
-            showToast('Answer deleted successfully!', 'success');
-            await loadAdminData();
-            if (selectedTeacher) {
-                const response = await getTeacherDetail(selectedTeacher.id);
-                setSelectedTeacher(mapTeacherDetail(response.data, selectedTeacher));
-            }
-        } catch (error) {
-            showToast('Failed to delete answer', 'error');
-        } finally {
-            setAdminMutationLoading(false);
-        }
-    }, [selectedTeacher, loadAdminData, showToast]);
-
-    const handleBulkReviewDecision = useCallback(async (ids: number[], action: 'approve' | 'reject') => {
-        setAdminMutationLoading(true);
-        try {
-            const res = await bulkReviewDecision(ids, action);
-            const updated = res.data?.updated ?? ids.length;
-            showToast(`${updated} review(s) ${action === 'approve' ? 'approved' : 'rejected'}`, 'success');
-            await loadAdminData();
-        } catch (error) {
-            showToast('Bulk update failed', 'error');
-        } finally {
-            setAdminMutationLoading(false);
-        }
-    }, [loadAdminData, showToast]);
 
     const handleSubmitReview = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
@@ -1289,6 +603,29 @@ const App: React.FC = () => {
 
     const displayTeachers = isSearching ? searchResults : teachers;
 
+    // Picking a suggestion clears the search box and opens the teacher.
+    const handleAutocompleteSelect = (teacher: Teacher) => {
+        setSearchTerm('');
+        setIsSearching(false);
+        setSearchResults([]);
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete('search');
+            return next;
+        }, { replace: true });
+        handleTeacherClick(teacher);
+    };
+
+    // "+" on a card or suggestion: desktop opens the compare panel right away,
+    // mobile just adds to the compare bar (compare is its own page there).
+    const handleCompareToggle = (teacher: Teacher) => {
+        if (window.innerWidth > 768) {
+            handleCardCompare(teacher);
+        } else {
+            toggleCompare(teacher);
+        }
+    };
+
     const loadMore = useCallback(() => {
         if (!isSearching && hasMore && !loadingMore) {
             setCurrentPage(prev => prev + 1);
@@ -1363,125 +700,18 @@ const App: React.FC = () => {
 
     // ========== RENDER ==========
     if (showAdminPanel) {
-        if (!isAdminLoggedIn) {
-            // On a refresh at /admin the cookie check needs a moment; don't
-            // flash the login form (or the public site) in the meantime.
-            if (!adminAuthChecked) {
-                return (
-                    <div className="app">
-                        <ToastHost toasts={toasts} onDismiss={dismissToast} />
-                        <header className={`header${headerScrolled ? ' header-scrolled' : ''}`}>
-                            <h1>Teacher Review System - Admin</h1>
-                            <button onClick={closeAdminPanel} className="back-to-site-btn">← Back to Site</button>
-                        </header>
-                        <div className="container">
-                            <div className="loading" role="status">Checking admin session…</div>
-                        </div>
-                    </div>
-                );
-            }
-            return (
-                <div className="app">
-                    <ToastHost toasts={toasts} onDismiss={dismissToast} />
-                <header className={`header${headerScrolled ? ' header-scrolled' : ''}`}>
-                        <h1>Teacher Review System - Admin</h1>
-                        <button onClick={closeAdminPanel} className="back-to-site-btn">← Back to Site</button>
-                    </header>
-                    <div className="container">
-                        <ErrorBoundary>
-                        <Suspense fallback={<ChunkFallback />}>
-                        <LoginForm
-                            adminUsername={adminUsername}
-                            setAdminUsername={setAdminUsername}
-                            adminPassword={adminPassword}
-                            setAdminPassword={setAdminPassword}
-                            adminError={adminError}
-                            onLogin={handleAdminLogin}
-                            requires_totp={requires_totp}
-                            admin_totp_code={admin_totp_code}
-                            setAdmin_totp_code={setAdmin_totp_code}
-                        />
-                        </Suspense>
-                        </ErrorBoundary>
-                    </div>
-                </div>
-            );
-        }
         return (
-            <div className="app">
-                <ToastHost toasts={toasts} onDismiss={dismissToast} />
-                <header className="header">
-                    <h1>Teacher Review System - Admin Panel</h1>
-                    <button onClick={closeAdminPanel} className="back-to-site-btn">← Back to Site</button>
-                </header>
-                <div className="container">
-                    <ErrorBoundary>
-                    <Suspense fallback={<ChunkFallback />}>
-                    <AdminPanel
-                        teachers={teachers}
-                        reviewsForModeration={reviewsForModeration}
-                        totalReviewsCount={adminStats?.total_reviews ?? 0}
-                        pendingReviewsCount={adminStats?.pending_reviews ?? 0}
-                        reviewsPendingOnly={reviewsPendingOnly}
-                        onTogglePendingOnly={handleTogglePendingOnly}
-                        onAddTeacher={handleAddTeacher}
-                        onUpdateTeacher={handleUpdateTeacher}
-                        onDeleteTeacher={handleDeleteTeacher}
-                        onDeleteReview={handleDeleteReview}
-                        onUpdateReview={handleUpdateReview}
-                        onLogout={handleAdminLogout}
-                        showAddTeacherForm={showAddTeacherForm}
-                        setShowAddTeacherForm={setShowAddTeacherForm}
-                        newTeacherName={newTeacherName}
-                        setNewTeacherName={setNewTeacherName}
-                        newTeacherDepartment={newTeacherDepartment}
-                        setNewTeacherDepartment={setNewTeacherDepartment}
-                        departmentOptions={departments.map((d) => d.department)}
-                        newTeacherImage={newTeacherImage}
-                        setNewTeacherImage={setNewTeacherImage}
-                        totalTeachersCount={totalTeachersCount}
-                        loadingMore={loadingMore}
-                        onLoadMore={handleLoadMoreTeachers}
-                        searchTerm={adminSearchTerm}
-                        onSearchChange={handleAdminSearch}
-                        searchResults={adminSearchResults}
-                        isSearching={adminIsSearching}
-                        onLoadMoreReviews={handleLoadMoreReviews}
-                        adminLoadingMoreReviews={adminLoadingMoreReviews}
-                        adminReviewsTotalPages={adminReviewsTotalPages}
-                        adminReviewsPage={adminReviewsPage}
-                        adminQuestions={adminQuestions}
-                        onDeleteQuestion={handleDeleteQuestion}
-                        onUpdateQuestion={handleUpdateQuestion}
-                        onUpdateAnswer={handleUpdateAnswer}
-                        onDeleteAnswer={handleDeleteAnswer}
-                        onBulkReviewDecision={handleBulkReviewDecision}
-                        adminMutationLoading={adminMutationLoading}
-                        adminLoadingMoreQuestions={adminLoadingMoreQuestions}
-                        adminQuestionsPage={adminQuestionsPage}
-                        adminQuestionsTotalPages={adminQuestionsTotalPages}
-                        onLoadMoreQuestions={handleLoadMoreQuestions}
-                        customCourses={customCourses}
-                        onReviewCourse={handleReviewCustomCourse}
-                        onLoadTeacherDetail={handleLoadTeacherDetail}
-                        onCleanTeacherImages={handleCleanTeacherImages}
-                        onApproveReview={handleApproveReview}
-                        onRejectReview={handleRejectReview}
-                        reports={adminReports}
-                        openReportsCount={adminStats?.open_reports ?? 0}
-                        reportsStatus={adminReportsStatus}
-                        onReportsStatusChange={handleReportsStatusChange}
-                        onUpdateReportStatus={handleUpdateReportStatus}
-                        onLoadMoreReports={handleLoadMoreReports}
-                        adminReportsPage={adminReportsPage}
-                        adminReportsTotalPages={adminReportsTotalPages}
-                        adminLoadingMoreReports={adminLoadingMoreReports}
-                        totpEnabled={adminTotpEnabled}
-                    />
-                    </Suspense>
-                    </ErrorBoundary>
-                </div>
-            </div>
+            <AdminScreen
+                admin={admin}
+                toasts={toasts}
+                dismissToast={dismissToast}
+                headerScrolled={headerScrolled}
+                teachers={teachers}
+                departments={departments}
+                totalTeachersCount={totalTeachersCount}
+                loadingMore={loadingMore}
+                handleLoadMoreTeachers={handleLoadMoreTeachers}
+            />
         );
     }
 
@@ -1490,179 +720,43 @@ const App: React.FC = () => {
             <ToastHost toasts={toasts} onDismiss={dismissToast} />
             {reviewSuccess && compareList.length === 0 && !isComparing && !showQnA && <InstallPrompt />}
             <PullToRefresh onRefresh={handlePullRefresh}>
-                <header className="header" role="banner">
-                    <div className="header-top">
-                        <a
-                            className="header-brand"
-                            href="/"
-                            onClick={(e) => { e.preventDefault(); handleTabHome(); }}
-                            title="Back to the start page"
-                            aria-label="UMT Teacher Reviews - go to start page"
-                        >
-                            <img
-                                src={`${import.meta.env.BASE_URL}umt-logo.webp`}
-                                alt="UMT Logo"
-                                className="header-logo"
-                                width={48}
-                                height={48}
-                                decoding="async"
-                            />
-                            <h1 style={{ margin: 0 }}>UMT Teacher Reviews</h1>
-                        </a>
-                        <button
-                            className={`menu-toggle${showMobileMenu ? ' menu-toggle-open' : ''}`}
-                            onClick={() => setShowMobileMenu(v => !v)}
-                            aria-expanded={showMobileMenu}
-                            aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
-                        >
-                            {showMobileMenu ? <Icon name="x" size={22} /> : <Icon name="menu" size={22} />}
-                        </button>
-                    </div>
-                    <p className="header-tagline">Reviews from UMT students, for UMT students.</p>
-                    <div className={`header-actions${showMobileMenu ? ' header-actions-open' : ''}`}>
-                        <button onClick={handleTabAdmin} className="admin-login-btn">
-                            <Icon name="lock" size={16} /> Admin login
-                        </button>
-                        <button onClick={handleOpenQnA} className="admin-login-btn">
-                            <Icon name="message-square" size={16} /> Q&amp;A
-                        </button>
-                        <button onClick={() => { setShowContactModal(true); setShowMobileMenu(false); }} className="admin-login-btn">
-                            <Icon name="mail" size={16} /> Contact us
-                        </button>
-                        <button onClick={() => { setShowAboutModal(true); setShowMobileMenu(false); }} className="admin-login-btn">
-                            <Icon name="info" size={16} /> About
-                        </button>
-                    </div>
-                </header>
+                <AppHeader
+                    showMobileMenu={showMobileMenu}
+                    setShowMobileMenu={setShowMobileMenu}
+                    handleTabHome={handleTabHome}
+                    handleTabAdmin={handleTabAdmin}
+                    handleOpenQnA={handleOpenQnA}
+                    setShowContactModal={setShowContactModal}
+                    setShowAboutModal={setShowAboutModal}
+                />
 
                 <div className={`container${selectedTeacher && !isComparing ? ' container-detail' : ''}`}>
-                <div className={`sidebar${(selectedTeacher || isComparing || showQnA) && isMobileViewport ? ' sidebar-hidden-mobile' : ''}`}>
-                    <div className="search-box">
-                        <TeacherAutocomplete
-                            value={searchTerm}
-                            onQueryChange={handleSearch}
-                            inputRef={searchInputRef}
-                            onSelect={(teacher) => {
-                                setSearchTerm('');
-                                setIsSearching(false);
-                                setSearchResults([]);
-                                setSearchParams((prev) => {
-                                    const next = new URLSearchParams(prev);
-                                    next.delete('search');
-                                    return next;
-                                }, { replace: true });
-                                handleTeacherClick(teacher);
-                            }}
-                            onCompare={(teacher) => {
-                                if (window.innerWidth > 768) {
-                                    handleCardCompare(teacher);
-                                } else {
-                                    toggleCompare(teacher);
-                                }
-                            }}
-                            isInCompare={(teacher) => compareList.some(t => t.id === teacher.id)}
-                        />
-                        {isSearching && searchTerm && (
-                            <div className="search-info">
-                                Found {searchResults.length} teacher{searchResults.length !== 1 ? 's' : ''} matching "{searchTerm}"
-                            </div>
-                        )}
-                    </div>
-
-                    {!isSearching && (
-                        <div className="filter-bar">
-                            <select
-                                className="filter-select"
-                                aria-label="Sort teachers"
-                                value={sortBy}
-                                onChange={(e) => { setSortBy(e.target.value); }}
-                            >
-                                <option value="name">Sort: Name</option>
-                                <option value="reviews">Sort: Most Reviews</option>
-                            </select>
-                            <select
-                                className="filter-select"
-                                aria-label="Filter by department"
-                                value={departmentFilter}
-                                onChange={(e) => { setDepartmentFilter(e.target.value); }}
-                            >
-                                <option value="">All Departments</option>
-                                {departments.map((d) => (
-                                    <option key={d.department} value={d.department}>
-                                        {d.department} ({d.teacher_count})
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    )}
-
-                    <div className="teacher-list">
-                        {loading ? (
-                            <>
-                                {[...Array(5)].map((_, i) => (
-                                    <TeacherCardSkeleton key={i} />
-                                ))}
-                            </>
-                        ) : error ? (
-                            <div className="error-message">
-                                {error} <button onClick={() => loadTeachers(1)} className="retry-btn">Retry</button>
-                            </div>
-                        ) : displayTeachers.length === 0 ? (
-                            <div className="no-results">No teachers match your search. Try a shorter name or a department.</div>
-                        ) : (
-                            <>
-                                {displayTeachers.map((teacher: Teacher, index: number) => (
-                                    <div
-                                        key={teacher.id}
-                                        className="teacher-card-enter"
-                                        style={{ animationDelay: `${Math.min(index * 0.06, 0.6)}s` }}
-                                    >
-                                        <TiltCard
-                                            className="teacher-card"
-                                            maxTilt={6}
-                                            onClick={() => handleTeacherClick(teacher)}
-                                        >
-                                            <Avatar name={teacher.name} imageUrl={teacher.image_url} className="teacher-card-image" priority={index < 6} />
-                                            <div className="teacher-card-info">
-                                                <h3 title={teacher.name}>{teacher.name}</h3>
-                                                <p className="department" title={teacher.department}>{teacher.department}</p>
-                                                <span className="reviews-count">
-                                                    ({teacher.review_count} {teacher.review_count === 1 ? 'review' : 'reviews'})
-                                                </span>
-                                            </div>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    if (window.innerWidth > 768) {
-                                                        handleCardCompare(teacher);
-                                                    } else {
-                                                        toggleCompare(teacher);
-                                                    }
-                                                }}
-                                                className={`compare-toggle-btn ${compareList.some(t => t.id === teacher.id) ? 'compare-toggle-btn-active' : ''}`}
-                                                aria-label={`Compare ${teacher.name}`}
-                                                title="Add to comparison"
-                                            >
-                                                <span className="compare-check">{compareList.some(t => t.id === teacher.id) ? '✓' : '+'}</span>
-                                            </button>
-                                        </TiltCard>
-                                    </div>
-                                ))}
-                                {loadingMore && <div className="loading-more">Loading more teachers...</div>}
-                                {!isSearching && hasMore && !loadingMore && (
-                                    <div className="load-more-container">
-                                        <button onClick={loadMore} className="load-more-btn">
-                                            Show more teachers ({teachers.length} / {totalTeachersCount})
-                                        </button>
-                                    </div>
-                                )}
-                                {!isSearching && !hasMore && teachers.length > 0 && (
-                            <div className="end-of-list">You've seen all {totalTeachersCount} teachers</div>
-                                )}
-                            </>
-                        )}
-                    </div>
-                </div>
+                <TeacherSidebar
+                    hiddenOnMobile={Boolean((selectedTeacher || isComparing || showQnA) && isMobileViewport)}
+                    searchTerm={searchTerm}
+                    handleSearch={handleSearch}
+                    searchInputRef={searchInputRef}
+                    handleAutocompleteSelect={handleAutocompleteSelect}
+                    handleCompareToggle={handleCompareToggle}
+                    compareList={compareList}
+                    isSearching={isSearching}
+                    searchResults={searchResults}
+                    sortBy={sortBy}
+                    setSortBy={setSortBy}
+                    departmentFilter={departmentFilter}
+                    setDepartmentFilter={setDepartmentFilter}
+                    departments={departments}
+                    loading={loading}
+                    error={error}
+                    loadTeachers={loadTeachers}
+                    displayTeachers={displayTeachers}
+                    handleTeacherClick={handleTeacherClick}
+                    loadingMore={loadingMore}
+                    hasMore={hasMore}
+                    loadMore={loadMore}
+                    teachers={teachers}
+                    totalTeachersCount={totalTeachersCount}
+                />
 
                 <main className={`main-content${selectedTeacher && !isComparing ? ' main-content-detail' : ''}`} id="main-content" ref={mainContentRef}>
                 <ErrorBoundary>
@@ -1698,72 +792,19 @@ const App: React.FC = () => {
                             onLoadMoreReviews={handleLoadMoreTeacherReviews}
                         />
                     ) : (
-                        <div className="welcome-message">
-                            <div className="welcome-crest">
-                                <span className="welcome-crest-plate">
-                                    <img
-                                        src={`${import.meta.env.BASE_URL}umt-logo.webp`}
-                                        alt="University of Management and Technology"
-                                        className="welcome-crest-img"
-                                        width={96}
-                                        height={96}
-                                        decoding="async"
-                                    />
-                                </span>
-                            </div>
-                            <p className="welcome-eyebrow">University of Management and Technology · Lahore</p>
-                            <h2 className="welcome-title">Reviews from UMT students, for UMT students.</h2>
-                            <p className="welcome-hint-desktop">Find a teacher to read reviews, or add what you know about a class.</p>
-                            <p className="welcome-hint-mobile">Find a teacher above to read reviews, or add what you know about a class.</p>
-                            <p className="welcome-trust">Anonymous. Moderated. Free.</p>
-                            {departments.length > 0 && (
-                                <div className="department-links">
-                                    <h3>Browse by department</h3>
-                                    <div className="department-links-list">
-                                        {departments.map((d) => (
-                                            <Link key={d.department} to={`/department/${encodeURIComponent(d.department)}`} className="department-link-chip">
-                                                {d.department}
-                                            </Link>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
+                        <WelcomePanel departments={departments} />
                     )}
                 </ErrorBoundary>
                 </main>
             </div>
 
-            <footer className="app-footer" role="contentinfo">
-                <div className="footer-content">
-                    <p>© {new Date().getFullYear()} UMT Teacher Reviews. All rights reserved.</p>
-                    <p className="footer-links">
-                        <a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Use</a> · <a href="/dmca">DMCA &amp; Content Removal</a> · <a href="/contact">Contact</a>
-                    </p>
-                    <p className="footer-disclaimer">All reviews are student opinions and not official university statements.</p>
-                </div>
-            </footer>
+            <AppFooter />
             </PullToRefresh>
             {showAboutModal && (
-                <div className="modal-overlay" onClick={() => setShowAboutModal(false)}>
-                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                        <h3 className="gradient-text modal-heading"><Icon name="book-open" size={22} /> About UMT Teacher Reviews</h3>
-                        <p>This platform allows students to write and read reviews about their teachers anonymously.</p>
-                        <hr />
-                        <p><strong>Version:</strong> 2.0</p>
-                        <button onClick={() => setShowAboutModal(false)} className="modal-close-btn">Close</button>
-                    </div>
-                </div>
+                <AboutModal onClose={() => setShowAboutModal(false)} />
             )}
             {showContactModal && (
-                <div className="modal-overlay" onClick={() => setShowContactModal(false)}>
-                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                        <h3 className="gradient-text modal-heading"><Icon name="mail" size={22} /> Contact Us</h3>
-                        <p>If you have any questions, need help, or want to give feedback, please send an email to:</p>
-                        <p><strong>umt.teacher.reviews@gmail.com</strong></p>
-                        <button onClick={() => setShowContactModal(false)} className="modal-close-btn">Close</button>
-                    </div>
-                </div>
+                <ContactModal onClose={() => setShowContactModal(false)} />
             )}
             {showReviewForm && selectedTeacher && (
                 <ReviewFormModal
@@ -1781,24 +822,13 @@ const App: React.FC = () => {
                 />
             )}
             {compareList.length > 0 && !isComparing && (
-                <div className="compare-bar">
-                    <div className="compare-bar-info">
-                        <span className="compare-bar-count">{compareList.length}/3 selected</span>
-                        <div className="compare-bar-names">
-                            {compareList.map((t) => (
-                                <span key={t.id} className="compare-bar-name" onClick={() => toggleCompare(t)} title="Remove">
-                                    {t.name} ✕
-                                </span>
-                            ))}
-                        </div>
-                    </div>
-                    <div className="compare-bar-actions">
-                        <button onClick={clearCompare} className="compare-clear-btn">Clear</button>
-                        <button onClick={runCompare} disabled={compareList.length < 2 || compareLoading} className="compare-go-btn">
-                            {compareLoading ? <><span className="spinner-small"></span> Loading...</> : 'Compare'}
-                        </button>
-                    </div>
-                </div>
+                <CompareBar
+                    compareList={compareList}
+                    compareLoading={compareLoading}
+                    toggleCompare={toggleCompare}
+                    clearCompare={clearCompare}
+                    runCompare={runCompare}
+                />
             )}
             <BottomNav
                 items={[
