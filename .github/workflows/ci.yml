@@ -14,11 +14,31 @@ concurrency:
 
 jobs:
   backend:
-    name: Backend (lint + tests)
+    name: Backend (syntax, unit + API tests)
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: backend
+    # Disposable MySQL for the API tests in backend/test/ (they wipe it).
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci_root_pw
+          MYSQL_DATABASE: trs_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pci_root_pw"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      TEST_DB_HOST: 127.0.0.1
+      TEST_DB_PORT: 3306
+      TEST_DB_USER: root
+      TEST_DB_PASSWORD: ci_root_pw
+      TEST_DB_NAME: trs_test
     steps:
       - uses: actions/checkout@v4
 

@@ -39,15 +39,35 @@ npm start               # http://localhost:3000
 ```
 
 The dev server proxies `/api` to the backend; see `frontend/src/services/api.ts`
-and `REACT_APP_API_BASE` if you host the API elsewhere.
+and `VITE_API_BASE` if you host the API elsewhere.
 
 ## Tests
 
 ```bash
-cd backend && npm test                 # node --test
-cd frontend && npx react-scripts test --watchAll=false
+cd backend && npm test                 # unit tests (+ API tests if TEST_DB_HOST is set)
+cd frontend && npm test                # Vitest
 cd frontend && npx tsc --noEmit        # type check
 ```
+
+### API tests
+
+`backend/test/` holds black-box API tests: they start the real `server.js`
+against a **disposable** MySQL database, load `schema.sql`, and exercise the
+public and admin endpoints over HTTP (reviews, search, moderation, CSRF,
+login, 2FA, CORS, rate limits). They **drop every table** in that database,
+so never point them at real data.
+
+```bash
+# e.g. with Docker
+docker run -d --name trs-test-db -p 3306:3306 \
+  -e MYSQL_ROOT_PASSWORD=test -e MYSQL_DATABASE=trs_test mysql:8.0
+
+cd backend
+TEST_DB_HOST=127.0.0.1 TEST_DB_USER=root TEST_DB_PASSWORD=test TEST_DB_NAME=trs_test npm test
+```
+
+Without `TEST_DB_HOST` the API tests are skipped. CI runs them on every push
+against a MySQL 8 service container.
 
 ## Administration
 
