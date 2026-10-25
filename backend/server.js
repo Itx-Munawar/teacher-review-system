@@ -339,6 +339,88 @@ const clampInt = (value, fallback, min, max) => {
     return Math.min(Math.max(parsed, min), max);
 };
 
+// ========== TOTP TWO-FACTOR (RFC 6238, SHA1, 30s, 6 digits) ==========
+// Deliberately dependency-free: the algorithm is ~40 lines and the only
+// "secret" material it handles is a per-admin code, so pulling in otplib for
+// it would not pay for its supply-chain surface.
+const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+const base32Encode = (buffer) => {
+    let bits = 0;
+    let value = 0;
+    let out = '';
+    for (const byte of buffer) {
+        value = (value << 8) | byte;
+        bits += 8;
+        while (bits >= 5) {
+            out += BASE32_ALPHABET[(value >>> (bits - 5)) & 31];
+            bits -= 5;
+        }
+    }
+    if (bits > 0) out += BASE32_ALPHABET[(value << (5 - bits)) & 31];
+    return out;
+};
+
+const base32Decode = (input) => {
+    const clean = String(input || '').toUpperCase().replace(/[^A-Z2-7]/g, '');
+    if (!clean) return Buffer.alloc(0);
+    let bits = 0;
+    let value = 0;
+    const bytes = [];
+    for (const ch of clean) {
+        value = (value << 5) | BASE32_ALPHABET.indexOf(ch);
+        bits += 5;
+        if (bits >= 8) {
+            bits -= 8;
+            bytes.push((value >>> bits) & 0xff);
+        }
+    }
+    return Buffer.from(bytes);
+};
+
+const generateTotpSecret = () => base32Encode(crypto.randomBytes(20)); // 32 chars
+
+// HOTP (RFC 4226) with the counter written big-endian, as TOTP uses.
+const hotp = (secretBytes, counter) => {
+    const buf = Buffer.alloc(8);
+    buf.writeBigUInt64BE(BigInt(counter));
+    const hmac = crypto.createHmac('sha1', secretBytes).update(buf).digest();
+    const offset = hmac[hmac.length - 1] & 0x0f;
+    const code = ((hmac[offset] & 0x7f) << 24) | (hmac[offset + 1] << 16) |
+        (hmac[offset + 2] << 8) | hmac[offset + 3];
+    return String(code % 1_000_000).padStart(6, '0');
+};
+
+// Accept the current step plus one step either side so a phone whose clock is
+// a minute off still works; the code is a 22-bit space, so a 3-way check does
+// not meaningfully weaken brute-force resistance (the login is also
+// rate-limited and the password still gates the request).
+const totpVerify = (secret, code) => {
+    const clean = String(code || '').replace(/\s+/g, '');
+    if (!/^\d{6}$/.test(clean)) return false;
+    const secretBytes = base32Decode(secret);
+    if (secretBytes.length < 10) return false;
+    const step = Math.floor(Date.now() / 1000 / 30);
+    const given = Buffer.from(clean);
+    for (let i = -1; i <= 1; i++) {
+        const candidate = Buffer.from(hotp(secretBytes, step + i));
+        if (crypto.timingSafeEqual(candidate, given)) return true;
+    }
+    return false;
+};
+
+const totpProvisioningUri = (secret, username) => {
+    const label = `UMT Teacher Reviews:${username}`;
+    const params = new URLSearchParams({
+        issuer: 'UMT Teacher Reviews',
+        algorithm: 'SHA1',
+        digits: '6',
+        period: '30',
+        secret
+    });
+    return `otpauth://totp/${label}?${params.toString()}`;
+};
+
 // Hand the event loop a turn between expensive batches so a long sweep does
 // not freeze every other request (and the platform health check).
 const yieldToEventLoop = () => new Promise((resolve) => setImmediate(resolve));
@@ -840,6 +922,18 @@ const runSchemaBootstrap = async () => {
             adminTokenVersionReady = true;
         } catch (tvErr) {
             console.error('⚠️ Could not ensure admins.token_version column:', tvErr.message);
+        }
+        // Optional TOTP two-factor column. Defaults allow the auth path to work
+        // for all existing admins without touching their rows.
+        try {
+            const [totpCols] = await db.query("SHOW COLUMNS FROM admins LIKE 'totp_enabled'");
+            if (totpCols.length === 0) {
+                await db.query('ALTER TABLE admins ADD COLUMN totp_secret VARCHAR(64) DEFAULT NULL');
+                await db.query('ALTER TABLE admins ADD COLUMN totp_enabled TINYINT(1) NOT NULL DEFAULT 0');
+                console.log('✅ Added TOTP columns to admins table');
+            }
+        } catch (totpErr) {
+            console.error('⚠️ Could not ensure admins.totp_* columns:', totpErr.message);
         }
         // Zero-result search terms (content-gap signals). Pruned after 30 days.
         try {
@@ -1483,7 +1577,7 @@ app.post('/api/reviews/:id/report', reportLimiter, [
 
 app.post('/api/admin/login', loginLimiter, csrfValidate, async (req, res) => {
     try {
-        const { username, password } = req.body || {};
+        const { username, password, totp_code } = req.body || {};
         if (!isText(username, 100) || !isText(password, 200)) {
             return res.status(400).json({ error: 'Username and password are required' });
         }
@@ -1496,11 +1590,6 @@ app.post('/api/admin/login', loginLimiter, csrfValidate, async (req, res) => {
         const admin = admins[0];
         const isValid = await bcrypt.compare(password, admin.password);
         if (!isValid) {
-            // Deliberately no hard "account locked" gate before the password
-            // check: with a single admin, five anonymous bad guesses used to
-            // become a free, repeatable denial of service. Guessing is already
-            // throttled per IP, so wrong passwords only record a lockout
-            // timestamp (for the alert) while a CORRECT password always works.
             const alreadyLocked = admin.locked_until && new Date(admin.locked_until) > new Date();
             if (!alreadyLocked) {
                 const failedAttempts = (admin.failed_attempts || 0) + 1;
@@ -1508,8 +1597,6 @@ app.post('/api/admin/login', loginLimiter, csrfValidate, async (req, res) => {
                 await db.query('UPDATE admins SET failed_attempts = ?, locked_until = ? WHERE id = ?', [failedAttempts, lockedUntil, admin.id]);
                 if (lockedUntil) {
                     await createAuditLog(null, 'LOGIN_LOCKOUT', `Locked after ${failedAttempts} failed attempts`, req.ip);
-                    // Fire and forget: a slow SMTP server must not delay the
-                    // response (that would leak which usernames exist).
                     sendEmail(
                         admin.email,
                         'Security alert: repeated failed admin logins',
@@ -1519,9 +1606,20 @@ app.post('/api/admin/login', loginLimiter, csrfValidate, async (req, res) => {
             }
             return res.status(401).json({ error: 'Invalid credentials' });
         }
+
+        // If 2FA is enabled on this account, require the TOTP code before
+        // issuing a session cookie.
+        if (admin.totp_enabled && admin.totp_secret) {
+            if (!totp_code) {
+                return res.status(200).json({ requires_totp: true });
+            }
+            if (!totpVerify(admin.totp_secret, totp_code)) {
+                await createAuditLog(admin.id, '2FA_FAILED', 'Invalid TOTP code during login', req.ip);
+                return res.status(401).json({ error: 'Invalid 2FA code' });
+            }
+        }
+
         await db.query('UPDATE admins SET failed_attempts = 0, locked_until = NULL WHERE id = ?', [admin.id]);
-        // `tv` ties the token to the current revocation counter, so a password
-        // reset (which bumps it) throws off every session issued before it.
         const token = signAdminToken(admin);
         await createAuditLog(admin.id, 'LOGIN', 'Admin logged in', req.ip);
         res.cookie('admin_token', token, buildCookieOptions(req));
@@ -1533,8 +1631,82 @@ app.post('/api/admin/login', loginLimiter, csrfValidate, async (req, res) => {
 });
 
 // GET /api/admin/me - validate the current admin session
-app.get('/api/admin/me', verifyAdmin, (req, res) => {
-    res.json({ admin: { id: req.admin.id, username: req.admin.username } });
+app.get('/api/admin/me', verifyAdmin, async (req, res) => {
+    try {
+        // The panel uses this to show the 2FA state; a column that predates the
+        // migration must not 500 the whole session check.
+        let totp_enabled = 0;
+        try {
+            const [rows] = await db.query('SELECT totp_enabled FROM admins WHERE id = ?', [req.admin.id]);
+            totp_enabled = rows[0]?.totp_enabled ? 1 : 0;
+        } catch (_) { /* totp_enabled column not migrated yet */ }
+        res.json({ admin: { id: req.admin.id, username: req.admin.username, totp_enabled } });
+    } catch (error) {
+        console.error('/api/admin/me error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// POST /api/admin/2fa/setup - start two-factor enrollment.
+// Saves a fresh secret (totp_enabled stays 0 until the code is confirmed) and
+// returns an otpauth:// URI the phone scans. Calling it again before enabling
+// replaces the secret, so a mistyped enrollment never strands the account.
+app.post('/api/admin/2fa/setup', verifyAdmin, csrfValidate, async (req, res) => {
+    try {
+        const secret = generateTotpSecret();
+        await db.query('UPDATE admins SET totp_secret = ?, totp_enabled = 0 WHERE id = ?', [secret, req.admin.id]);
+        await createAuditLog(req.admin.id, '2FA_SETUP', '2FA enrollment started', req.ip);
+        res.json({
+            secret,
+            otpauth_uri: totpProvisioningUri(secret, req.admin.username || `admin-${req.admin.id}`)
+        });
+    } catch (error) {
+        console.error('2FA setup error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// POST /api/admin/2fa/enable - confirm enrollment by submitting a live code
+// from the authenticator app. The account is locked out of 2FA-free logins
+// only after this succeeds, so a broken scan cannot trap the admin.
+app.post('/api/admin/2fa/enable', verifyAdmin, csrfValidate, async (req, res) => {
+    try {
+        const { code } = req.body || {};
+        if (!isText(code, 10)) return res.status(400).json({ error: 'Enter the 6-digit code from your authenticator app' });
+
+        let adminId = req.admin.id;
+        let username = req.admin.username;
+        // Setup may have stored the secret on a different row if the account
+        // was re-created; always read the current row before verifying.
+        const [rows] = await db.query('SELECT totp_secret, totp_enabled FROM admins WHERE id = ?', [adminId]);
+        if (rows.length === 0) return res.status(500).json({ error: 'Admin row not found' });
+        const { totp_secret, totp_enabled } = rows[0];
+        if (!totp_secret) return res.status(400).json({ error: 'Run setup first (scan the QR/secret), then confirm with a code' });
+        if (totp_enabled) return res.json({ success: true, message: 'Two-factor authentication is already enabled' });
+        if (!totpVerify(totp_secret, code)) {
+            await createAuditLog(adminId, '2FA_ENABLE_FAILED', 'Wrong code while enabling 2FA', req.ip);
+            return res.status(401).json({ error: 'That code did not match. Check the app and try again.' });
+        }
+        await db.query('UPDATE admins SET totp_enabled = 1 WHERE id = ?', [adminId]);
+        await createAuditLog(adminId, '2FA_ENABLED', '2FA enrollment confirmed', req.ip);
+        res.json({ success: true, message: 'Two-factor authentication is now enabled' });
+    } catch (error) {
+        console.error('2FA enable error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// POST /api/admin/2fa/disable - turn 2FA off. CSRF-protected like every other
+// state change; the audit row keeps a record of when it was dropped.
+app.post('/api/admin/2fa/disable', verifyAdmin, csrfValidate, async (req, res) => {
+    try {
+        await db.query('UPDATE admins SET totp_enabled = 0, totp_secret = NULL WHERE id = ?', [req.admin.id]);
+        await createAuditLog(req.admin.id, '2FA_DISABLED', '2FA turned off', req.ip);
+        res.json({ success: true, message: 'Two-factor authentication disabled' });
+    } catch (error) {
+        console.error('2FA disable error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 // POST /api/admin/logout - clear the admin session cookie

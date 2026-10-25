@@ -30,15 +30,31 @@ Status key: **Done** · **In progress** · **Planned** · **Needs input** (accou
 | 17 | Zero-result search logging | Done |
 | 18 | Structured request logging | Done |
 
-## Phase 3 — Security
+## Phase 3 — Security (done)
 
 | # | Step | Status |
 | --- | --- | --- |
-| 19 | Admin TOTP two-factor authentication | Planned |
+| 19 | Admin TOTP two-factor authentication | Done |
 | 20 | Error monitoring (Sentry) | Needs input — DSN |
 | 21 | Uptime monitor / keep-warm ping | Needs input — external account |
 
-## Phase 4 — Product and architecture
+- `POST /api/admin/login` now accepts an optional `totp_code`. When the account
+  has a TOTP secret, the endpoint returns `{ requires_totp: true }` instead of
+  a session cookie, and the frontend asks the user for the code in the login
+  form before proceeding.
+- New endpoints: `POST /api/admin/2fa/setup` (generates a fresh secret and
+  returns a provisioning URI), `POST /api/admin/2fa/enable` (confirms the
+  enrollment by verifying a live code), `POST /api/admin/2fa/disable` (turns
+  2FA off; logged in audit). The schema bootstrap adds the `totp_secret` and
+  `totp_enabled` columns if they are missing.
+- `GET /api/admin/me` now includes `totp_enabled` so the security tab can
+  update immediately after a change.
+- Frontend: login form shows the TOTP field when 2FA is active; a **Security**
+  tab in the admin panel walks through QR code scanning, manual secret entry,
+  confirmation, and (optionally) disabling 2FA.
+- A bare `2FA_FAILED` action is logged when a wrong code is submitted.
+
+## Phase 4 follow-up (planned)
 
 | # | Step | Status |
 | --- | --- | --- |

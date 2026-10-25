@@ -185,4 +185,30 @@ Roadmap: `ROADMAP.md`.
   courses and open reader reports — only when something is waiting. Recipient
   is `MODERATION_DIGEST_EMAIL`, defaulting to `EMAIL_USER`.
 
+## Phase 3 follow-up (2026-10-25, branch `review/2026-10-phase1`)
+
+Roadmap: `ROADMAP.md`.
+
+### Admin two-factor
+
+- Optional TOTP (RFC 6238) for admin accounts, implemented with native Node
+  `crypto` and no new dependencies: `generateTotpSecret`, `totpVerify`,
+  and `totpProvisioningUri` in `backend/server.js`.
+- `admins.totp_secret` (VARCHAR(64)) and `admins.totp_enabled` (TINYINT(1))
+  are added by the schema bootstrap so a cold deploy works without manual SQL.
+- Login is two-step when 2FA is enabled: the password is still checked first
+  (same timing profile), and only after that does the endpoint require a 6-digit
+  code. A wrong code logs a `2FA_FAILED` audit row.
+- New endpoints:
+  - `POST /api/admin/2fa/setup` — generates a fresh secret and returns it along
+    with an `otpauth://` URI.
+  - `POST /api/admin/2fa/enable` — confirms the enrollment with one live code;
+    bumps `totp_enabled` atomically so the account is unusable from login
+    immediately after this succeeds.
+  - `POST /api/admin/2fa/disable` — clears both columns; the audit row records
+    who disabled it and when.
+  - `GET /api/admin/me` now returns `totp_enabled`.
+- Frontend: the login form shows a 6-digit code input when `requires_totp`
+  is returned; a **Security** tab in the admin panel handles provisioning
+  (QR + manual secret), confirmation, and disabling.
 

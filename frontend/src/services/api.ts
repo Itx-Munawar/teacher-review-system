@@ -161,12 +161,14 @@ export const reviewCustomCourse = (id: number, action: 'approve' | 'reject') => 
 
 // ========== ADMIN APIs ==========
 
-export const adminLogin = (username: string, password: string) => {
-    return api.post('/admin/login', { username, password });
+export const adminLogin = (username: string, password: string, totp_code?: string) => {
+    return api.post('/admin/login', { username, password, totp_code });
 };
 
-export const adminMe = () => {
-    return api.get('/admin/me');
+export const adminMe = async () => {
+    const res = await api.get('/admin/me');
+    // Backward-compatible shape; older backends return admin without totp_enabled.
+    return { admin: res.data.admin } as { admin: { id: number; username: string; totp_enabled?: number } };
 };
 
 export const adminLogout = () => {
@@ -263,6 +265,25 @@ export const getAdminAuditLogs = (page: number = 1, limit: number = 25, action: 
 /** Teacher search terms that returned zero results (content-gap signals). */
 export const getSearchGaps = () => {
     return api.get('/admin/search-gaps');
+};
+
+// ========== ADMIN TWO-FACTOR (RFC 6238 TOTP) ==========
+
+export interface Admin2faProvision {
+    secret: string;
+    otpauth_uri: string;
+}
+
+export const getAdmin2faProvision = () => {
+    return api.post<{ secret: string; otpauth_uri: string }>('/admin/2fa/setup', {});
+};
+
+export const confirmAdmin2fa = (code: string) => {
+    return api.post('/admin/2fa/enable', { code });
+};
+
+export const disableAdmin2fa = () => {
+    return api.post('/admin/2fa/disable', {});
 };
 
 /**

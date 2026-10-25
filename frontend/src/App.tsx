@@ -123,12 +123,16 @@ const App: React.FC = () => {
     const [adminUsername, setAdminUsername] = useState('');
     const [adminPassword, setAdminPassword] = useState('');
     const [adminError, setAdminError] = useState('');
+    const [admin_totp_code, setAdmin_totp_code] = useState('');
+    /** When true, login was accepted but a TOTP code is still required. */
+    const [requires_totp, setRequires_totp] = useState(false);
     const [showAddTeacherForm, setShowAddTeacherForm] = useState(false);
     const [newTeacherName, setNewTeacherName] = useState('');
     const [newTeacherDepartment, setNewTeacherDepartment] = useState('');
     const [newTeacherImage, setNewTeacherImage] = useState('');
     const [reviewsForModeration, setReviewsForModeration] = useState<AdminReview[]>([]);
     const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
+    const [adminTotpEnabled, setAdminTotpEnabled] = useState(false);
 
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastIdRef = useRef(0);
@@ -434,6 +438,16 @@ const App: React.FC = () => {
         } catch (err) {
             console.error('Error loading admin stats:', err);
         }
+
+        // Check whether 2FA is enabled on this account (loaded with every
+        // data refresh so the security tab can update instantly after a change).
+        try {
+            const meRes = await adminMe();
+            const enabled = !!meRes.admin.totp_enabled;
+            setAdminTotpEnabled(enabled);
+        } catch (err) {
+            console.error('Error checking 2FA status:', err);
+        }
     }, [reviewsPendingOnly]);
 
     // Toggle the "pending only" review filter (dashboard pending counter).
@@ -728,18 +742,23 @@ const App: React.FC = () => {
         e.preventDefault();
         setAdminError('');
         try {
-            await adminLogin(adminUsername, adminPassword);
+            const res = await adminLogin(adminUsername, adminPassword, admin_totp_code || undefined);
+            const data = res.data as any;
+            if (data?.requires_totp) {
+                setRequires_totp(true);
+                return;
+            }
             setIsAdminLoggedIn(true);
             setAdminUsername('');
             setAdminPassword('');
+            setAdmin_totp_code('');
+            setRequires_totp(false);
             showToast('Admin login successful!', 'success');
-            // The isAdminLoggedIn effect owns the data load; calling it here too
-            // fired every admin request twice on login.
-        } catch (error) {
-            const err = error as { response?: { data?: { error?: string } } };
-            setAdminError(err.response?.data?.error || 'Login failed');
+        } catch (error: any) {
+            const errData = error?.response?.data;
+            setAdminError(errData?.error || 'Login failed');
         }
-    }, [adminUsername, adminPassword, showToast]);
+    }, [adminUsername, adminPassword, admin_totp_code, showToast]);
 
     const logoutInFlightRef = useRef(false);
 
@@ -1372,6 +1391,9 @@ const App: React.FC = () => {
                             setAdminPassword={setAdminPassword}
                             adminError={adminError}
                             onLogin={handleAdminLogin}
+                            requires_totp={requires_totp}
+                            admin_totp_code={admin_totp_code}
+                            setAdmin_totp_code={setAdmin_totp_code}
                         />
                         </ErrorBoundary>
                     </div>
@@ -1446,6 +1468,7 @@ const App: React.FC = () => {
                         adminReportsPage={adminReportsPage}
                         adminReportsTotalPages={adminReportsTotalPages}
                         adminLoadingMoreReports={adminLoadingMoreReports}
+                        totpEnabled={adminTotpEnabled}
                     />
                     </ErrorBoundary>
                 </div>
