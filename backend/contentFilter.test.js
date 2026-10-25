@@ -157,9 +157,14 @@ const sweepRows = () => [
     { id: 5, comment: 'rejected earlier by admin', user_name: 'E', courses: null, is_approved: 0 } // clean, manually held
 ];
 
+const pageRows = (rows, params) => {
+    const [lastId, limit] = params;
+    return rows.filter((row) => Number(row.id) > Number(lastId)).slice(0, Number(limit));
+};
+
 const makeDb = (rows, updates) => ({
-    query: async (sql) => {
-        if (sql.includes('FROM reviews')) return [rows, []];
+    query: async (sql, params = []) => {
+        if (sql.includes('FROM reviews')) return [pageRows(rows, params), []];
         updates.push(sql);
         return [{ affectedRows: 0 }, []];
     }
@@ -200,6 +205,22 @@ test('sweep is idempotent once rows are queued', async () => {
     assert.strictEqual(updates.length, 0, 'no writes on second run');
 });
 
+test('sweep paginates past the first 500-row batch', async () => {
+    const rows = Array.from({ length: 620 }, (_, i) => ({
+        id: i + 1,
+        comment: i === 619 ? 'fucking terrible' : 'clear explanations',
+        user_name: 'A',
+        courses: null,
+        is_approved: 1
+    }));
+    const updates = [];
+    const result = await sweepExistingReviews(makeDb(rows, updates));
+
+    assert.strictEqual(result.scanned, 620, 'every page was scanned');
+    assert.deepStrictEqual(result.flaggedIds, [620], 'flag found in the last batch');
+    assert.strictEqual(updates.length, 1, 'one chunked UPDATE');
+});
+
 test('parseCourseList handles JSON, legacy text, null and junk', () => {
     assert.deepStrictEqual(parseCourseList('["Math", " Physics "]'), ['Math', 'Physics']);
     assert.deepStrictEqual(parseCourseList('null'), []);
@@ -231,11 +252,11 @@ const qaData = () => ({
 });
 
 const makeQaDb = (data, updates) => ({
-    query: async (sql) => {
+    query: async (sql, params = []) => {
         if (sql.startsWith('SELECT')) {
-            if (sql.includes('question_answers')) return [data.answers, []];
-            if (sql.includes('FROM questions')) return [data.questions, []];
-            if (sql.includes('custom_courses')) return [data.courses, []];
+            if (sql.includes('question_answers')) return [pageRows(data.answers, params), []];
+            if (sql.includes('FROM questions')) return [pageRows(data.questions, params), []];
+            if (sql.includes('custom_courses')) return [pageRows(data.courses, params), []];
         }
         updates.push(sql);
         return [{ affectedRows: 0 }, []];

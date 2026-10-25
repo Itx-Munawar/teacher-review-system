@@ -21,6 +21,14 @@ const JWT_SECRET = process.env.JWT_SECRET;
 // cannot silently weaken it, and existing cost-10 hashes still verify because
 // bcrypt stores the cost inside the hash itself.
 const BCRYPT_ROUNDS = Math.min(15, Math.max(10, parseInt(process.env.BCRYPT_ROUNDS, 10) || 12));
+// Sliding admin session: every authenticated request moves the expiry forward,
+// so 30 idle minutes ends the session server-side as well as in the UI (the
+// client timer alone left a stolen cookie usable for the full JWT lifetime).
+const ADMIN_SESSION_MINUTES = Math.min(24 * 60, Math.max(5, parseInt(process.env.ADMIN_SESSION_MINUTES, 10) || 30));
+const ADMIN_SESSION_MS = ADMIN_SESSION_MINUTES * 60 * 1000;
+// Public site origin used in sitemap.xml / robots.txt. FRONTEND_URL is already
+// required at startup, so there is no reason to bake a deployment hostname in.
+const PUBLIC_SITE_URL = String(process.env.FRONTEND_URL || 'https://teacher-review-system-zeta.vercel.app').replace(/\/+$/, '');
 
 // ========== ENV VALIDATION ==========
 const missingVars = [];
@@ -64,7 +72,7 @@ const buildCookieOptions = (req) => {
         httpOnly: true,
         secure,
         sameSite: sameSiteFor(req, secure),
-        maxAge: 24 * 60 * 60 * 1000,
+        maxAge: ADMIN_SESSION_MS,
         path: '/'
     };
 };
@@ -82,7 +90,15 @@ const allowedOrigins = new Set(
         .filter(Boolean)
         .concat([
             'https://teacher-review-system-zeta.vercel.app',
-            'http://localhost:3000'
+            // The configured frontend origin (e.g. http://localhost:3000 in
+            // dev) instead of hardcoding localhost into every deployment.
+            ...(() => {
+                try {
+                    return [new URL(process.env.FRONTEND_URL).origin];
+                } catch (error) {
+                    return [];
+                }
+            })()
         ])
 );
 
@@ -212,10 +228,31 @@ const sendEmail = async (to, subject, html) => {
 // lock the admin out of their own panel.
 let adminTokenVersionReady = false;
 
+const signAdminToken = (admin) => jwt.sign(
+    {
+        id: admin.id,
+        username: admin.username,
+        tv: admin.token_version || admin.tv || 0
+    },
+    JWT_SECRET,
+    { algorithm: 'HS256', expiresIn: `${ADMIN_SESSION_MINUTES}m` }
+);
+
+// Sliding expiry: once a cookie session is past half of its lifetime, the next
+// authenticated request re-issues it. Header-token clients manage their own
+// token lifetime, so they are never given a cookie they did not ask for.
+const refreshAdminSession = (req, res, decoded, cookieToken) => {
+    if (!cookieToken || !decoded.exp) return;
+    const remainingMs = decoded.exp * 1000 - Date.now();
+    if (remainingMs > ADMIN_SESSION_MS / 2) return;
+    res.cookie('admin_token', signAdminToken(decoded), buildCookieOptions(req));
+};
+
 const verifyAdmin = (req, res, next) => {
     const cookies = parseCookies(req);
     const headerToken = req.headers.authorization?.split(' ')[1];
-    const token = headerToken || cookies.admin_token;
+    const cookieToken = headerToken ? null : cookies.admin_token;
+    const token = headerToken || cookieToken;
     if (!token) return res.status(401).json({ error: 'No token provided' });
 
     let decoded;
@@ -228,6 +265,7 @@ const verifyAdmin = (req, res, next) => {
     }
 
     if (!adminTokenVersionReady) {
+        refreshAdminSession(req, res, decoded, cookieToken);
         req.admin = decoded;
         return next();
     }
@@ -237,6 +275,7 @@ const verifyAdmin = (req, res, next) => {
             if (rows.length === 0 || rows[0].token_version !== (decoded.tv || 0)) {
                 return res.status(403).json({ error: 'Session revoked' });
             }
+            refreshAdminSession(req, res, decoded, cookieToken);
             req.admin = decoded;
             next();
         })
@@ -252,6 +291,31 @@ const verifyAdmin = (req, res, next) => {
 // surface. The length caps also stop a large payload from becoming a bcrypt
 // cost amplifier.
 const isText = (value, maxLen) => typeof value === 'string' && value.length > 0 && value.length <= maxLen;
+
+// Query params and route params are attacker-controlled strings. Clamp them
+// before they reach LIMIT/OFFSET, where MySQL rejects a negative value with a
+// 500 instead of the 400 the caller deserves.
+const clampInt = (value, fallback, min, max) => {
+    const parsed = parseInt(value, 10);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(Math.max(parsed, min), max);
+};
+
+// Hand the event loop a turn between expensive batches so a long sweep does
+// not freeze every other request (and the platform health check).
+const yieldToEventLoop = () => new Promise((resolve) => setImmediate(resolve));
+
+// One password rule, used by both the reset flow and the bootstrap route so
+// the two can never drift apart. Returns an error message or null.
+const passwordProblem = (password) => {
+    if (typeof password !== 'string' || password.length < 10) {
+        return 'Password must be at least 10 characters';
+    }
+    if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+        return 'Password must include at least one letter and one number';
+    }
+    return null;
+};
 
 // Constant work per login attempt: comparing against a fixed dummy hash keeps
 // "no such user" and "wrong password" indistinguishable by response timing.
@@ -374,8 +438,6 @@ const runQaFilterSweep = async () => {
             return;
         }
         const result = await sweepExistingQa(db);
-        if (result.questions.toQueue > 0 || result.answers.toQueue > 0) invalidateCache('questions');
-        if (result.courses.toDemote > 0) invalidateCache('courses');
         qaSweepDone = true;
         await db.query(
             "INSERT INTO audit_logs (action, details, ip_address) VALUES ('SWEEP_QA', ?, 'system')",
@@ -421,13 +483,27 @@ const runSensitiveReviewBackfill = async () => {
             }
         }
 
-        const [rows] = await db.query(
-            "SELECT id, comment, user_name, courses FROM reviews WHERE moderation_flag IS NULL OR moderation_flag <> 'sensitive'"
-        );
-        const flaggedIds = rows
-            .filter((row) => moderationFlagFor(`${row.comment || ''} ${row.user_name || ''} ${row.courses || ''}`) === 'sensitive')
-            .map((row) => row.id);
-
+        const BATCH = 500;
+        let lastId = 0;
+        let scanned = 0;
+        const flaggedIds = [];
+        for (;;) {
+            const [rows] = await db.query(
+                `SELECT id, comment, user_name, courses FROM reviews
+                 WHERE id > ? AND (moderation_flag IS NULL OR moderation_flag <> 'sensitive')
+                 ORDER BY id ASC LIMIT ?`,
+                [lastId, BATCH]
+            );
+            if (rows.length === 0) break;
+            scanned += rows.length;
+            lastId = Number(rows[rows.length - 1].id);
+            for (const row of rows) {
+                const text = `${row.comment || ''} ${row.user_name || ''} ${row.courses || ''}`;
+                if (moderationFlagFor(text) === 'sensitive') flaggedIds.push(row.id);
+            }
+            if (rows.length < BATCH) break;
+            await yieldToEventLoop();
+        }
         const CHUNK = 500;
         for (let i = 0; i < flaggedIds.length; i += CHUNK) {
             const chunk = flaggedIds.slice(i, i + CHUNK);
@@ -440,9 +516,9 @@ const runSensitiveReviewBackfill = async () => {
         sensitiveBackfillDone = true;
         await db.query(
             "INSERT INTO audit_logs (action, details, ip_address) VALUES ('FLAG_SENSITIVE_REVIEWS', ?, 'system')",
-            [JSON.stringify({ version: SENSITIVE_BACKFILL_VERSION, scanned: rows.length, flagged: flaggedIds.length })]
+            [JSON.stringify({ version: SENSITIVE_BACKFILL_VERSION, scanned, flagged: flaggedIds.length })]
         );
-        console.log(`🔎 Sensitive-review backfill v${SENSITIVE_BACKFILL_VERSION}: scanned ${rows.length}, flagged ${flaggedIds.length}`);
+        console.log(`🔎 Sensitive-review backfill v${SENSITIVE_BACKFILL_VERSION}: scanned ${scanned}, flagged ${flaggedIds.length}`);
     } catch (error) {
         sensitiveBackfillAttempts += 1;
         console.error('❌ Sensitive-review backfill failed:', error.message);
@@ -606,18 +682,23 @@ ensureTables();
 // Supports: ?page=N&limit=20..200&sort=name|reviews|newest&department=<name>
 app.get('/api/teachers', async (req, res) => {
     try {
-        const page = parseInt(req.query.page) || 1;
+        const page = clampInt(req.query.page, 1, 1, 100000);
         // limit: the admin panel pulls the whole teacher list in big pages so
         // its sorting covers every row; public callers keep the default of 20.
-        const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 200);
+        const limit = clampInt(req.query.limit, 20, 1, 200);
         const offset = (page - 1) * limit;
         const sort = req.query.sort || 'name';
         const department = req.query.department || '';
 
+        // An admin must never see a cached list from before their last
+        // add/approve/delete. Public visitors keep the 60s shared cache.
+        const bypassCache = Boolean(parseCookies(req).admin_token);
+        const cacheControl = bypassCache ? 'private, no-store' : 'public, max-age=60';
+
         const cacheKey = `teachers:${page}:${limit}:${sort}:${department}`;
-        const cached = getCached(cacheKey);
+        const cached = bypassCache ? null : getCached(cacheKey);
         if (cached) {
-            res.set('Cache-Control', 'public, max-age=60');
+            res.set('Cache-Control', cacheControl);
             return res.json(cached);
         }
 
@@ -655,7 +736,7 @@ app.get('/api/teachers', async (req, res) => {
         };
 
         setCache(cacheKey, result);
-        res.set('Cache-Control', 'public, max-age=60');
+        res.set('Cache-Control', cacheControl);
         res.json(result);
     } catch (error) {
         console.error('Error fetching teachers:', error);
@@ -688,12 +769,15 @@ app.get('/api/departments', async (req, res) => {
 app.get('/api/teachers/search', searchLimiter, async (req, res) => {
     try {
         const searchTerm = req.query.q;
-        const limit = Math.min(parseInt(req.query.limit) || 0, 50);
+        const limit = clampInt(req.query.limit, 0, 0, 50);
         if (!searchTerm || searchTerm.trim() === '') {
             return res.json([]);
         }
 
         const term = searchTerm.trim();
+        if (term.length > 100) {
+            return res.status(400).json({ error: 'Search term is too long' });
+        }
         // Per-word SOUNDEX: MySQL's SOUNDEX truncates to 4 chars over the whole
         // string, so a multi-word name shifts the code. Compare first/last word
         // of the name against first/last word of the query so "Muhamad" matches
@@ -736,16 +820,17 @@ app.get('/api/teachers/search', searchLimiter, async (req, res) => {
 // ========== NEW: GET SINGLE TEACHER WITH REVIEWS ==========
 app.get('/api/teachers/:id', async (req, res) => {
     try {
-        const teacherId = req.params.id;
+        const teacherId = Number.parseInt(req.params.id, 10);
+        if (!Number.isInteger(teacherId) || teacherId < 1) {
+            return res.status(400).json({ error: 'Invalid teacher ID' });
+        }
 
-        // Ensure courses column exists (cold-start safety net)
-        try {
-            const [coursesCol] = await db.query("SHOW COLUMNS FROM reviews LIKE 'courses'");
-            if (coursesCol.length === 0) {
-                await db.query('ALTER TABLE reviews ADD COLUMN courses VARCHAR(2000) NULL AFTER user_name');
-                console.log('✅ Added courses column to reviews table (via teacher detail)');
-            }
-        } catch (e) { /* non-critical */ }
+        // Reviews are paginated so a heavily reviewed teacher cannot return an
+        // unbounded payload. Callers that omit the params keep the old shape
+        // (first page, newest first).
+        const reviewPage = clampInt(req.query.review_page, 1, 1, 100000);
+        const reviewLimit = clampInt(req.query.review_limit, 50, 1, 100);
+        const reviewOffset = (reviewPage - 1) * reviewLimit;
 
         // Get teacher
         const [teachers] = await db.query(
@@ -763,8 +848,9 @@ app.get('/api/teachers/:id', async (req, res) => {
             `SELECT r.id, r.teacher_id, r.comment, r.user_name, r.courses, r.is_approved, r.created_at
              FROM reviews r
              WHERE r.teacher_id = ? AND r.is_approved = 1
-             ORDER BY r.created_at DESC`,
-            [teacherId]
+             ORDER BY r.created_at DESC
+             LIMIT ? OFFSET ?`,
+            [teacherId, reviewLimit, reviewOffset]
         );
 
         // Get total review count
@@ -772,12 +858,19 @@ app.get('/api/teachers/:id', async (req, res) => {
             'SELECT COUNT(*) as total FROM reviews WHERE teacher_id = ? AND is_approved = 1',
             [teacherId]
         );
+        const totalReviews = countData[0].total || 0;
 
 
         res.json({
             teacher: teachers[0],
             reviews: reviews,
-            total_reviews: countData[0].total || 0
+            total_reviews: totalReviews,
+            review_pagination: {
+                page: reviewPage,
+                limit: reviewLimit,
+                total: totalReviews,
+                totalPages: Math.max(1, Math.ceil(totalReviews / reviewLimit))
+            }
         });
     } catch (error) {
         console.error('Error fetching teacher details:', error);
@@ -788,7 +881,10 @@ app.get('/api/teachers/:id', async (req, res) => {
 // GET /api/teachers/:id/related - other teachers in the same department
 app.get('/api/teachers/:id/related', async (req, res) => {
     try {
-        const teacherId = parseInt(req.params.id);
+        const teacherId = Number.parseInt(req.params.id, 10);
+        if (!Number.isInteger(teacherId) || teacherId < 1) {
+            return res.status(400).json({ error: 'Invalid teacher ID' });
+        }
         const [teachers] = await db.query('SELECT department FROM teachers WHERE id = ?', [teacherId]);
         if (teachers.length === 0) return res.status(404).json({ error: 'Teacher not found' });
 
@@ -812,7 +908,10 @@ app.get('/api/teachers/:id/related', async (req, res) => {
 
 app.get('/api/teachers/:id/questions', async (req, res) => {
     try {
-        const teacherId = parseInt(req.params.id);
+        const teacherId = Number.parseInt(req.params.id, 10);
+        if (!Number.isInteger(teacherId) || teacherId < 1) {
+            return res.status(400).json({ error: 'Invalid teacher ID' });
+        }
         const [teachers] = await db.query('SELECT id FROM teachers WHERE id = ?', [teacherId]);
         if (teachers.length === 0) return res.status(404).json({ error: 'Teacher not found' });
 
@@ -949,7 +1048,6 @@ app.post('/api/questions', questionLimiter, [
             [teacher_id, sanitizedQuestion, 0]
         );
 
-        invalidateCache('questions');
         res.json({
             success: true,
             question_id: result.insertId,
@@ -969,7 +1067,10 @@ app.post('/api/questions/:id/answers', questionLimiter, [
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
     try {
-        const questionId = parseInt(req.params.id);
+        const questionId = Number.parseInt(req.params.id, 10);
+        if (!Number.isInteger(questionId) || questionId < 1) {
+            return res.status(400).json({ error: 'Invalid question ID' });
+        }
         const { answer } = req.body;
         const sanitizedAnswer = answer.trim().slice(0, 1000);
 
@@ -983,7 +1084,6 @@ app.post('/api/questions/:id/answers', questionLimiter, [
             [questionId, sanitizedAnswer, 0]
         );
 
-        invalidateCache('questions');
         res.json({
             success: true,
             answer_id: result.insertId,
@@ -1106,7 +1206,7 @@ app.post('/api/reviews/:id/report', reportLimiter, [
             return res.status(400).json({ error: 'Invalid review ID' });
         }
 
-        const [reviews] = await db.query('SELECT id FROM reviews WHERE id = ?', [reviewId]);
+        const [reviews] = await db.query('SELECT id FROM reviews WHERE id = ? AND is_approved = 1', [reviewId]);
         if (reviews.length === 0) {
             return res.status(404).json({ error: 'Review not found' });
         }
@@ -1135,8 +1235,6 @@ app.post('/api/reviews/:id/report', reportLimiter, [
 
 // ========== ADMIN API ENDPOINTS ==========
 
-// ========== ADMIN API ENDPOINTS ==========
-
 app.post('/api/admin/login', loginLimiter, csrfValidate, async (req, res) => {
     try {
         const { username, password } = req.body || {};
@@ -1150,25 +1248,35 @@ app.post('/api/admin/login', loginLimiter, csrfValidate, async (req, res) => {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
         const admin = admins[0];
-        if (admin.locked_until && new Date(admin.locked_until) > new Date()) {
-            return res.status(401).json({ error: 'Account locked. Try again later.' });
-        }
         const isValid = await bcrypt.compare(password, admin.password);
         if (!isValid) {
-            const failedAttempts = (admin.failed_attempts || 0) + 1;
-            let lockedUntil = null;
-            if (failedAttempts >= 5) lockedUntil = new Date(Date.now() + 15 * 60 * 1000);
-            await db.query('UPDATE admins SET failed_attempts = ?, locked_until = ? WHERE id = ?', [failedAttempts, lockedUntil, admin.id]);
+            // Deliberately no hard "account locked" gate before the password
+            // check: with a single admin, five anonymous bad guesses used to
+            // become a free, repeatable denial of service. Guessing is already
+            // throttled per IP, so wrong passwords only record a lockout
+            // timestamp (for the alert) while a CORRECT password always works.
+            const alreadyLocked = admin.locked_until && new Date(admin.locked_until) > new Date();
+            if (!alreadyLocked) {
+                const failedAttempts = (admin.failed_attempts || 0) + 1;
+                const lockedUntil = failedAttempts >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null;
+                await db.query('UPDATE admins SET failed_attempts = ?, locked_until = ? WHERE id = ?', [failedAttempts, lockedUntil, admin.id]);
+                if (lockedUntil) {
+                    await createAuditLog(null, 'LOGIN_LOCKOUT', `Locked after ${failedAttempts} failed attempts`, req.ip);
+                    // Fire and forget: a slow SMTP server must not delay the
+                    // response (that would leak which usernames exist).
+                    sendEmail(
+                        admin.email,
+                        'Security alert: repeated failed admin logins',
+                        `<p>There were ${failedAttempts} failed login attempts for the admin account <strong>${admin.username}</strong> from ${req.ip || 'an unknown address'}.</p><p>Your password still works. If this was not you, change it now.</p>`
+                    );
+                }
+            }
             return res.status(401).json({ error: 'Invalid credentials' });
         }
         await db.query('UPDATE admins SET failed_attempts = 0, locked_until = NULL WHERE id = ?', [admin.id]);
         // `tv` ties the token to the current revocation counter, so a password
         // reset (which bumps it) throws off every session issued before it.
-        const token = jwt.sign(
-            { id: admin.id, username: admin.username, tv: admin.token_version || 0 },
-            JWT_SECRET,
-            { algorithm: 'HS256', expiresIn: '24h' }
-        );
+        const token = signAdminToken(admin);
         await createAuditLog(admin.id, 'LOGIN', 'Admin logged in', req.ip);
         res.cookie('admin_token', token, buildCookieOptions(req));
         res.json({ success: true, admin: { id: admin.id, username: admin.username } });
@@ -1196,7 +1304,12 @@ app.post('/api/admin/forgot-password', resetLimiter, csrfValidate, async (req, r
             return res.status(400).json({ error: 'A valid email is required' });
         }
         const [admins] = await db.query('SELECT id, username FROM admins WHERE email = ?', [email]);
-        if (admins.length === 0) return res.json({ success: true, message: 'If that email exists, we sent a reset link.' });
+        // Same answer whether or not the address belongs to an admin: the old
+        // two different messages were a clean account-enumeration oracle.
+        const genericMessage = 'If that email exists, we sent a reset link.';
+        if (admins.length === 0) {
+            return res.json({ success: true, message: genericMessage });
+        }
         const admin = admins[0];
         const resetToken = crypto.randomBytes(32).toString('hex');
         const tokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
@@ -1209,8 +1322,11 @@ app.post('/api/admin/forgot-password', resetLimiter, csrfValidate, async (req, r
         // by the server and never leaked in a Referer header when the page then
         // loads an asset from another origin.
         const resetLink = `${frontendUrl}/reset-password#token=${resetToken}`;
-        await sendEmail(email, 'Password Reset Request', `<p>Click <a href="${resetLink}">here</a> to reset your password. Link expires in 1 hour.</p>`);
-        res.json({ success: true, message: 'Reset link sent to email.' });
+        // Fire and forget: awaiting SMTP for existing addresses but not for
+        // missing ones was a timing oracle. sendEmail() logs and swallows its
+        // own failures, so nothing is lost by returning immediately.
+        sendEmail(email, 'Password Reset Request', `<p>Click <a href="${resetLink}">here</a> to reset your password. Link expires in 1 hour.</p>`);
+        res.json({ success: true, message: genericMessage });
     } catch (error) {
         console.error('Forgot password error:', error);
         res.status(500).json({ error: 'Server error' });
@@ -1223,9 +1339,8 @@ app.post('/api/admin/reset-password', resetUseLimiter, csrfValidate, async (req,
         if (!isText(token, 128) || !isText(newPassword, 200)) {
             return res.status(400).json({ error: 'Token and new password (min 10 chars) required' });
         }
-        if (newPassword.length < 10) {
-            return res.status(400).json({ error: 'Password must be at least 10 characters' });
-        }
+        const passwordError = passwordProblem(newPassword);
+        if (passwordError) return res.status(400).json({ error: passwordError });
         const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
         const [admins] = await db.query('SELECT id FROM admins WHERE reset_token = ? AND reset_token_expires > NOW()', [tokenHash]);
         if (admins.length === 0) return res.status(400).json({ error: 'Invalid or expired token' });
@@ -1296,8 +1411,9 @@ app.post('/api/admin/setup', setupLimiter, csrfValidate, async (req, res) => {
         if (!isText(username, 60) || !isText(password, 200) || !isText(email, 254)) {
             return res.status(400).json({ error: 'Username, password, and email required' });
         }
-        if (password.length < 10) {
-            return res.status(400).json({ error: 'Password must be at least 10 characters' });
+        const passwordError = passwordProblem(password);
+        if (passwordError) {
+            return res.status(400).json({ error: passwordError });
         }
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
             return res.status(400).json({ error: 'A valid email is required' });
@@ -1338,7 +1454,6 @@ app.post('/api/admin/teachers', verifyAdmin, csrfValidate, [
     body('department').isLength({ min: 2, max: 100 }).withMessage('Department must be 2-100 characters'),
     body('image_url').optional().isURL().withMessage('Image URL must be a valid URL')
 ], async (req, res) => {
-    // ... (your existing add teacher code) ...
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
     try {
@@ -1358,25 +1473,64 @@ app.post('/api/admin/teachers', verifyAdmin, csrfValidate, [
 });
 
 app.delete('/api/admin/teachers/:id', verifyAdmin, csrfValidate, async (req, res) => {
-    // ... (your existing delete teacher code) ...
+    const teacherId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(teacherId) || teacherId < 1) {
+        return res.status(400).json({ error: 'Invalid teacher ID' });
+    }
+
+    let connection;
     try {
-        const teacherId = req.params.id;
-        const [teachers] = await db.query('SELECT name FROM teachers WHERE id = ?', [teacherId]);
-        const [result] = await db.query('DELETE FROM teachers WHERE id = ?', [teacherId]);
-        if (result.affectedRows === 0) return res.status(404).json({ error: 'Teacher not found' });
-        await createAuditLog(req.admin.id, 'DELETE_TEACHER', `Deleted teacher: ${teachers[0]?.name || teacherId}`, req.ip);
+        connection = await db.getConnection();
+        await connection.beginTransaction();
+
+        const [teachers] = await connection.query('SELECT name FROM teachers WHERE id = ?', [teacherId]);
+        if (teachers.length === 0) {
+            await connection.rollback();
+            return res.status(404).json({ error: 'Teacher not found' });
+        }
+
+        // Q&A and review reports deliberately have no foreign key (the column
+        // types differ across deployments), so they must be removed explicitly
+        // or they linger as rows nothing can ever display or delete.
+        if (reviewReportsReady) {
+            await connection.query(
+                'DELETE rr FROM review_reports rr JOIN reviews r ON r.id = rr.review_id WHERE r.teacher_id = ?',
+                [teacherId]
+            );
+        }
+        await connection.query('DELETE FROM reviews WHERE teacher_id = ?', [teacherId]);
+        await connection.query(
+            `DELETE qa FROM question_answers qa
+             JOIN questions q ON q.id = qa.question_id
+             WHERE q.teacher_id = ?`,
+            [teacherId]
+        );
+        await connection.query('DELETE FROM questions WHERE teacher_id = ?', [teacherId]);
+        await connection.query('DELETE FROM teachers WHERE id = ?', [teacherId]);
+
+        await connection.commit();
+
+        await createAuditLog(req.admin.id, 'DELETE_TEACHER', `Deleted teacher: ${teachers[0].name || teacherId}`, req.ip);
         invalidateCache('teachers');
         res.json({ success: true, message: 'Teacher deleted successfully' });
     } catch (error) {
+        if (connection) {
+            try { await connection.rollback(); } catch (rollbackErr) { /* already gone */ }
+        }
         console.error('Error deleting teacher:', error);
         res.status(500).json({ error: 'Database error' });
+    } finally {
+        if (connection) connection.release();
     }
 });
 
 // ========== GET TEACHER DETAILS (admin only) — full info + ALL reviews ==========
 app.get('/api/admin/teachers/:id', verifyAdmin, async (req, res) => {
     try {
-        const teacherId = req.params.id;
+        const teacherId = Number.parseInt(req.params.id, 10);
+        if (!Number.isInteger(teacherId) || teacherId < 1) {
+            return res.status(400).json({ error: 'Invalid teacher ID' });
+        }
 
         const [teachers] = await db.query('SELECT * FROM teachers WHERE id = ?', [teacherId]);
         if (teachers.length === 0) {
@@ -1384,12 +1538,15 @@ app.get('/api/admin/teachers/:id', verifyAdmin, async (req, res) => {
         }
 
         // ALL reviews (approved + pending) — admins see everything
+        const reportSelect = reviewReportsReady
+            ? `, (SELECT COUNT(*) FROM review_reports rr WHERE rr.review_id = r.id AND rr.status = 'open') AS open_reports`
+            : '';
         const [reviews] = await db.query(
-            `SELECT r.*, t.name as teacher_name
+            `SELECT r.*, t.name as teacher_name${reportSelect}
              FROM reviews r
              JOIN teachers t ON r.teacher_id = t.id
              WHERE r.teacher_id = ?
-             ORDER BY r.created_at DESC`,
+             ORDER BY (r.moderation_flag = 'sensitive') DESC, (r.moderation_flag = 'bias') DESC, r.created_at DESC`,
             [teacherId]
         );
 
@@ -1538,7 +1695,6 @@ app.post('/api/admin/clean-teacher-images', verifyAdmin, csrfValidate, async (re
 });
 
 app.get('/api/admin/reviews', verifyAdmin, async (req, res) => {
-    // ... (your existing get admin reviews code) ...
     try {
         const page = Math.max(parseInt(req.query.page) || 1, 1);
         const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 100);
@@ -1557,7 +1713,7 @@ app.get('/api/admin/reviews', verifyAdmin, async (req, res) => {
             FROM reviews r
             JOIN teachers t ON r.teacher_id = t.id
             ${whereClause}
-            ORDER BY r.created_at DESC
+            ORDER BY (r.moderation_flag = 'sensitive') DESC, (r.moderation_flag = 'bias') DESC, r.created_at DESC
             LIMIT ${limit} OFFSET ${offset}
         `);
 
@@ -1582,12 +1738,19 @@ app.get('/api/admin/reviews', verifyAdmin, async (req, res) => {
 });
 
 app.delete('/api/admin/reviews/:id', verifyAdmin, csrfValidate, async (req, res) => {
-    // ... (your existing delete review code) ...
     try {
-        const reviewId = req.params.id;
+        const reviewId = Number.parseInt(req.params.id, 10);
+        if (!Number.isInteger(reviewId) || reviewId < 1) {
+            return res.status(400).json({ error: 'Invalid review ID' });
+        }
+        if (reviewReportsReady) {
+            await db.query('DELETE FROM review_reports WHERE review_id = ?', [reviewId]);
+        }
         const [result] = await db.query('DELETE FROM reviews WHERE id = ?', [reviewId]);
         if (result.affectedRows === 0) return res.status(404).json({ error: 'Review not found' });
         await createAuditLog(req.admin.id, 'DELETE_REVIEW', `Deleted review ID: ${reviewId}`, req.ip);
+        // Without this the public review_count stays cached for up to 60s.
+        invalidateCache('teachers');
         res.json({ success: true, message: 'Review deleted successfully' });
     } catch (error) {
         console.error('Error deleting review:', error);
@@ -1639,6 +1802,8 @@ app.put('/api/admin/reviews/:id', verifyAdmin, csrfValidate, [
 
         await db.query(`UPDATE reviews SET ${updates.join(', ')} WHERE id = ?`, [...updateVals, reviewId]);
         await createAuditLog(req.admin.id, is_approved !== undefined ? is_approved ? 'APPROVE_REVIEW' : 'REJECT_REVIEW' : 'EDIT_REVIEW', `Review ID: ${reviewId} ${is_approved !== undefined ? is_approved ? 'approved' : 'rejected' : 'edited'}`, req.ip);
+        // Approval changes review_count on the public list; drop the cached copy.
+        invalidateCache('teachers');
         res.json({ success: true, message: is_approved !== undefined ? (is_approved ? 'Review approved' : 'Review rejected') : 'Review updated successfully' });
     } catch (error) {
         console.error('Error editing review:', error);
@@ -1688,8 +1853,6 @@ app.post('/api/admin/filter-qa', verifyAdmin, csrfValidate, async (req, res) => 
         const dryRun = String(req.query.dryRun) === 'true' || (req.body && req.body.dryRun === true);
         const result = await sweepExistingQa(db, { dryRun });
         if (!dryRun) {
-            if (result.questions.toQueue > 0 || result.answers.toQueue > 0) invalidateCache('questions');
-            if (result.courses.toDemote > 0) invalidateCache('courses');
             qaSweepDone = true;
             await createAuditLog(
                 req.admin.id,
@@ -1712,8 +1875,8 @@ app.post('/api/admin/filter-qa', verifyAdmin, csrfValidate, async (req, res) => 
 // GET /api/admin/questions - list questions (admin only)
 app.get('/api/admin/questions', verifyAdmin, async (req, res) => {
     try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+        const page = clampInt(req.query.page, 1, 1, 100000);
+        const limit = clampInt(req.query.limit, 50, 1, 100);
         const offset = (page - 1) * limit;
 
         const [questions] = await db.query(`
@@ -1768,7 +1931,6 @@ app.delete('/api/admin/questions/:id', verifyAdmin, csrfValidate, async (req, re
         const [result] = await db.query('DELETE FROM questions WHERE id = ?', [questionId]);
         if (result.affectedRows === 0) return res.status(404).json({ error: 'Question not found' });
         await createAuditLog(req.admin.id, 'DELETE_QUESTION', `Deleted question ID: ${questionId}`, req.ip);
-        invalidateCache('questions');
         res.json({ success: true, message: 'Question deleted successfully' });
     } catch (error) {
         console.error('Error deleting question:', error);
@@ -1806,7 +1968,6 @@ app.put('/api/admin/questions/:id', verifyAdmin, csrfValidate, [
         await db.query(`UPDATE questions SET ${updates.join(', ')} WHERE id = ?`, [...updateVals, questionId]);
         const action = is_approved === undefined ? 'EDIT_QUESTION' : (is_approved ? 'APPROVE_QUESTION' : 'REJECT_QUESTION');
         await createAuditLog(req.admin.id, action, `Question ID: ${questionId}`, req.ip);
-        invalidateCache('questions');
         res.json({
             success: true,
             message: is_approved === undefined ? 'Question updated' : (is_approved ? 'Question approved' : 'Question rejected')
@@ -1847,7 +2008,6 @@ app.put('/api/admin/answers/:id', verifyAdmin, csrfValidate, [
         await db.query(`UPDATE question_answers SET ${updates.join(', ')} WHERE id = ?`, [...updateVals, answerId]);
         const action = is_approved === undefined ? 'EDIT_ANSWER' : (is_approved ? 'APPROVE_ANSWER' : 'REJECT_ANSWER');
         await createAuditLog(req.admin.id, action, `Answer ID: ${answerId}`, req.ip);
-        invalidateCache('questions');
         res.json({
             success: true,
             message: is_approved === undefined ? 'Answer updated' : (is_approved ? 'Answer approved' : 'Answer rejected')
@@ -1971,10 +2131,84 @@ app.put('/api/admin/custom-courses/:id', verifyAdmin, csrfValidate, async (req, 
         );
         if (result.affectedRows === 0) return res.status(404).json({ error: 'Course not found' });
         await createAuditLog(req.admin.id, action === 'approve' ? 'APPROVE_COURSE' : 'REJECT_COURSE', `Custom course ID: ${courseId}`, req.ip);
-        invalidateCache('courses');
         res.json({ success: true, message: `Course ${action}d successfully` });
     } catch (error) {
         console.error('Error updating custom course:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// ========== READER REPORTS (admin) ==========
+// The public report button used to write rows that no endpoint ever read, so
+// reports could only be counted. These two routes let a moderator see the
+// reason and close it out.
+
+app.get('/api/admin/reports', verifyAdmin, async (req, res) => {
+    const page = clampInt(req.query.page, 1, 1, 100000);
+    const limit = clampInt(req.query.limit, 50, 1, 100);
+    const offset = (page - 1) * limit;
+
+    if (!reviewReportsReady) {
+        return res.json({
+            reports: [],
+            pagination: { page, limit, total: 0, totalPages: 1 },
+            available: false
+        });
+    }
+
+    const status = ['open', 'resolved', 'dismissed'].includes(req.query.status) ? req.query.status : 'open';
+    try {
+        const [reports] = await db.query(`
+            SELECT rr.id, rr.review_id, rr.reason, rr.status, rr.created_at,
+                   r.comment, r.user_name, r.is_approved,
+                   t.id AS teacher_id, t.name AS teacher_name
+            FROM review_reports rr
+            JOIN reviews r ON r.id = rr.review_id
+            JOIN teachers t ON t.id = r.teacher_id
+            WHERE rr.status = ?
+            ORDER BY rr.created_at DESC
+            LIMIT ? OFFSET ?
+        `, [status, limit, offset]);
+
+        const [countResult] = await db.query(
+            'SELECT COUNT(*) as total FROM review_reports WHERE status = ?',
+            [status]
+        );
+        const total = countResult[0].total || 0;
+
+        res.json({
+            reports,
+            pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+            available: true
+        });
+    } catch (error) {
+        console.error('Error fetching review reports:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// PUT /api/admin/reports/:id - close a report (or reopen it)
+app.put('/api/admin/reports/:id', verifyAdmin, csrfValidate, [
+    body('status').isIn(['open', 'resolved', 'dismissed']).withMessage('Invalid report status')
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
+    if (!reviewReportsReady) {
+        return res.status(503).json({ error: 'Reporting is temporarily unavailable.' });
+    }
+
+    const reportId = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(reportId) || reportId < 1) {
+        return res.status(400).json({ error: 'Invalid report ID' });
+    }
+
+    try {
+        const [result] = await db.query('UPDATE review_reports SET status = ? WHERE id = ?', [req.body.status, reportId]);
+        if (result.affectedRows === 0) return res.status(404).json({ error: 'Report not found' });
+        await createAuditLog(req.admin.id, 'REVIEW_REPORT', `Report ${reportId} marked ${req.body.status}`, req.ip);
+        res.json({ success: true, message: `Report ${req.body.status}` });
+    } catch (error) {
+        console.error('Error updating review report:', error);
         res.status(500).json({ error: 'Database error' });
     }
 });
@@ -2007,11 +2241,23 @@ app.get('/api/admin/stats', verifyAdmin, async (req, res) => {
             last_sweep = null;
         }
 
+        // Open reader reports drive the badge on the Reports tab.
+        let openReports = 0;
+        if (reviewReportsReady) {
+            try {
+                const [reportCount] = await db.query("SELECT COUNT(*) as count FROM review_reports WHERE status = 'open'");
+                openReports = reportCount[0].count || 0;
+            } catch (reportErr) {
+                openReports = 0;
+            }
+        }
+
         res.json({
             total_teachers: teacherCount[0].count,
             total_reviews: reviewCount[0].count,
             reviews_last_week: recentReviews[0].count,
             pending_reviews: pendingCount[0].count,
+            open_reports: openReports,
             last_sweep
         });
     } catch (error) {
@@ -2026,7 +2272,7 @@ app.get('/sitemap.xml', async (req, res) => {
         const [teachers] = await db.query('SELECT id, name, department FROM teachers ORDER BY name');
         const [departments] = await db.query('SELECT DISTINCT department FROM teachers ORDER BY department');
         const today = new Date().toISOString().split('T')[0];
-        const baseUrl = 'https://teacher-review-system-zeta.vercel.app';
+        const baseUrl = PUBLIC_SITE_URL;
 
         let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
         xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
@@ -2063,7 +2309,7 @@ app.get('/sitemap.xml', async (req, res) => {
 
 // ========== DYNAMIC ROBOTS.TXT ==========
 app.get('/robots.txt', (req, res) => {
-    const baseUrl = 'https://teacher-review-system-zeta.vercel.app';
+    const baseUrl = PUBLIC_SITE_URL;
     const robots = `User-agent: *
 Allow: /
 Disallow: /admin

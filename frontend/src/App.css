@@ -11038,3 +11038,29 @@ body {
         transform: none !important;
     }
 }
+
+/* Older reviews are loaded a page at a time on long profiles. */
+.review-load-more {
+    display: block;
+    margin: 18px auto 4px;
+    padding: 10px 24px;
+    border: 1px solid rgba(63, 99, 96, 0.35);
+    border-radius: 999px;
+    background: #fffdf9;
+    color: #2a1838;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.review-load-more:hover:not(:disabled),
+.review-load-more:focus-visible:not(:disabled) {
+    background: #f5f1ea;
+    border-color: rgba(63, 99, 96, 0.6);
+}
+
+.review-load-more:disabled {
+    opacity: 0.6;
+    cursor: default;
+}

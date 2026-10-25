@@ -14,7 +14,7 @@ const InstallPrompt: React.FC = () => {
     useEffect(() => {
         // iOS Safari doesn't fire beforeinstallprompt; show a manual hint instead.
         const ua = navigator.userAgent;
-        const ios = /iphone|ipad|ipod/i.test(ua) && !(window as any).MSStream;
+        const ios = /iphone|ipad|ipod/i.test(ua) && !(window as Window & { MSStream?: unknown }).MSStream;
         setIsIOS(ios);
 
         // This component is only mounted after a review is submitted, so it is
