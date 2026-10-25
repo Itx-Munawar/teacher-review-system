@@ -1,0 +1,37 @@
+version: 2
+
+updates:
+  # Runtime dependencies are checked weekly; grouped so a quiet week produces
+  # one PR per ecosystem instead of a dozen.
+  - package-ecosystem: npm
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      backend-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      frontend-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      # Create React App is pinned until the Vite migration (ROADMAP.md).
+      # Dependabot cannot move react-scripts across majors anyway.
+      - dependency-name: react-scripts
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3

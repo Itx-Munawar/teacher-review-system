@@ -114,5 +114,104 @@ following fixes.
   instead of fetching every match.
 - Admin Q&A rows have a Delete button wired to the new endpoint.
 - Password reset enforces the 72-byte limit client-side and caps inputs at 72.
-- `/about` and `/contact` redirect permanently to `/` on Vercel.
+- `/about` redirects permanently to `/` on Vercel; `/contact` is now a real page.
 - Privacy Policy documents hashed audit IPs and the 90-day retention.
+
+## Phase 1 follow-up (2026-10-25, branch `review/2026-10-phase1`)
+
+Roadmap: `ROADMAP.md`.
+
+### SEO
+
+- Per-route canonical URLs via `frontend/src/utils/seo.ts`; previously every
+  route kept the homepage canonical from `index.html`, so `/questions` and the
+  legal pages could not rank.
+- `/admin`, unknown teacher IDs, and empty department pages are now
+  `noindex, nofollow`. Verified in a headless browser: a valid teacher and
+  department return `index, follow`; a bogus ID/department returns `noindex`.
+- `sitemap.xml` uses real `lastmod` values (last approved review, last teacher
+  added) instead of stamping every URL with today's date, and lists
+  `/questions` and `/contact`.
+- Removed a duplicated `<meta name="robots">` tag that the first pass added to
+  `index.html` twice.
+
+### Product and build
+
+- `/contact` is a real page, linked from both footers, and the PWA search
+  shortcut points at `/?search=` instead of `/?search=teachers`.
+- Removed the "Sort: Newest" option; the API never returned a date for it, so it
+  silently behaved like name order.
+- `npm run build` works on Windows (`cross-env CI=false`).
+
+### Backend
+
+- `/api/ready` checks MySQL (`SELECT 1`, 2.5 s timeout, 503 on failure);
+  `/api/health` remains process-only so a DB blip does not restart the service.
+- Added `(department, name)` on `teachers` and `(is_approved, created_at)` on
+  `questions` through the schema bootstrap (idempotent) and `schema.sql`.
+- Graceful SIGTERM/SIGINT shutdown closes the HTTP server and MySQL pool.
+
+### Tooling and documentation
+
+- GitHub Actions CI (backend syntax + tests; frontend types, tests, build) and
+  Dependabot for npm and Actions.
+- README documents the health/readiness split and a `mysqldump` backup/restore
+  runbook.
+- `.env.example` blanks `ADMIN_SETUP_KEY` by default and documents the JWT
+  length requirement.
+
+## Phase 2 follow-up (2026-10-25, branch `review/2026-10-phase1`)
+
+Roadmap: `ROADMAP.md`.
+
+### Observability
+
+- Every non-health request is logged as one JSON line
+  (`{"t","level","msg","method","path","status","ms"}`) so Render logs can be
+  parsed and filtered; `/api/health` and `/api/ready` are excluded on purpose.
+- Zero-result teacher searches are written to a new `search_gaps` table
+  (created by the schema bootstrap) and surfaced in the admin panel as a
+  "Content Gaps" list — the signal for which faculty members to add next.
+  Only zero-result queries are stored; successful searches are never logged.
+  Rows are pruned after 30 days.
+
+### Admin
+
+- New **Audit & Gaps** tab: paginated `GET /api/admin/audit-logs` (with an
+  action filter) plus `GET /api/admin/search-gaps`. Audit IPs stay the keyed
+  hashes described above.
+- Daily moderation digest: an hourly check (at most one email per day, tracked
+  in `audit_logs`) emails the pending counts for reviews, questions, answers,
+  courses and open reader reports — only when something is waiting. Recipient
+  is `MODERATION_DIGEST_EMAIL`, defaulting to `EMAIL_USER`.
+
+## Phase 3 follow-up (2026-10-25, branch `review/2026-10-phase1`)
+
+Roadmap: `ROADMAP.md`.
+
+### Admin two-factor
+
+- `POST /api/admin/login` now accepts an optional `totp_code`. When the account
+  has a TOTP secret, the endpoint returns `{ requires_totp: true }` instead of
+  a session cookie, and the frontend asks the user for the code in the login
+  form before proceeding.
+- New endpoints: `POST /api/admin/2fa/setup` (generates a fresh secret and
+  returns a provisioning URI), `POST /api/admin/2fa/enable` (confirms the
+  enrollment by verifying a live code), `POST /api/admin/2fa/disable` (turns
+  2FA off; logged in audit). The schema bootstrap adds the `totp_secret` and
+  `totp_enabled` columns if they are missing.
+- `GET /api/admin/me` now includes `totp_enabled` so the security tab can
+  update immediately after a change.
+- Frontend: login form shows the TOTP field when `requires_totp`
+  is returned; a **Security** tab in the admin panel walks through QR code scanning, manual secret entry,
+  confirmation, and (optionally) disabling 2FA.
+- A bare `2FA_FAILED` action is logged when a wrong code is submitted.
+
+## Phase 4 — Product and architecture (planned)
+
+| # | Step | Status |
+| --- | --- | --- |
+| 22 | Course pages (`/course/:name`) | Planned |
+| 23 | Prerendered social/OG tags for teacher and department pages | Planned |
+| 24 | CRA → Vite migration | Planned |
+

@@ -2,7 +2,11 @@ import React from 'react';
 import LegalPage from './LegalPage';
 
 const PrivacyPolicy: React.FC = () => (
-    <LegalPage title="Privacy Policy" updated="August 11, 2026">
+    <LegalPage
+        title="Privacy Policy"
+        updated="August 11, 2026"
+        description="How UMT Teacher Reviews collects, uses, and retains data."
+    >
         <h2>1. Overview</h2>
         <p>
             UMT Teacher Reviews ("we", "us", "our") respects your privacy. This Privacy Policy explains

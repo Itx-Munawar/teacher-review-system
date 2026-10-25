@@ -138,6 +138,35 @@ app.use(express.json({ limit: '100kb' }));
 // CSRF: set cookie on every response so the frontend can read it
 app.use(csrfSetCookie);
 
+// ========== STRUCTURED LOGGING ==========
+// One JSON object per line, so Render's log drains can be parsed and searched
+// (Render's console "search" is text-only, but a downloaded log or a drain to
+// a log service can filter on msg/level/status). Plain console.* stays for
+// errors because stack traces read better multiline.
+const logJson = (level, msg, fields = {}) => {
+    const line = JSON.stringify({ t: new Date().toISOString(), level, msg, ...fields });
+    if (level === 'error') console.error(line);
+    else console.log(line);
+};
+
+// Skip the endpoints a monitor hits every few minutes; logging them would be
+// the only thing in the log on a quiet day.
+const UNLOGGED_PATHS = new Set(['/api/health', '/api/ready']);
+app.use((req, res, next) => {
+    if (UNLOGGED_PATHS.has(req.path)) return next();
+    const start = process.hrtime.bigint();
+    res.on('finish', () => {
+        // res.getHeader is safe here: 'finish' fires after the response is sent.
+        logJson('info', 'http_request', {
+            method: req.method,
+            path: req.path,
+            status: res.statusCode,
+            ms: Number((process.hrtime.bigint() - start) / 1000000n)
+        });
+    });
+    next();
+});
+
 // Admin responses carry moderation data about real people. A shared cache or a
 // browser back-forward cache must never keep them.
 app.use('/api/admin', (req, res, next) => {
@@ -310,6 +339,88 @@ const clampInt = (value, fallback, min, max) => {
     return Math.min(Math.max(parsed, min), max);
 };
 
+// ========== TOTP TWO-FACTOR (RFC 6238, SHA1, 30s, 6 digits) ==========
+// Deliberately dependency-free: the algorithm is ~40 lines and the only
+// "secret" material it handles is a per-admin code, so pulling in otplib for
+// it would not pay for its supply-chain surface.
+const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+const base32Encode = (buffer) => {
+    let bits = 0;
+    let value = 0;
+    let out = '';
+    for (const byte of buffer) {
+        value = (value << 8) | byte;
+        bits += 8;
+        while (bits >= 5) {
+            out += BASE32_ALPHABET[(value >>> (bits - 5)) & 31];
+            bits -= 5;
+        }
+    }
+    if (bits > 0) out += BASE32_ALPHABET[(value << (5 - bits)) & 31];
+    return out;
+};
+
+const base32Decode = (input) => {
+    const clean = String(input || '').toUpperCase().replace(/[^A-Z2-7]/g, '');
+    if (!clean) return Buffer.alloc(0);
+    let bits = 0;
+    let value = 0;
+    const bytes = [];
+    for (const ch of clean) {
+        value = (value << 5) | BASE32_ALPHABET.indexOf(ch);
+        bits += 5;
+        if (bits >= 8) {
+            bits -= 8;
+            bytes.push((value >>> bits) & 0xff);
+        }
+    }
+    return Buffer.from(bytes);
+};
+
+const generateTotpSecret = () => base32Encode(crypto.randomBytes(20)); // 32 chars
+
+// HOTP (RFC 4226) with the counter written big-endian, as TOTP uses.
+const hotp = (secretBytes, counter) => {
+    const buf = Buffer.alloc(8);
+    buf.writeBigUInt64BE(BigInt(counter));
+    const hmac = crypto.createHmac('sha1', secretBytes).update(buf).digest();
+    const offset = hmac[hmac.length - 1] & 0x0f;
+    const code = ((hmac[offset] & 0x7f) << 24) | (hmac[offset + 1] << 16) |
+        (hmac[offset + 2] << 8) | hmac[offset + 3];
+    return String(code % 1_000_000).padStart(6, '0');
+};
+
+// Accept the current step plus one step either side so a phone whose clock is
+// a minute off still works; the code is a 22-bit space, so a 3-way check does
+// not meaningfully weaken brute-force resistance (the login is also
+// rate-limited and the password still gates the request).
+const totpVerify = (secret, code) => {
+    const clean = String(code || '').replace(/\s+/g, '');
+    if (!/^\d{6}$/.test(clean)) return false;
+    const secretBytes = base32Decode(secret);
+    if (secretBytes.length < 10) return false;
+    const step = Math.floor(Date.now() / 1000 / 30);
+    const given = Buffer.from(clean);
+    for (let i = -1; i <= 1; i++) {
+        const candidate = Buffer.from(hotp(secretBytes, step + i));
+        if (crypto.timingSafeEqual(candidate, given)) return true;
+    }
+    return false;
+};
+
+const totpProvisioningUri = (secret, username) => {
+    const label = `UMT Teacher Reviews:${username}`;
+    const params = new URLSearchParams({
+        issuer: 'UMT Teacher Reviews',
+        algorithm: 'SHA1',
+        digits: '6',
+        period: '30',
+        secret
+    });
+    return `otpauth://totp/${label}?${params.toString()}`;
+};
+
 // Hand the event loop a turn between expensive batches so a long sweep does
 // not freeze every other request (and the platform health check).
 const yieldToEventLoop = () => new Promise((resolve) => setImmediate(resolve));
@@ -370,6 +481,107 @@ const createAuditLog = async (adminId, action, details, ip = 'unknown') => {
         );
     } catch (error) {
         console.error('Audit log error:', error);
+    }
+};
+
+// ========== ZERO-RESULT SEARCH LOG ==========
+// Students searching for a teacher who is not in the directory are telling us
+// who to add next. Only zero-result queries are stored (they carry content
+// information); successful searches are never logged, so the table is not a
+// record of what anyone looked up. Retention below keeps it small.
+const SEARCH_GAP_RETENTION_DAYS = 30;
+let searchGapsReady = false;
+
+const pruneSearchGaps = async () => {
+    try {
+        const cutoff = new Date(Date.now() - SEARCH_GAP_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+        const [result] = await db.query('DELETE FROM search_gaps WHERE created_at < ?', [cutoff]);
+        if (result.affectedRows > 0) {
+            logJson('info', 'search_gaps_pruned', { deleted: result.affectedRows });
+        }
+    } catch (error) {
+        console.error('Search gap prune error:', error.message);
+    }
+};
+
+const recordSearchGap = (rawTerm) => {
+    const term = String(rawTerm || '').trim().slice(0, 200);
+    if (!term) return;
+    db.query('INSERT INTO search_gaps (query) VALUES (?)', [term])
+        .then(() => {
+            logJson('info', 'search_zero_results', { query: term });
+        })
+        .catch((error) => {
+            // Table may not exist yet on a cold deploy; never fail a search.
+            console.error('Search gap log error:', error.message);
+        });
+};
+
+// ========== DAILY MODERATION DIGEST ==========
+// The free-tier backend sleeps, so pending items sit unseen until someone
+// opens the panel. One email per day (only when something is actually waiting)
+// keeps moderation from depending on remembering to look.
+const DIGEST_RECIPIENT = (process.env.MODERATION_DIGEST_EMAIL || process.env.EMAIL_USER || '').trim();
+let digestInFlight = false;
+
+const sendModerationDigest = async (force = false) => {
+    if (!DIGEST_RECIPIENT || digestInFlight) return;
+    digestInFlight = true;
+    try {
+        // Mark today's digest before sending so a restart mid-day cannot
+        // double-send; a failed send is retried on the next hourly tick only
+        // if the marker insert itself failed.
+        const today = new Date().toISOString().slice(0, 10);
+        const [marker] = await db.query(
+            "SELECT id FROM audit_logs WHERE action = 'DIGEST_SENT' AND details = ? LIMIT 1",
+            [today]
+        );
+        if (marker.length > 0 && !force) return;
+
+        const [pendingReviews] = await db.query('SELECT COUNT(*) as count FROM reviews WHERE is_approved = 0');
+        const [pendingQuestions] = await db.query('SELECT COUNT(*) as count FROM questions WHERE is_approved = 0');
+        const [pendingAnswers] = await db.query('SELECT COUNT(*) as count FROM question_answers WHERE is_approved = 0');
+        const [pendingCourses] = await db.query("SELECT COUNT(*) as count FROM custom_courses WHERE status = 'pending'");
+        let openReports = 0;
+        try {
+            const [rep] = await db.query("SELECT COUNT(*) as count FROM review_reports WHERE status = 'open'");
+            openReports = rep[0].count || 0;
+        } catch (_) { /* table may not exist yet */ }
+
+        const total = pendingReviews[0].count + pendingQuestions[0].count + pendingAnswers[0].count + openReports;
+        if (total === 0) {
+            await db.query(
+                "INSERT INTO audit_logs (action, details, ip_address) VALUES ('DIGEST_SENT', ?, 'system')",
+                [today]
+            );
+            return;
+        }
+
+        const rows = [
+            ['Reviews awaiting approval', pendingReviews[0].count],
+            ['Questions awaiting approval', pendingQuestions[0].count],
+            ['Answers awaiting approval', pendingAnswers[0].count],
+            ['Course names awaiting review', pendingCourses[0].count],
+            ['Open reader reports', openReports]
+        ].filter(([, n]) => n > 0);
+
+        const html = `
+            <h2 style="margin:0 0 12px">Moderation digest — ${new Date().toDateString()}</h2>
+            <table cellpadding="6" style="border-collapse:collapse">
+                ${rows.map(([label, n]) => `<tr><td style="border-bottom:1px solid #eee">${label}</td><td style="border-bottom:1px solid #eee;text-align:right"><strong>${n}</strong></td></tr>`).join('')}
+            </table>
+            <p style="color:#64748b">Open the admin panel to moderate: ${PUBLIC_SITE_URL}/admin</p>
+        `;
+        await sendEmail(DIGEST_RECIPIENT, `Moderation digest: ${total} item${total === 1 ? '' : 's'} waiting`, html);
+        await db.query(
+            "INSERT INTO audit_logs (action, details, ip_address) VALUES ('DIGEST_SENT', ?, 'system')",
+            [today]
+        );
+        logJson('info', 'digest_sent', { total, to: 'operator' });
+    } catch (error) {
+        console.error('Moderation digest error:', error.message);
+    } finally {
+        digestInFlight = false;
     }
 };
 
@@ -573,6 +785,24 @@ const runSensitiveReviewBackfill = async () => {
 let schemaBootstrapError = null;
 let schemaBootstrapDone = false;
 
+// MySQL has no "ADD INDEX IF NOT EXISTS", so check the catalogue first.
+const ensureIndex = async (table, indexName, definition) => {
+    try {
+        const [rows] = await db.query(
+            `SELECT 1 FROM information_schema.statistics
+              WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?
+              LIMIT 1`,
+            [table, indexName]
+        );
+        if (rows.length === 0) {
+            await db.query(`ALTER TABLE \`${table}\` ADD INDEX \`${indexName}\` ${definition}`);
+            console.log(`✅ Added index ${indexName} on ${table}`);
+        }
+    } catch (error) {
+        console.error(`⚠️ Could not ensure index ${indexName} on ${table}:`, error.message);
+    }
+};
+
 const runSchemaBootstrap = async () => {
     try {
         await db.query(`
@@ -693,11 +923,47 @@ const runSchemaBootstrap = async () => {
         } catch (tvErr) {
             console.error('⚠️ Could not ensure admins.token_version column:', tvErr.message);
         }
+        // Optional TOTP two-factor column. Defaults allow the auth path to work
+        // for all existing admins without touching their rows.
+        try {
+            const [totpCols] = await db.query("SHOW COLUMNS FROM admins LIKE 'totp_enabled'");
+            if (totpCols.length === 0) {
+                await db.query('ALTER TABLE admins ADD COLUMN totp_secret VARCHAR(64) DEFAULT NULL');
+                await db.query('ALTER TABLE admins ADD COLUMN totp_enabled TINYINT(1) NOT NULL DEFAULT 0');
+                console.log('✅ Added TOTP columns to admins table');
+            }
+        } catch (totpErr) {
+            console.error('⚠️ Could not ensure admins.totp_* columns:', totpErr.message);
+        }
+        // Zero-result search terms (content-gap signals). Pruned after 30 days.
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS search_gaps (
+                    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                    query VARCHAR(200) NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (id),
+                    KEY idx_search_gaps_created (created_at),
+                    KEY idx_search_gaps_query (query)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+            searchGapsReady = true;
+        } catch (gapsErr) {
+            console.error('⚠️ Could not ensure search_gaps table:', gapsErr.message);
+        }
+
+        // Composite indexes for the two hottest list queries: department pages
+        // (WHERE department = ? ORDER BY name) and the public Q&A board
+        // (WHERE is_approved = 1 ORDER BY created_at DESC).
+        await ensureIndex('teachers', 'idx_teachers_department_name', '(department, name)');
+        await ensureIndex('questions', 'idx_questions_approved_created', '(is_approved, created_at)');
+
         schemaBootstrapError = null;
         schemaBootstrapDone = true;
         console.log('✅ Schema bootstrap complete (questions, question_answers, custom_courses, review_reports, cleanup)');
         // Keep the audit trail bounded (and the hashed IPs with it).
         pruneAuditLogs();
+        pruneSearchGaps();
         // Schema is up: retroactively filter any pre-existing reviews.
         runReviewFilterSweep();
         runQaFilterSweep();
@@ -721,6 +987,11 @@ ensureTables();
 // Render instances can stay up for weeks, so prune on a timer as well as on
 // boot. unref() keeps the timer from holding the process open.
 setInterval(pruneAuditLogs, 24 * 60 * 60 * 1000).unref();
+setInterval(pruneSearchGaps, 24 * 60 * 60 * 1000).unref();
+// Hourly check; the marker row makes it a at-most-once-per-day digest.
+setInterval(() => sendModerationDigest(), 60 * 60 * 1000).unref();
+// Give the schema bootstrap a moment on cold start, then try once today.
+setTimeout(() => sendModerationDigest(), 90 * 1000).unref();
 
 // ========== PUBLIC API ENDPOINTS ==========
 
@@ -858,6 +1129,11 @@ app.get('/api/teachers/search', searchLimiter, async (req, res) => {
             term, `${like}%`, `%${like}%`, term, term, `%${like}%`,
             ...(limit > 0 ? [limit] : [])
         ]);
+
+        // Zero-result searches are content-gap signals (see search_gaps).
+        if (teachers.length === 0 && searchGapsReady) {
+            recordSearchGap(term);
+        }
 
         res.set('Cache-Control', 'public, max-age=120');
         res.json(teachers);
@@ -1301,7 +1577,7 @@ app.post('/api/reviews/:id/report', reportLimiter, [
 
 app.post('/api/admin/login', loginLimiter, csrfValidate, async (req, res) => {
     try {
-        const { username, password } = req.body || {};
+        const { username, password, totp_code } = req.body || {};
         if (!isText(username, 100) || !isText(password, 200)) {
             return res.status(400).json({ error: 'Username and password are required' });
         }
@@ -1314,11 +1590,6 @@ app.post('/api/admin/login', loginLimiter, csrfValidate, async (req, res) => {
         const admin = admins[0];
         const isValid = await bcrypt.compare(password, admin.password);
         if (!isValid) {
-            // Deliberately no hard "account locked" gate before the password
-            // check: with a single admin, five anonymous bad guesses used to
-            // become a free, repeatable denial of service. Guessing is already
-            // throttled per IP, so wrong passwords only record a lockout
-            // timestamp (for the alert) while a CORRECT password always works.
             const alreadyLocked = admin.locked_until && new Date(admin.locked_until) > new Date();
             if (!alreadyLocked) {
                 const failedAttempts = (admin.failed_attempts || 0) + 1;
@@ -1326,8 +1597,6 @@ app.post('/api/admin/login', loginLimiter, csrfValidate, async (req, res) => {
                 await db.query('UPDATE admins SET failed_attempts = ?, locked_until = ? WHERE id = ?', [failedAttempts, lockedUntil, admin.id]);
                 if (lockedUntil) {
                     await createAuditLog(null, 'LOGIN_LOCKOUT', `Locked after ${failedAttempts} failed attempts`, req.ip);
-                    // Fire and forget: a slow SMTP server must not delay the
-                    // response (that would leak which usernames exist).
                     sendEmail(
                         admin.email,
                         'Security alert: repeated failed admin logins',
@@ -1337,9 +1606,20 @@ app.post('/api/admin/login', loginLimiter, csrfValidate, async (req, res) => {
             }
             return res.status(401).json({ error: 'Invalid credentials' });
         }
+
+        // If 2FA is enabled on this account, require the TOTP code before
+        // issuing a session cookie.
+        if (admin.totp_enabled && admin.totp_secret) {
+            if (!totp_code) {
+                return res.status(200).json({ requires_totp: true });
+            }
+            if (!totpVerify(admin.totp_secret, totp_code)) {
+                await createAuditLog(admin.id, '2FA_FAILED', 'Invalid TOTP code during login', req.ip);
+                return res.status(401).json({ error: 'Invalid 2FA code' });
+            }
+        }
+
         await db.query('UPDATE admins SET failed_attempts = 0, locked_until = NULL WHERE id = ?', [admin.id]);
-        // `tv` ties the token to the current revocation counter, so a password
-        // reset (which bumps it) throws off every session issued before it.
         const token = signAdminToken(admin);
         await createAuditLog(admin.id, 'LOGIN', 'Admin logged in', req.ip);
         res.cookie('admin_token', token, buildCookieOptions(req));
@@ -1351,8 +1631,82 @@ app.post('/api/admin/login', loginLimiter, csrfValidate, async (req, res) => {
 });
 
 // GET /api/admin/me - validate the current admin session
-app.get('/api/admin/me', verifyAdmin, (req, res) => {
-    res.json({ admin: { id: req.admin.id, username: req.admin.username } });
+app.get('/api/admin/me', verifyAdmin, async (req, res) => {
+    try {
+        // The panel uses this to show the 2FA state; a column that predates the
+        // migration must not 500 the whole session check.
+        let totp_enabled = 0;
+        try {
+            const [rows] = await db.query('SELECT totp_enabled FROM admins WHERE id = ?', [req.admin.id]);
+            totp_enabled = rows[0]?.totp_enabled ? 1 : 0;
+        } catch (_) { /* totp_enabled column not migrated yet */ }
+        res.json({ admin: { id: req.admin.id, username: req.admin.username, totp_enabled } });
+    } catch (error) {
+        console.error('/api/admin/me error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// POST /api/admin/2fa/setup - start two-factor enrollment.
+// Saves a fresh secret (totp_enabled stays 0 until the code is confirmed) and
+// returns an otpauth:// URI the phone scans. Calling it again before enabling
+// replaces the secret, so a mistyped enrollment never strands the account.
+app.post('/api/admin/2fa/setup', verifyAdmin, csrfValidate, async (req, res) => {
+    try {
+        const secret = generateTotpSecret();
+        await db.query('UPDATE admins SET totp_secret = ?, totp_enabled = 0 WHERE id = ?', [secret, req.admin.id]);
+        await createAuditLog(req.admin.id, '2FA_SETUP', '2FA enrollment started', req.ip);
+        res.json({
+            secret,
+            otpauth_uri: totpProvisioningUri(secret, req.admin.username || `admin-${req.admin.id}`)
+        });
+    } catch (error) {
+        console.error('2FA setup error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// POST /api/admin/2fa/enable - confirm enrollment by submitting a live code
+// from the authenticator app. The account is locked out of 2FA-free logins
+// only after this succeeds, so a broken scan cannot trap the admin.
+app.post('/api/admin/2fa/enable', verifyAdmin, csrfValidate, async (req, res) => {
+    try {
+        const { code } = req.body || {};
+        if (!isText(code, 10)) return res.status(400).json({ error: 'Enter the 6-digit code from your authenticator app' });
+
+        let adminId = req.admin.id;
+        let username = req.admin.username;
+        // Setup may have stored the secret on a different row if the account
+        // was re-created; always read the current row before verifying.
+        const [rows] = await db.query('SELECT totp_secret, totp_enabled FROM admins WHERE id = ?', [adminId]);
+        if (rows.length === 0) return res.status(500).json({ error: 'Admin row not found' });
+        const { totp_secret, totp_enabled } = rows[0];
+        if (!totp_secret) return res.status(400).json({ error: 'Run setup first (scan the QR/secret), then confirm with a code' });
+        if (totp_enabled) return res.json({ success: true, message: 'Two-factor authentication is already enabled' });
+        if (!totpVerify(totp_secret, code)) {
+            await createAuditLog(adminId, '2FA_ENABLE_FAILED', 'Wrong code while enabling 2FA', req.ip);
+            return res.status(401).json({ error: 'That code did not match. Check the app and try again.' });
+        }
+        await db.query('UPDATE admins SET totp_enabled = 1 WHERE id = ?', [adminId]);
+        await createAuditLog(adminId, '2FA_ENABLED', '2FA enrollment confirmed', req.ip);
+        res.json({ success: true, message: 'Two-factor authentication is now enabled' });
+    } catch (error) {
+        console.error('2FA enable error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// POST /api/admin/2fa/disable - turn 2FA off. CSRF-protected like every other
+// state change; the audit row keeps a record of when it was dropped.
+app.post('/api/admin/2fa/disable', verifyAdmin, csrfValidate, async (req, res) => {
+    try {
+        await db.query('UPDATE admins SET totp_enabled = 0, totp_secret = NULL WHERE id = ?', [req.admin.id]);
+        await createAuditLog(req.admin.id, '2FA_DISABLED', '2FA turned off', req.ip);
+        res.json({ success: true, message: 'Two-factor authentication disabled' });
+    } catch (error) {
+        console.error('2FA disable error:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 // POST /api/admin/logout - clear the admin session cookie
@@ -2348,36 +2702,145 @@ app.get('/api/admin/stats', verifyAdmin, async (req, res) => {
     }
 });
 
+// GET /api/admin/audit-logs - newest moderation actions, paginated.
+// Optional ?action= filters to one action type (the tab's filter dropdown
+// offers the handful that actually recur). IPs are stored hashed (see
+// hashIpForAudit) and are shown as-is: they correlate sessions, they do not
+// identify a person.
+app.get('/api/admin/audit-logs', verifyAdmin, async (req, res) => {
+    try {
+        const page = clampInt(req.query.page, 1, 1, 100000);
+        const limit = clampInt(req.query.limit, 25, 1, 100);
+        const offset = (page - 1) * limit;
+        const action = typeof req.query.action === 'string' ? req.query.action.slice(0, 50) : '';
+
+        const whereClause = action ? 'WHERE a.action = ?' : '';
+        const params = action ? [action] : [];
+
+        const [countRows] = await db.query(
+            `SELECT COUNT(*) as total FROM audit_logs a ${whereClause}`,
+            params
+        );
+        const total = countRows[0].total;
+
+        const [rows] = await db.query(`
+            SELECT a.id, a.action, a.details, a.ip_address, a.created_at,
+                   ad.username as admin_username
+            FROM audit_logs a
+            LEFT JOIN admins ad ON ad.id = a.admin_id
+            ${whereClause}
+            ORDER BY a.id DESC
+            LIMIT ? OFFSET ?
+        `, [...params, limit, offset]);
+
+        res.json({
+            logs: rows,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages: Math.max(1, Math.ceil(total / limit))
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching audit logs:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// GET /api/admin/search-gaps - the queries students typed that matched nobody
+// in the directory. Ordered by how often the term recurred, newest evidence
+// first; the point is deciding who to add next, not auditing individuals.
+app.get('/api/admin/search-gaps', verifyAdmin, async (req, res) => {
+    try {
+        if (!searchGapsReady) {
+            return res.json({ gaps: [] });
+        }
+        const [rows] = await db.query(`
+            SELECT query, COUNT(*) as times, MAX(created_at) as last_seen
+            FROM search_gaps
+            GROUP BY query
+            ORDER BY times DESC, last_seen DESC
+            LIMIT 50
+        `);
+        res.json({ gaps: rows });
+    } catch (error) {
+        console.error('Error fetching search gaps:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
 // ========== DYNAMIC SITEMAP.XML ==========
 app.get('/sitemap.xml', async (req, res) => {
     try {
-        const [teachers] = await db.query('SELECT id, name, department FROM teachers ORDER BY name');
-        const [departments] = await db.query('SELECT DISTINCT department FROM teachers ORDER BY department');
-        const today = new Date().toISOString().split('T')[0];
+        // Real last-modified dates matter: stamping every URL with "today" on
+        // every request teaches crawlers to ignore the field entirely.
+        const [teachers] = await db.query(`
+            SELECT t.id, t.created_at,
+                   (SELECT MAX(r.created_at) FROM reviews r
+                     WHERE r.teacher_id = t.id AND r.is_approved = 1) AS last_review
+            FROM teachers t
+            ORDER BY t.name
+        `);
+        const [departments] = await db.query(`
+            SELECT department, MAX(created_at) AS last_added
+            FROM teachers
+            GROUP BY department
+            ORDER BY department
+        `);
+        const [questionMeta] = await db.query(
+            'SELECT MAX(created_at) AS last_question FROM questions WHERE is_approved = 1'
+        );
         const baseUrl = PUBLIC_SITE_URL;
+
+        const asDate = (value) => {
+            if (!value) return null;
+            const date = value instanceof Date ? value : new Date(value);
+            return Number.isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
+        };
+        const today = asDate(new Date());
 
         let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
         xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
 
-        // Homepage
-        xml += `  <url>\n    <loc>${baseUrl}/</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n`;
+        const addUrl = (loc, lastmod, changefreq, priority) => {
+            xml += `  <url>\n    <loc>${loc}</loc>\n`;
+            if (lastmod) xml += `    <lastmod>${lastmod}</lastmod>\n`;
+            xml += `    <changefreq>${changefreq}</changefreq>\n    <priority>${priority}</priority>\n  </url>\n`;
+        };
 
-        // Static pages. /about and /contact are intentionally absent: they have no
-        // route, and the SPA catch-all would answer them with a duplicate homepage.
-        const staticPages = ['privacy', 'terms', 'dmca'];
-        staticPages.forEach(page => {
-            xml += `  <url>\n    <loc>${baseUrl}/${page}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>yearly</changefreq>\n    <priority>0.3</priority>\n  </url>\n`;
+        // Homepage
+        addUrl(`${baseUrl}/`, today, 'daily', '1.0');
+
+        // Static pages. /about has no route (it redirects to the homepage), so it
+        // is intentionally absent. Legal pages have no real modification date.
+        ['privacy', 'terms', 'dmca', 'contact'].forEach((page) => {
+            addUrl(`${baseUrl}/${page}`, null, 'yearly', '0.3');
         });
+
+        // Public Q&A board
+        if (questionMeta[0]?.last_question) {
+            addUrl(`${baseUrl}/questions`, asDate(questionMeta[0].last_question), 'daily', '0.6');
+        }
 
         // Department pages
-        departments.forEach(dept => {
-            const encoded = encodeURIComponent(dept.department);
-            xml += `  <url>\n    <loc>${baseUrl}/department/${encoded}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
+        departments.forEach((dept) => {
+            addUrl(
+                `${baseUrl}/department/${encodeURIComponent(dept.department)}`,
+                asDate(dept.last_added),
+                'weekly',
+                '0.7'
+            );
         });
 
-        // Teacher pages
-        teachers.forEach(teacher => {
-            xml += `  <url>\n    <loc>${baseUrl}/teacher/${teacher.id}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n  </url>\n`;
+        // Teacher pages: last approved review, or the row's creation date.
+        teachers.forEach((teacher) => {
+            addUrl(
+                `${baseUrl}/teacher/${teacher.id}`,
+                asDate(teacher.last_review || teacher.created_at),
+                'weekly',
+                '0.8'
+            );
         });
 
         xml += '</urlset>';
@@ -2404,9 +2867,24 @@ Sitemap: ${baseUrl}/sitemap.xml
     res.send(robots);
 });
 
-// Health check
+// Health check: process liveness only, so a platform restart loop is not
+// triggered by a transient database blip.
 app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// Readiness: unlike /api/health, this touches the database. Point uptime
+// monitors here so "server up but DB unreachable" is visible.
+app.get('/api/ready', async (req, res) => {
+    try {
+        await Promise.race([
+            db.query('SELECT 1'),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2500))
+        ]);
+        res.json({ status: 'ready', timestamp: new Date().toISOString() });
+    } catch (error) {
+        res.status(503).json({ status: 'unavailable', error: 'Database check failed' });
+    }
 });
 
 // Unknown route: answer JSON like every other API response. Express' default
@@ -2433,8 +2911,27 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`\n🚀 Server running on http://localhost:${PORT}`);
     console.log(`📊 API endpoints ready at http://localhost:${PORT}/api`);
     console.log(`✅ Health check: http://localhost:${PORT}/api/health\n`);
 });
+
+// Render sends SIGTERM before replacing an instance. Stop accepting requests,
+// let in-flight ones finish, then close the MySQL pool instead of dropping
+// connections mid-query.
+const shutdown = (signal) => {
+    console.log(`\n${signal} received - closing HTTP server...`);
+    server.close(async () => {
+        try {
+            await db.end();
+        } catch (error) {
+            console.error('Error closing database pool:', error.message);
+        }
+        process.exit(0);
+    });
+    // Do not hang forever if a request refuses to finish.
+    setTimeout(() => process.exit(1), 10000).unref();
+};
+
+['SIGTERM', 'SIGINT'].forEach((signal) => process.on(signal, () => shutdown(signal)));

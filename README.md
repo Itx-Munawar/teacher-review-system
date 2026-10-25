@@ -25,9 +25,10 @@ cp .env.example .env    # fill in DB and JWT values
 npm start               # http://localhost:5000
 ```
 
-Required environment variables are documented in `backend/.env.example`
-(`JWT_SECRET`, `DB_*`, `FRONTEND_URL`). Email variables are only needed for
-password resets and security alerts.
+Required environment variables are documented in `backend/.env.example`:
+`JWT_SECRET` (at least 32 characters, or the server refuses to start), the
+`DB_*` group, `FRONTEND_URL`, and `EMAIL_USER`/`EMAIL_PASS` for password resets
+and security alerts.
 
 ### Frontend
 
@@ -69,3 +70,39 @@ in the **Reports** tab of the admin panel.
 
 Do not commit `.env` files. Never commit a scraped faculty directory or seeded
 admin credentials.
+
+## Health and readiness
+
+Two endpoints, on purpose:
+
+| Endpoint | Checks | Use for |
+| --- | --- | --- |
+| `GET /api/health` | Process is running | Platform liveness probe |
+| `GET /api/ready` | `SELECT 1` against MySQL (2.5 s timeout, 503 on failure) | Uptime monitor, keep-warm ping |
+
+Point an uptime monitor (UptimeRobot, BetterStack, Render health checks) at
+`/api/ready`. The Render free tier sleeps after inactivity, so the first request
+after a quiet period can take 30–60 seconds — use a 5-minute or slower interval
+if the monitor treats timeouts as downtime.
+
+## Backups
+
+The database is the only stateful component; reviews, questions and audit logs
+all live in MySQL. Take a logical dump on a schedule and keep it off-provider.
+
+```bash
+# Dump (compressed). Prefer a read replica or off-peak window.
+mysqldump --single-transaction --quick --routines --triggers \
+  --set-gtid-purged=OFF -h "$DB_HOST" -P "${DB_PORT:-3306}" \
+  -u "$DB_USER" -p "$DB_NAME" | gzip > "backup-$(date +%F).sql.gz"
+
+# Restore into an empty database
+gunzip -c backup-2026-10-25.sql.gz | mysql -h "$DB_HOST" -P "${DB_PORT:-3306}" \
+  -u "$DB_USER" -p "$DB_NAME"
+```
+
+For Aiven, the console's **Backups** tab provides automated snapshots; enable it
+if the plan includes it, and still keep an independent `mysqldump` copy. After a
+restore, `npm start` recreates any missing indexes via the schema bootstrap.
+
+Test the restore path once into a scratch database before relying on it.

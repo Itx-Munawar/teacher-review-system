@@ -2,7 +2,11 @@ import React from 'react';
 import LegalPage from './LegalPage';
 
 const DmcaPolicy: React.FC = () => (
-    <LegalPage title="DMCA &amp; Content Removal Policy" updated="August 11, 2026">
+    <LegalPage
+        title="DMCA & Content Removal Policy"
+        updated="August 11, 2026"
+        description="How to request removal of a review or report copyright infringement."
+    >
         <h2>1. Purpose</h2>
         <p>
             UMT Teacher Reviews hosts user-generated reviews. While we encourage open and honest

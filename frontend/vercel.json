@@ -11,11 +11,11 @@
     { "source": "/reset-password", "destination": "/index.html" },
     { "source": "/privacy", "destination": "/index.html" },
     { "source": "/terms", "destination": "/index.html" },
-    { "source": "/dmca", "destination": "/index.html" }
+    { "source": "/dmca", "destination": "/index.html" },
+    { "source": "/contact", "destination": "/index.html" }
   ],
   "redirects": [
-    { "source": "/about", "destination": "/", "permanent": true },
-    { "source": "/contact", "destination": "/", "permanent": true }
+    { "source": "/about", "destination": "/", "permanent": true }
   ],
   "headers": [
     {

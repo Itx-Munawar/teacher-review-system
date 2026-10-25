@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useMemo, memo } from 'react';
+import React, { useState, useEffect, useMemo, memo, useCallback } from 'react';
 import Icon from './Icon';
-import { getTeachers } from '../services/api';
+import { getTeachers, getAdminAuditLogs, getSearchGaps, getAdmin2faProvision, confirmAdmin2fa, disableAdmin2fa } from '../services/api';
 import { extractCourses } from '../utils/courses';
 import Avatar from './Avatar';
-import type { Teacher, AdminReview, AdminQuestion, CustomCourse, AdminTeacherDetail, AdminReport } from '../types';
+import type { Teacher, AdminReview, AdminQuestion, CustomCourse, AdminTeacherDetail, AdminReport, AdminAuditLog, SearchGap } from '../types';
 
-type AdminTab = 'teachers' | 'reviews' | 'qa' | 'courses' | 'reports';
+type AdminTab = 'teachers' | 'reviews' | 'qa' | 'courses' | 'reports' | 'audit' | 'security';
 
 type TeacherSortKey = 'name' | 'department' | 'reviews' | 'newest';
 
@@ -74,6 +74,8 @@ export interface AdminPanelProps {
     adminReportsPage: number;
     adminReportsTotalPages: number;
     adminLoadingMoreReports: boolean;
+    /** Whether 2FA is currently enabled on this account (set from /api/admin/me). */
+    totpEnabled: boolean;
 }
 
 const AdminPanel = memo(({
@@ -134,7 +136,8 @@ const AdminPanel = memo(({
     onLoadMoreReports,
     adminReportsPage,
     adminReportsTotalPages,
-    adminLoadingMoreReports
+    adminLoadingMoreReports,
+    totpEnabled: totpEnabledProp
 }: AdminPanelProps) => {
     // Broken-photo cleanup: preview first, then confirm
     const [photoCheck, setPhotoCheck] = useState<{ count: number; broken: number } | null>(null);
@@ -255,6 +258,136 @@ const AdminPanel = memo(({
     const [detailTeacherId, setDetailTeacherId] = useState<number | null>(null);
     const [teacherDetail, setTeacherDetail] = useState<AdminTeacherDetail | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
+
+    // Audit tab state (fetched on demand, not on mount — the list can be large
+    // and most sessions never open it).
+    const [auditLogs, setAuditLogs] = useState<AdminAuditLog[]>([]);
+    const [auditAction, setAuditAction] = useState('');
+    const [auditActions, setAuditActions] = useState<string[]>([]);
+    const [auditLoading, setAuditLoading] = useState(false);
+    const [auditPage, setAuditPage] = useState(1);
+    const [auditTotalPages, setAuditTotalPages] = useState(1);
+    const [auditLoadingMore, setAuditLoadingMore] = useState(false);
+    const [searchGaps, setSearchGaps] = useState<SearchGap[]>([]);
+    const [gapsLoading, setGapsLoading] = useState(false);
+
+    const loadAuditPage = useCallback(async (page: number, action: string, append: boolean) => {
+        if (append) setAuditLoadingMore(true);
+        else setAuditLoading(true);
+        try {
+            const res = await getAdminAuditLogs(page, 25, action);
+            const rows: AdminAuditLog[] = res.data?.logs || [];
+            setAuditLogs((prev) => (append ? [...prev, ...rows] : rows));
+            setAuditPage(page);
+            setAuditTotalPages(res.data?.pagination?.totalPages || 1);
+            const seen = new Set<string>();
+            rows.forEach((r) => seen.add(r.action));
+            if (seen.size > 0) {
+                setAuditActions((prev) => Array.from(new Set([...prev, ...Array.from(seen)]))
+                    .sort((a, b) => a.localeCompare(b)));
+            }
+        } catch (err) {
+            console.error('Failed to load audit logs:', err);
+        } finally {
+            setAuditLoading(false);
+            setAuditLoadingMore(false);
+        }
+    }, []);
+
+    const loadSearchGaps = useCallback(async () => {
+        setGapsLoading(true);
+        try {
+            const res = await getSearchGaps();
+            setSearchGaps(res.data?.gaps || []);
+        } catch (err) {
+            console.error('Failed to load search gaps:', err);
+        } finally {
+            setGapsLoading(false);
+        }
+    }, []);
+
+    // Audit tab loads lazily: the list can be long and most sessions never
+    // open it. Re-fetch page 1 whenever the action filter changes.
+    const [auditLoadedFor, setAuditLoadedFor] = useState<string | null>(null);
+    useEffect(() => {
+        if (activeTab !== 'audit') return;
+        if (auditLoadedFor !== auditAction) {
+            loadAuditPage(1, auditAction, false)
+                .then(() => setAuditLoadedFor(auditAction));
+        }
+        loadSearchGaps();
+    }, [activeTab, auditAction, auditLoadedFor, loadAuditPage, loadSearchGaps]);
+
+    // ========== 2FA STATE (enrollment flow) ==========
+    const [totpSecret, setTotpSecret] = useState<string | null>(null);
+    const [totpUri, setTotpUri] = useState<string | null>(null);
+    const [totpCode, setTotpCode] = useState('');
+    const [totpError, setTotpError] = useState('');
+    const [totpLoading, setTotpLoading] = useState(false);
+    /** Sync from the server-side enable flag; the user cannot disable 2FA without
+     *  first re-enabling it through the UI flow (so we don't lose the secret). */
+    const [totpEnabled, setTotpEnabled] = useState(totpEnabledProp);
+    useEffect(() => {
+        setTotpEnabled(totpEnabledProp);
+    }, [totpEnabledProp]);
+
+    const start2fa = async () => {
+        setTotpError('');
+        setTotpLoading(true);
+        try {
+            const res = await getAdmin2faProvision();
+            const data = res.data;
+            setTotpSecret(data.secret);
+            setTotpUri(data.otpauth_uri);
+        } catch (err: any) {
+            console.error('2FA provision failed:', err);
+            setTotpError(err?.response?.data?.error || 'Failed to start 2FA setup');
+        } finally {
+            setTotpLoading(false);
+        }
+    };
+
+    const confirm2fa = async () => {
+        setTotpError('');
+        setTotpLoading(true);
+        try {
+            await confirmAdmin2fa(totpCode);
+            setTotpSecret(null);
+            setTotpUri(null);
+            setTotpCode('');
+            setTotpEnabled(true);
+        } catch (err: any) {
+            console.error('2FA confirmation failed:', err);
+            setTotpError(err?.response?.data?.error || 'Invalid code');
+        } finally {
+            setTotpLoading(false);
+        }
+    };
+
+    const cancel2fa = () => {
+        setTotpSecret(null);
+        setTotpUri(null);
+        setTotpCode('');
+        setTotpError('');
+    };
+
+    const disable2fa = async () => {
+        const ok = window.confirm('Disable two-factor authentication on this account?');
+        if (!ok) return;
+        setTotpLoading(true);
+        try {
+            await disableAdmin2fa();
+            setTotpSecret(null);
+            setTotpUri(null);
+            setTotpCode('');
+            setTotpEnabled(false);
+        } catch (err: any) {
+            console.error('2FA disable failed:', err);
+            setTotpError(err?.response?.data?.error || 'Failed to disable 2FA');
+        } finally {
+            setTotpLoading(false);
+        }
+    };
     // Edit handlers
     const startEdit = (teacher: Teacher) => {
         setEditingTeacherId(teacher.id);
@@ -505,6 +638,18 @@ const AdminPanel = memo(({
                     onClick={() => setActiveTab('reports')}
                 >
                     <Icon name="flag" size={15} /> Reports{openReportsCount > 0 ? ` (${openReportsCount})` : ''}
+                </button>
+                <button
+                    className={`admin-tab ${activeTab === 'audit' ? 'admin-tab-active' : ''}`}
+                    onClick={() => setActiveTab('audit')}
+                >
+                    <Icon name="file-text" size={15} /> Audit & Gaps
+                </button>
+                <button
+                    className={`admin-tab ${activeTab === 'security' ? 'admin-tab-active' : ''}`}
+                    onClick={() => setActiveTab('security')}
+                >
+                    <Icon name="lock" size={15} /> Security
                 </button>
             </div>
 
@@ -1108,6 +1253,188 @@ const AdminPanel = memo(({
                         {adminLoadingMoreReports ? 'Loading…' : 'Load more reports'}
                     </button>
                 )}
+            </div>
+            )}
+
+            {activeTab === 'audit' && (
+            <div className="admin-section">
+                <h3>Content Gaps (Missing Teachers)</h3>
+                <p style={{ color: '#64748b', fontSize: '0.85rem', margin: '0 0 12px' }}>
+                    Queries typed by students that matched nobody in the directory. Use this to decide which faculty members to add next.
+                </p>
+                {gapsLoading && searchGaps.length === 0 ? (
+                    <p style={{ padding: '12px', color: '#999' }}>Loading content gaps…</p>
+                ) : searchGaps.length === 0 ? (
+                    <p style={{ padding: '12px', color: '#999' }}>No unmatched searches recorded yet.</p>
+                ) : (
+                    <div className="admin-list" style={{ marginBottom: '24px' }}>
+                        {searchGaps.map((gap, idx) => (
+                            <div key={`${gap.query}-${idx}`} className="admin-item" style={{ padding: '8px 12px' }}>
+                                <div className="review-info">
+                                    <strong>&quot;{gap.query}&quot;</strong>
+                                    <small style={{ marginLeft: '12px', color: '#64748b' }}>
+                                        Searched {gap.times} time{gap.times === 1 ? '' : 's'} · last seen {new Date(gap.last_seen).toLocaleDateString()}
+                                    </small>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                <h3 style={{ marginTop: '24px' }}>Admin Audit Log</h3>
+                <p style={{ color: '#64748b', fontSize: '0.85rem', margin: '0 0 12px' }}>
+                    Record of admin moderation and configuration actions. IP addresses are stored as keyed hashes.
+                </p>
+                {auditActions.length > 0 && (
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '0.85rem', color: '#475569' }}>Filter action:</span>
+                        <select
+                            className="filter-select"
+                            value={auditAction}
+                            onChange={(e) => setAuditAction(e.target.value)}
+                            style={{ padding: '4px 8px', fontSize: '0.85rem' }}
+                        >
+                            <option value="">All actions</option>
+                            {auditActions.map((act) => (
+                                <option key={act} value={act}>{act}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+                {auditLoading && auditLogs.length === 0 ? (
+                    <p style={{ padding: '20px', textAlign: 'center', color: '#999' }}>Loading audit log…</p>
+                ) : auditLogs.length === 0 ? (
+                    <p style={{ padding: '20px', textAlign: 'center', color: '#999' }}>No audit log rows found.</p>
+                ) : (
+                    <div className="admin-list">
+                        {auditLogs.map((log) => (
+                            <div key={log.id} className="admin-item" style={{ alignItems: 'flex-start', padding: '10px 12px' }}>
+                                <div className="review-info">
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                        <span className="admin-pending-badge" style={{ background: '#e2e8f0', color: '#334155' }}>
+                                            {log.action}
+                                        </span>
+                                        <strong>{log.admin_username || 'System / Setup'}</strong>
+                                        <small style={{ color: '#64748b' }}>
+                                            {new Date(log.created_at).toLocaleString()}
+                                        </small>
+                                    </div>
+                                    {log.details && (
+                                        <p style={{ margin: '6px 0 0', color: '#334155', fontSize: '0.9rem' }}>
+                                            {log.details}
+                                        </p>
+                                    )}
+                                    {log.ip_address && (
+                                        <small style={{ color: '#94a3b8', fontSize: '0.75rem', fontFamily: 'monospace' }}>
+                                            IP: {log.ip_address}
+                                        </small>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+                {auditPage < auditTotalPages && (
+                    <button
+                        onClick={() => loadAuditPage(auditPage + 1, auditAction, true)}
+                        className="add-teacher-btn"
+                        disabled={auditLoadingMore}
+                        style={{ marginTop: '12px' }}
+                    >
+                        {auditLoadingMore ? 'Loading…' : 'Load more audit logs'}
+                    </button>
+                )}
+            </div>
+            )}
+
+            {activeTab === 'security' && (
+            <div className="admin-section">
+                <h3>Two-Factor Authentication (TOTP)</h3>
+                <p style={{ color: '#64748b', fontSize: '0.85rem', margin: '0 0 12px' }}>
+                    Use an authenticator app (Google Authenticator, Apple Authenticator, Authy, etc.) to scan the QR code or enter the secret manually. When enabled, the login form asks for a 6-digit code in addition to the password.
+                </p>
+
+                {totpEnabled ? (
+                    <div style={{ padding: '12px', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '8px', marginBottom: '16px' }}>
+                        <p style={{ margin: 0, fontWeight: 600, color: '#047857' }}>
+                            Two-factor authentication is enabled on this account.
+                        </p>
+                        <p style={{ margin: '8px 0 0', fontSize: '0.85rem', color: '#475569' }}>
+                            Your authenticator app will generate a new 6-digit code every 30 seconds. Use it when signing in.
+                        </p>
+                        <button
+                            onClick={disable2fa}
+                            className="admin-mini-btn admin-mini-reject"
+                            disabled={totpLoading}
+                            style={{ marginTop: '12px' }}
+                        >
+                            Disable 2FA
+                        </button>
+                    </div>
+                ) : (
+                    <div>
+                        {!totpSecret ? (
+                            <>
+                                <button onClick={start2fa} className="add-teacher-btn" disabled={totpLoading}>
+                                    {totpLoading ? 'Generating…' : 'Start 2FA Setup'}
+                                </button>
+                            </>
+                        ) : (
+                            <div>
+                                <p style={{ fontWeight: 600, marginBottom: '8px' }}>Step 1: Scan the QR code</p>
+                                <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '12px' }}>
+                                    Open your authenticator app and scan this QR code. If you cannot scan it, enter the secret manually.
+                                </p>
+                                <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '16px', alignItems: 'flex-start' }}>
+                                    {/* Render the QR as an image from the otpauth URI.
+                                        The Google Chart API is a free, no-auth service that
+                                        generates QR images; no secret is stored client-side
+                                        beyond the browser session. */}
+                                    <img
+                                        src={`https://chart.googleapis.com/chart?chs=200x200&cht=qr&chl=${encodeURIComponent(totpUri || '')}&choe=UTF-8`}
+                                        alt="QR code for TOTP provisioning"
+                                        style={{ border: '1px solid #e2e8f0', borderRadius: '8px' }}
+                                    />
+                                    <div>
+                                        <p style={{ fontSize: '0.85rem', color: '#475569', marginBottom: '4px' }}>Manual secret (copy into your app):</p>
+                                        <code
+                                            style={{ display: 'block', padding: '8px 12px', background: '#f1f5f9', borderRadius: '6px',
+                                                     fontFamily: 'monospace', fontSize: '0.95rem', letterSpacing: '0.05em' }}
+                                        >{totpSecret}</code>
+                                    </div>
+                                </div>
+
+                                <p style={{ fontWeight: 600, marginBottom: '8px' }}>Step 2: Enter the 6-digit code</p>
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        pattern="[0-9]{6}"
+                                        maxLength={8}
+                                        placeholder="6-digit code"
+                                        value={totpCode}
+                                        onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ''))}
+                                        style={{ padding: '6px 10px', width: '140px', fontSize: '1rem', fontFamily: 'monospace', letterSpacing: '0.1em' }}
+                                    />
+                                    <button onClick={confirm2fa} className="add-teacher-btn" disabled={totpLoading || totpCode.length < 6}>
+                                        Confirm & Enable
+                                    </button>
+                                    <button onClick={cancel2fa} className="admin-mini-btn" disabled={totpLoading}>
+                                        Cancel
+                                    </button>
+                                </div>
+                                {totpError && <p style={{ color: '#dc2626', fontSize: '0.85rem', marginTop: '8px' }}>{totpError}</p>}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>
+                    <p style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                        <strong>Note:</strong> If you lose access to your authenticator device, contact the site operator to recover.
+                        A lost device means you cannot log in with 2FA until it is disabled from the outside.
+                    </p>
+                </div>
             </div>
             )}
         </div>

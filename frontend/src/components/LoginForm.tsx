@@ -7,6 +7,10 @@ export interface LoginFormProps {
     setAdminPassword: (v: string) => void;
     adminError: string;
     onLogin: (e: React.FormEvent) => void;
+    /** When true, also show the TOTP code field (2FA is enabled on this account). */
+    requires_totp?: boolean;
+    admin_totp_code: string;
+    setAdmin_totp_code: (v: string) => void;
 }
 
 const LoginForm = memo(({
@@ -15,7 +19,10 @@ const LoginForm = memo(({
     adminPassword,
     setAdminPassword,
     adminError,
-    onLogin
+    onLogin,
+    requires_totp = false,
+    admin_totp_code,
+    setAdmin_totp_code
 }: LoginFormProps) => (
     <div className="login-form-container">
         <div className="login-form">
@@ -42,6 +49,24 @@ const LoginForm = memo(({
                     onChange={(e) => setAdminPassword(e.target.value)}
                     required
                 />
+                {requires_totp && (
+                    <>
+                        <p style={{ fontSize: '0.85rem', color: '#475569', margin: '8px 0' }}>
+                            This account uses two-factor authentication. Enter the 6-digit code from your authenticator app.
+                        </p>
+                        <input
+                            type="text"
+                            placeholder="TOTP code"
+                            aria-label="TOTP code"
+                            autoComplete="one-time-code"
+                            maxLength={8}
+                            pattern="[0-9]{6}"
+                            value={admin_totp_code}
+                            onChange={(e) => setAdmin_totp_code(e.target.value.replace(/\D/g, ''))}
+                            required
+                        />
+                    </>
+                )}
                 {adminError && <div className="error-message">{adminError}</div>}
                 <button type="submit">Login</button>
             </form>
