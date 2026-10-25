@@ -5854,7 +5854,8 @@ select:focus-visible {
     body {
         animation: none !important;
     }
-    /* Stop gradient text animation */
+
+    /* Stop gradient text animation */
     .gradient-text {
         animation: none !important;
     }
@@ -5892,7 +5893,8 @@ select:focus-visible {
     .teacher-detail-image {
         animation: none !important;
     }
-    /* Simplify card entrance animations */
+
+    /* Simplify card entrance animations */
     .teacher-card-enter {
         animation: fadeIn 0.2s ease-out both !important;
     }
@@ -5901,7 +5903,8 @@ select:focus-visible {
     .tilt-card {
         transform-style: flat !important;
     }
-    /* Reduce shadow complexity */
+
+    /* Reduce shadow complexity */
     .teacher-card {
         box-shadow: 0 2px 8px rgba(33, 22, 43, 0.12) !important;
     }
