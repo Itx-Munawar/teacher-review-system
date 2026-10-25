@@ -2,7 +2,11 @@ import React from 'react';
 import LegalPage from './LegalPage';
 
 const TermsOfUse: React.FC = () => (
-    <LegalPage title="Terms of Use" updated="August 11, 2026">
+    <LegalPage
+        title="Terms of Use"
+        updated="August 11, 2026"
+        description="Rules for using UMT Teacher Reviews, including acceptable use and moderation."
+    >
         <h2>1. Acceptance of Terms</h2>
         <p>
             By accessing or using UMT Teacher Reviews (the "Site"), you agree to these Terms of Use. If

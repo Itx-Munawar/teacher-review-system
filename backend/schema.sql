@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS teachers (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY idx_teachers_name (name),
-    KEY idx_teachers_department (department)
+    KEY idx_teachers_department (department),
+    KEY idx_teachers_department_name (department, name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Reviews written by students (rating kept for legacy data; no longer used by the UI)
@@ -87,7 +88,8 @@ CREATE TABLE IF NOT EXISTS questions (
     is_approved TINYINT(1) NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    KEY idx_questions_teacher (teacher_id, is_approved)
+    KEY idx_questions_teacher (teacher_id, is_approved),
+    KEY idx_questions_approved_created (is_approved, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Answers submitted to a question (one question can have many answers)

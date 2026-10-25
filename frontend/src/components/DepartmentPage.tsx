@@ -5,6 +5,7 @@ import TiltCard from './TiltCard';
 import Avatar from './Avatar';
 import { TeacherCardSkeleton } from './Skeleton';
 import { SITE_URL } from '../utils/siteUrl';
+import { applySeo } from '../utils/seo';
 
 interface Teacher {
     id: number;
@@ -33,17 +34,7 @@ const DepartmentPage: React.FC = () => {
         const description = `Browse ${department} teachers at UMT Lahore. Read anonymous student reviews and find the best professors.`;
         const url = `${baseUrl}/department/${encodeURIComponent(department)}`;
 
-        document.title = title;
-        const metaDesc = document.querySelector('meta[name="description"]');
-        const ogTitle = document.querySelector('meta[property="og:title"]');
-        const ogDesc = document.querySelector('meta[property="og:description"]');
-        const ogUrl = document.querySelector('meta[property="og:url"]');
-        const canonical = document.querySelector('link[rel="canonical"]');
-        if (metaDesc) metaDesc.setAttribute('content', description);
-        if (ogTitle) ogTitle.setAttribute('content', title);
-        if (ogDesc) ogDesc.setAttribute('content', description);
-        if (ogUrl) ogUrl.setAttribute('content', url);
-        if (canonical) canonical.setAttribute('href', url);
+        applySeo({ title, description, url });
 
         let cancelled = false;
         loadGeneration.current += 1;
@@ -65,6 +56,16 @@ const DepartmentPage: React.FC = () => {
         });
         return () => { cancelled = true; };
     }, [department]);
+
+    // An empty result usually means the department name in the URL is wrong
+    // (or the department was renamed), so keep the soft-404 out of the index.
+    useEffect(() => {
+        if (loading) return;
+        const robots = document.head.querySelector('meta[name="robots"]');
+        if (robots) {
+            robots.setAttribute('content', teachers.length === 0 ? 'noindex, nofollow' : 'index, follow');
+        }
+    }, [loading, teachers.length]);
 
     // The API pages at 20 rows by default; the largest department has ~290
     // teachers, so the first page alone used to hide most of it.
@@ -154,7 +155,7 @@ const DepartmentPage: React.FC = () => {
                 <div className="footer-content">
                     <p>© {new Date().getFullYear()} UMT Teacher Reviews. All rights reserved.</p>
                     <p className="footer-links">
-                        <a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Use</a> · <a href="/dmca">DMCA &amp; Content Removal</a>
+                        <a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Use</a> · <a href="/dmca">DMCA &amp; Content Removal</a> · <a href="/contact">Contact</a>
                     </p>
                 </div>
             </footer>

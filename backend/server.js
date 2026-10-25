@@ -573,6 +573,24 @@ const runSensitiveReviewBackfill = async () => {
 let schemaBootstrapError = null;
 let schemaBootstrapDone = false;
 
+// MySQL has no "ADD INDEX IF NOT EXISTS", so check the catalogue first.
+const ensureIndex = async (table, indexName, definition) => {
+    try {
+        const [rows] = await db.query(
+            `SELECT 1 FROM information_schema.statistics
+              WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?
+              LIMIT 1`,
+            [table, indexName]
+        );
+        if (rows.length === 0) {
+            await db.query(`ALTER TABLE \`${table}\` ADD INDEX \`${indexName}\` ${definition}`);
+            console.log(`✅ Added index ${indexName} on ${table}`);
+        }
+    } catch (error) {
+        console.error(`⚠️ Could not ensure index ${indexName} on ${table}:`, error.message);
+    }
+};
+
 const runSchemaBootstrap = async () => {
     try {
         await db.query(`
@@ -693,6 +711,12 @@ const runSchemaBootstrap = async () => {
         } catch (tvErr) {
             console.error('⚠️ Could not ensure admins.token_version column:', tvErr.message);
         }
+        // Composite indexes for the two hottest list queries: department pages
+        // (WHERE department = ? ORDER BY name) and the public Q&A board
+        // (WHERE is_approved = 1 ORDER BY created_at DESC).
+        await ensureIndex('teachers', 'idx_teachers_department_name', '(department, name)');
+        await ensureIndex('questions', 'idx_questions_approved_created', '(is_approved, created_at)');
+
         schemaBootstrapError = null;
         schemaBootstrapDone = true;
         console.log('✅ Schema bootstrap complete (questions, question_answers, custom_courses, review_reports, cleanup)');
@@ -2351,33 +2375,74 @@ app.get('/api/admin/stats', verifyAdmin, async (req, res) => {
 // ========== DYNAMIC SITEMAP.XML ==========
 app.get('/sitemap.xml', async (req, res) => {
     try {
-        const [teachers] = await db.query('SELECT id, name, department FROM teachers ORDER BY name');
-        const [departments] = await db.query('SELECT DISTINCT department FROM teachers ORDER BY department');
-        const today = new Date().toISOString().split('T')[0];
+        // Real last-modified dates matter: stamping every URL with "today" on
+        // every request teaches crawlers to ignore the field entirely.
+        const [teachers] = await db.query(`
+            SELECT t.id, t.created_at,
+                   (SELECT MAX(r.created_at) FROM reviews r
+                     WHERE r.teacher_id = t.id AND r.is_approved = 1) AS last_review
+            FROM teachers t
+            ORDER BY t.name
+        `);
+        const [departments] = await db.query(`
+            SELECT department, MAX(created_at) AS last_added
+            FROM teachers
+            GROUP BY department
+            ORDER BY department
+        `);
+        const [questionMeta] = await db.query(
+            'SELECT MAX(created_at) AS last_question FROM questions WHERE is_approved = 1'
+        );
         const baseUrl = PUBLIC_SITE_URL;
+
+        const asDate = (value) => {
+            if (!value) return null;
+            const date = value instanceof Date ? value : new Date(value);
+            return Number.isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
+        };
+        const today = asDate(new Date());
 
         let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
         xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
 
-        // Homepage
-        xml += `  <url>\n    <loc>${baseUrl}/</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n`;
+        const addUrl = (loc, lastmod, changefreq, priority) => {
+            xml += `  <url>\n    <loc>${loc}</loc>\n`;
+            if (lastmod) xml += `    <lastmod>${lastmod}</lastmod>\n`;
+            xml += `    <changefreq>${changefreq}</changefreq>\n    <priority>${priority}</priority>\n  </url>\n`;
+        };
 
-        // Static pages. /about and /contact are intentionally absent: they have no
-        // route, and the SPA catch-all would answer them with a duplicate homepage.
-        const staticPages = ['privacy', 'terms', 'dmca'];
-        staticPages.forEach(page => {
-            xml += `  <url>\n    <loc>${baseUrl}/${page}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>yearly</changefreq>\n    <priority>0.3</priority>\n  </url>\n`;
+        // Homepage
+        addUrl(`${baseUrl}/`, today, 'daily', '1.0');
+
+        // Static pages. /about has no route (it redirects to the homepage), so it
+        // is intentionally absent. Legal pages have no real modification date.
+        ['privacy', 'terms', 'dmca', 'contact'].forEach((page) => {
+            addUrl(`${baseUrl}/${page}`, null, 'yearly', '0.3');
         });
+
+        // Public Q&A board
+        if (questionMeta[0]?.last_question) {
+            addUrl(`${baseUrl}/questions`, asDate(questionMeta[0].last_question), 'daily', '0.6');
+        }
 
         // Department pages
-        departments.forEach(dept => {
-            const encoded = encodeURIComponent(dept.department);
-            xml += `  <url>\n    <loc>${baseUrl}/department/${encoded}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
+        departments.forEach((dept) => {
+            addUrl(
+                `${baseUrl}/department/${encodeURIComponent(dept.department)}`,
+                asDate(dept.last_added),
+                'weekly',
+                '0.7'
+            );
         });
 
-        // Teacher pages
-        teachers.forEach(teacher => {
-            xml += `  <url>\n    <loc>${baseUrl}/teacher/${teacher.id}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n  </url>\n`;
+        // Teacher pages: last approved review, or the row's creation date.
+        teachers.forEach((teacher) => {
+            addUrl(
+                `${baseUrl}/teacher/${teacher.id}`,
+                asDate(teacher.last_review || teacher.created_at),
+                'weekly',
+                '0.8'
+            );
         });
 
         xml += '</urlset>';
@@ -2404,9 +2469,24 @@ Sitemap: ${baseUrl}/sitemap.xml
     res.send(robots);
 });
 
-// Health check
+// Health check: process liveness only, so a platform restart loop is not
+// triggered by a transient database blip.
 app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// Readiness: unlike /api/health, this touches the database. Point uptime
+// monitors here so "server up but DB unreachable" is visible.
+app.get('/api/ready', async (req, res) => {
+    try {
+        await Promise.race([
+            db.query('SELECT 1'),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2500))
+        ]);
+        res.json({ status: 'ready', timestamp: new Date().toISOString() });
+    } catch (error) {
+        res.status(503).json({ status: 'unavailable', error: 'Database check failed' });
+    }
 });
 
 // Unknown route: answer JSON like every other API response. Express' default
@@ -2433,8 +2513,27 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`\n🚀 Server running on http://localhost:${PORT}`);
     console.log(`📊 API endpoints ready at http://localhost:${PORT}/api`);
     console.log(`✅ Health check: http://localhost:${PORT}/api/health\n`);
 });
+
+// Render sends SIGTERM before replacing an instance. Stop accepting requests,
+// let in-flight ones finish, then close the MySQL pool instead of dropping
+// connections mid-query.
+const shutdown = (signal) => {
+    console.log(`\n${signal} received - closing HTTP server...`);
+    server.close(async () => {
+        try {
+            await db.end();
+        } catch (error) {
+            console.error('Error closing database pool:', error.message);
+        }
+        process.exit(0);
+    });
+    // Do not hang forever if a request refuses to finish.
+    setTimeout(() => process.exit(1), 10000).unref();
+};
+
+['SIGTERM', 'SIGINT'].forEach((signal) => process.on(signal, () => shutdown(signal)));

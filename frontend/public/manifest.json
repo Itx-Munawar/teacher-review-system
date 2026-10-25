@@ -34,7 +34,7 @@
   "shortcuts": [
     {
       "name": "Search Teachers",
-      "url": "/?search=teachers",
+      "url": "/?search=",
       "description": "Search UMT teachers"
     },
     {

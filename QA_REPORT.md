@@ -114,5 +114,49 @@ following fixes.
   instead of fetching every match.
 - Admin Q&A rows have a Delete button wired to the new endpoint.
 - Password reset enforces the 72-byte limit client-side and caps inputs at 72.
-- `/about` and `/contact` redirect permanently to `/` on Vercel.
+- `/about` redirects permanently to `/` on Vercel; `/contact` is now a real page.
 - Privacy Policy documents hashed audit IPs and the 90-day retention.
+
+## Phase 1 follow-up (2026-10-25, branch `review/2026-10-phase1`)
+
+Roadmap: `ROADMAP.md`.
+
+### SEO
+
+- Per-route canonical URLs via `frontend/src/utils/seo.ts`; previously every
+  route kept the homepage canonical from `index.html`, so `/questions` and the
+  legal pages could not rank.
+- `/admin`, unknown teacher IDs, and empty department pages are now
+  `noindex, nofollow`. Verified in a headless browser: a valid teacher and
+  department return `index, follow`; a bogus ID/department returns `noindex`.
+- `sitemap.xml` uses real `lastmod` values (last approved review, last teacher
+  added) instead of stamping every URL with today's date, and lists
+  `/questions` and `/contact`.
+- Removed a duplicated `<meta name="robots">` tag that the first pass added to
+  `index.html` twice.
+
+### Product and build
+
+- `/contact` is a real page, linked from both footers, and the PWA search
+  shortcut points at `/?search=` instead of `/?search=teachers`.
+- Removed the "Sort: Newest" option; the API never returned a date for it, so it
+  silently behaved like name order.
+- `npm run build` works on Windows (`cross-env CI=false`).
+
+### Backend
+
+- `/api/ready` checks MySQL (`SELECT 1`, 2.5 s timeout, 503 on failure);
+  `/api/health` remains process-only so a DB blip does not restart the service.
+- Added `(department, name)` on `teachers` and `(is_approved, created_at)` on
+  `questions` through the schema bootstrap (idempotent) and `schema.sql`.
+- Graceful SIGTERM/SIGINT shutdown closes the HTTP server and MySQL pool.
+
+### Tooling and documentation
+
+- GitHub Actions CI (backend syntax + tests; frontend types, tests, build) and
+  Dependabot for npm and Actions.
+- README documents the health/readiness split and a `mysqldump` backup/restore
+  runbook.
+- `.env.example` blanks `ADMIN_SETUP_KEY` by default and documents the JWT
+  length requirement.
+

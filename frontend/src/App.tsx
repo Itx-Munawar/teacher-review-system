@@ -34,6 +34,7 @@ import {
 } from './services/api';
 import { debounce } from './utils/debounce';
 import { SITE_URL } from './utils/siteUrl';
+import { applySeo } from './utils/seo';
 import TiltCard from './components/TiltCard';
 import TeacherAutocomplete from './components/TeacherAutocomplete';
 import InstallPrompt from './components/InstallPrompt';
@@ -607,6 +608,13 @@ const App: React.FC = () => {
                     setSelectedTeacher(mapTeacherDetail(response.data));
                 } catch (err) {
                     console.error('Failed to restore teacher:', err);
+                    // A wrong/removed teacher ID renders the normal list (an SPA
+                    // cannot send a 404), so keep that soft-404 out of the index.
+                    const status = (err as { response?: { status?: number } }).response?.status;
+                    if (status === 404) {
+                        const robots = document.head.querySelector('meta[name="robots"]');
+                        if (robots) robots.setAttribute('content', 'noindex, nofollow');
+                    }
                 }
             })();
         }
@@ -623,6 +631,11 @@ const App: React.FC = () => {
                 setSelectedTeacher(mapTeacherDetail(response.data));
             } catch (err) {
                 console.error('Failed to restore teacher:', err);
+                const status = (err as { response?: { status?: number } }).response?.status;
+                if (status === 404) {
+                    const robots = document.head.querySelector('meta[name="robots"]');
+                    if (robots) robots.setAttribute('content', 'noindex, nofollow');
+                }
             }
         })();
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -642,17 +655,11 @@ const App: React.FC = () => {
     // Dynamic page title + Open Graph + Twitter + canonical + JSON-LD for SEO
     useEffect(() => {
         const baseUrl = SITE_URL;
-        const metaDescription = document.querySelector('meta[name="description"]');
-        const ogTitle = document.querySelector('meta[property="og:title"]');
-        const ogDesc = document.querySelector('meta[property="og:description"]');
-        const ogUrl = document.querySelector('meta[property="og:url"]');
-        const twTitle = document.querySelector('meta[name="twitter:title"]');
-        const twDesc = document.querySelector('meta[name="twitter:description"]');
-        const canonical = document.querySelector('link[rel="canonical"]');
-
+        const path = location.pathname;
         let title = 'UMT Teacher Reviews – Anonymous Reviews for UMT Professors';
         let description = 'Read and write anonymous reviews for UMT teachers. Find the best professors at University of Management and Technology, Lahore.';
         let url = baseUrl + '/';
+        let noindex = false;
         let jsonLd: Record<string, unknown> | null = null;
 
         if (selectedTeacher) {
@@ -672,20 +679,24 @@ const App: React.FC = () => {
                 'url': url,
                 'description': description
             };
+        } else if (path === '/questions') {
+            title = 'Questions & Answers | UMT Teacher Reviews';
+            description = 'Ask and answer questions about UMT teachers: grading, attendance, exams, and teaching style.';
+            url = `${baseUrl}/questions`;
+        } else if (path === '/admin') {
+            // The login panel has nothing to rank for and must never appear in
+            // search results next to teacher pages.
+            title = 'Admin | UMT Teacher Reviews';
+            description = 'Admin sign-in for UMT Teacher Reviews.';
+            url = `${baseUrl}/admin`;
+            noindex = true;
         } else if (searchTerm) {
             title = `Search "${searchTerm}" | UMT Teacher Reviews`;
             description = `Search results for "${searchTerm}" among UMT teachers. Read anonymous student reviews at UMT Teacher Reviews.`;
             url = `${baseUrl}/?search=${encodeURIComponent(searchTerm)}`;
         }
 
-        document.title = title;
-        if (metaDescription) metaDescription.setAttribute('content', description);
-        if (ogTitle) ogTitle.setAttribute('content', title);
-        if (ogDesc) ogDesc.setAttribute('content', description);
-        if (ogUrl) ogUrl.setAttribute('content', url);
-        if (twTitle) twTitle.setAttribute('content', title);
-        if (twDesc) twDesc.setAttribute('content', description);
-        if (canonical) canonical.setAttribute('href', url);
+        applySeo({ title, description, url, noindex });
 
         // Inject / update JSON-LD for teacher pages
         let existingLd = document.getElementById('teacher-jsonld') as HTMLScriptElement | null;
@@ -700,7 +711,7 @@ const App: React.FC = () => {
         } else if (existingLd) {
             existingLd.remove();
         }
-    }, [selectedTeacher, searchTerm]);
+    }, [selectedTeacher, searchTerm, location.pathname]);
 
     const checkAdminLogin = useCallback(async () => {
         try {
@@ -1536,7 +1547,6 @@ const App: React.FC = () => {
                             >
                                 <option value="name">Sort: Name</option>
                                 <option value="reviews">Sort: Most Reviews</option>
-                                <option value="newest">Sort: Newest</option>
                             </select>
                             <select
                                 className="filter-select"
@@ -1694,7 +1704,7 @@ const App: React.FC = () => {
                 <div className="footer-content">
                     <p>© {new Date().getFullYear()} UMT Teacher Reviews. All rights reserved.</p>
                     <p className="footer-links">
-                        <a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Use</a> · <a href="/dmca">DMCA &amp; Content Removal</a>
+                        <a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Use</a> · <a href="/dmca">DMCA &amp; Content Removal</a> · <a href="/contact">Contact</a>
                     </p>
                     <p className="footer-disclaimer">All reviews are student opinions and not official university statements.</p>
                 </div>
