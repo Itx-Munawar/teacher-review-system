@@ -996,7 +996,7 @@ setTimeout(() => sendModerationDigest(), 90 * 1000).unref();
 // ========== PUBLIC API ENDPOINTS ==========
 
 // GET /api/teachers - paginated list (20 per page by default)
-// Supports: ?page=N&limit=20..200&sort=name|reviews|newest&department=<name>
+// Supports: ?page=N&limit=20..200&sort=name|reviews|newest&department=<name>&course=<name>
 app.get('/api/teachers', async (req, res) => {
     try {
         const page = clampInt(req.query.page, 1, 1, 100000);
@@ -1006,13 +1006,15 @@ app.get('/api/teachers', async (req, res) => {
         const offset = (page - 1) * limit;
         const sort = req.query.sort || 'name';
         const department = req.query.department || '';
+        const course = req.query.course || '';
 
         // An admin must never see a cached list from before their last
         // add/approve/delete. Public visitors keep the 60s shared cache.
         const bypassCache = Boolean(parseCookies(req).admin_token);
         const cacheControl = bypassCache ? 'private, no-store' : 'public, max-age=60';
 
-        const cacheKey = `teachers:${page}:${limit}:${sort}:${department}`;
+        // Cache key includes course filter so different courses get distinct entries
+        const cacheKey = `teachers:${page}:${limit}:${sort}:${department}:${course}`;
         const cached = bypassCache ? null : getCached(cacheKey);
         if (cached) {
             res.set('Cache-Control', cacheControl);
@@ -1023,9 +1025,23 @@ app.get('/api/teachers', async (req, res) => {
         if (sort === 'reviews') orderBy = 'review_count DESC, t.name';
         else if (sort === 'newest') orderBy = 't.created_at DESC';
 
-        const whereClause = department ? 'WHERE t.department = ?' : '';
+        // Build WHERE clause from optional filters
+        const clauses = [];
         const params = [];
-        if (department) params.push(department);
+        if (department) {
+            clauses.push('t.department = ?');
+            params.push(department);
+        }
+        if (course) {
+            // Find teachers who have been reviewed for this course (exact or partial match)
+            clauses.push(`t.id IN (
+                SELECT DISTINCT r.teacher_id FROM reviews r
+                WHERE r.is_approved = 1 AND r.courses IS NOT NULL
+                AND LOWER(r.courses) LIKE LOWER(?)
+            )`);
+            params.push(`%${course}%`);
+        }
+        const whereClause = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
 
         const query = `
             SELECT t.*,
@@ -1033,12 +1049,12 @@ app.get('/api/teachers', async (req, res) => {
             FROM teachers t
             ${whereClause}
             ORDER BY ${orderBy}
-            LIMIT ${limit} OFFSET ${offset}
+            LIMIT ? OFFSET ?
         `;
         
-        const [teachers] = await db.query(query, params);
+        const [teachers] = await db.query(query, [...params, limit, offset]);
 
-        const countQuery = department ? 'SELECT COUNT(*) as total FROM teachers WHERE department = ?' : 'SELECT COUNT(*) as total FROM teachers';
+        const countQuery = `SELECT COUNT(*) as total FROM teachers t ${whereClause}`;
         const [countResult] = await db.query(countQuery, params);
         const total = countResult[0].total;
 
@@ -2791,6 +2807,25 @@ app.get('/sitemap.xml', async (req, res) => {
         const [questionMeta] = await db.query(
             'SELECT MAX(created_at) AS last_question FROM questions WHERE is_approved = 1'
         );
+        // Distinct courses mentioned in approved reviews — used for /course/:name pages.
+        // Kept lightweight: simple distinct list from the JSON array column.
+        const [courses] = await db.query(`
+            SELECT DISTINCT TRIM(JSON_UNQUOTE(JSON_EXTRACT(c.name, '$')) ) AS name
+            FROM (
+                SELECT SUBSTRING_INDEX(SUBSTRING_INDEX(courses, ',', n.n), ',', -1) AS name
+                FROM reviews
+                JOIN (
+                    SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4
+                    UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8
+                    UNION ALL SELECT 9 UNION ALL SELECT 10 UNION ALL SELECT 11 UNION ALL SELECT 12
+                ) n
+                WHERE is_approved = 1 AND courses IS NOT NULL AND courses != ''
+                  AND LENGTH(courses) - LENGTH(REPLACE(courses, ',', '')) >= n.n - 1
+            ) c
+            WHERE TRIM(c.name) != ''
+            ORDER BY c.name
+            LIMIT 100
+        `);
         const baseUrl = PUBLIC_SITE_URL;
 
         const asDate = (value) => {
@@ -2842,6 +2877,32 @@ app.get('/sitemap.xml', async (req, res) => {
                 '0.8'
             );
         });
+
+        // Course pages: each distinct course gets a listing page.
+        // Only include courses that have at least one teacher in the directory.
+        if (courses.length > 0) {
+            const [teachersWithCourses] = await db.query(`
+                SELECT DISTINCT t.id, t.name
+                FROM teachers t
+                JOIN reviews r ON r.teacher_id = t.id AND r.is_approved = 1
+                WHERE r.courses IS NOT NULL AND r.courses != ''
+            `);
+            const courseTeacherIds = new Set(teachersWithCourses.map((t) => t.id));
+            const seen = [];
+            courses.forEach((row) => {
+                const name = String(row.name || '').trim();
+                if (!name || name.length < 2 || seen.includes(name)) return;
+                // Only include if there are actual teachers for it
+                // (we check at render time; if empty the page is noindexed client-side)
+                addUrl(
+                    `${baseUrl}/course/${encodeURIComponent(name)}`,
+                    today,
+                    'weekly',
+                    '0.5'
+                );
+                seen.push(name);
+            });
+        }
 
         xml += '</urlset>';
 

@@ -54,13 +54,13 @@ Status key: **Done** · **In progress** · **Planned** · **Needs input** (accou
   confirmation, and (optionally) disabling 2FA.
 - A bare `2FA_FAILED` action is logged when a wrong code is submitted.
 
-## Phase 4 follow-up (planned)
+## Phase 4 follow-up (in progress)
 
 | # | Step | Status |
 | --- | --- | --- |
-| 22 | Course pages (`/course/:name`) | Planned |
-| 23 | Prerendered social/OG tags for teacher and department pages | Planned |
-| 24 | CRA → Vite migration | Planned |
+| 22 | Course pages (`/course/:name`) | In progress |
+| 23 | Prerendered social/OG tags for teacher and department pages | Deferred |
+| 24 | CRA → Vite migration | In progress |
 
 ## Already handled
 
