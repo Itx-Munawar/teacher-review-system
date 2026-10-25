@@ -22,6 +22,7 @@ import {
     deleteQuestion,
     updateQuestion,
     updateAnswer,
+    deleteAnswer,
     bulkReviewDecision,
     submitReview,
     getAdminCustomCourses,
@@ -251,7 +252,7 @@ const App: React.FC = () => {
         setIsSearching(true);
         setLoading(true);
         try {
-            const res = await searchAllTeachers(value);
+            const res = await searchAllTeachers(value, 50);
             setSearchResults(res.data || []);
         } catch (searchErr) {
             console.error('Search error:', searchErr);
@@ -296,7 +297,7 @@ const App: React.FC = () => {
         if (value.trim()) {
             setAdminIsSearching(true);
             try {
-                const res = await searchAllTeachers(value);
+                const res = await searchAllTeachers(value, 50);
                 setAdminSearchResults(res.data || []);
             } catch (error) {
                 console.error('Admin search error:', error);
@@ -992,6 +993,24 @@ const App: React.FC = () => {
         }
     }, [loadAdminData, showToast]);
 
+    const handleDeleteAnswer = useCallback(async (id: number) => {
+        if (!window.confirm('Delete this answer permanently? This cannot be undone.')) return;
+        setAdminMutationLoading(true);
+        try {
+            await deleteAnswer(id);
+            showToast('Answer deleted successfully!', 'success');
+            await loadAdminData();
+            if (selectedTeacher) {
+                const response = await getTeacherDetail(selectedTeacher.id);
+                setSelectedTeacher(mapTeacherDetail(response.data, selectedTeacher));
+            }
+        } catch (error) {
+            showToast('Failed to delete answer', 'error');
+        } finally {
+            setAdminMutationLoading(false);
+        }
+    }, [selectedTeacher, loadAdminData, showToast]);
+
     const handleBulkReviewDecision = useCallback(async (ids: number[], action: 'approve' | 'reject') => {
         setAdminMutationLoading(true);
         try {
@@ -1394,6 +1413,7 @@ const App: React.FC = () => {
                         onDeleteQuestion={handleDeleteQuestion}
                         onUpdateQuestion={handleUpdateQuestion}
                         onUpdateAnswer={handleUpdateAnswer}
+                        onDeleteAnswer={handleDeleteAnswer}
                         onBulkReviewDecision={handleBulkReviewDecision}
                         adminMutationLoading={adminMutationLoading}
                         adminLoadingMoreQuestions={adminLoadingMoreQuestions}

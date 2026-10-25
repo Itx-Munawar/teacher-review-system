@@ -29,6 +29,10 @@ const ResetPassword: React.FC = () => {
             setError('Password must be at least 10 characters');
             return;
         }
+        if (new TextEncoder().encode(password).length > 72) {
+            setError('Password must be at most 72 bytes (special characters count as more than one)');
+            return;
+        }
         try {
             const res = await api.post('/admin/reset-password', { token, newPassword: password });
             setMessage(res.data.message);
@@ -52,7 +56,7 @@ const ResetPassword: React.FC = () => {
                         type="password"
                         placeholder="New Password"
                         autoComplete="new-password"
-                        maxLength={200}
+                        maxLength={72}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         required
@@ -61,7 +65,7 @@ const ResetPassword: React.FC = () => {
                         type="password"
                         placeholder="Confirm Password"
                         autoComplete="new-password"
-                        maxLength={200}
+                        maxLength={72}
                         value={confirm}
                         onChange={(e) => setConfirm(e.target.value)}
                         required

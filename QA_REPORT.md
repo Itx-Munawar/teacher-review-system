@@ -1,6 +1,6 @@
 # QA Testing Report: UMT Teacher Reviews
 
-Last verified against the code: 2026-10-17.
+Last verified against the code: 2026-10-25.
 
 This report started as a QA audit of the frontend (Vercel) and backend (Render). Every finding from that audit has since been re-checked against the current code. The table below shows where each one stands.
 
@@ -80,3 +80,39 @@ backend (54 tests) and frontend (63 tests) suites plus `tsc --noEmit` pass.
 - Deleted the scraped `backend/faculty.aspx`, dead `setup*.js` scripts, and the
   unused repository-root `package.json`/`package-lock.json`; added a root
   `README.md`.
+
+## Review pass: 2026-10-25
+
+A second full review of the repository and the live deployment produced the
+following fixes.
+
+### Backend
+
+- `GET /api/questions` now pages over questions and fetches their answers in a
+  second query. Paging the question × answer join could split a question with
+  many answers across pages and made `totalPages` disagree with the rendered
+  count.
+- Teacher search escapes `%`, `_`, and `\` before building `LIKE` patterns, so
+  `q=_` no longer returns the whole table.
+- Answers can only be posted to approved questions (`is_approved = 1`).
+- Added `DELETE /api/admin/answers/:id` (admin + CSRF + audit log) so a
+  moderated answer can be removed instead of only edited.
+- `passwordProblem` rejects passwords longer than 72 bytes, matching bcrypt's
+  truncation limit.
+- `JWT_SECRET` must be at least 32 characters or the server refuses to start.
+- Audit-log IPs are stored as a keyed HMAC (`sha256:` prefix, 32 hex chars), and
+  rows older than `AUDIT_LOG_RETENTION_DAYS` (default 90) are pruned on boot and
+  daily.
+- `sitemap.xml` no longer lists `/about` and `/contact`, which have no route and
+  were rendering a duplicate homepage.
+
+### Frontend
+
+- Department pages gained "Load more" pagination; previously only the first 20
+  of up to 289 teachers were reachable.
+- Search requests from the URL restore and the admin panel pass `limit=50`
+  instead of fetching every match.
+- Admin Q&A rows have a Delete button wired to the new endpoint.
+- Password reset enforces the 72-byte limit client-side and caps inputs at 72.
+- `/about` and `/contact` redirect permanently to `/` on Vercel.
+- Privacy Policy documents hashed audit IPs and the 90-day retention.

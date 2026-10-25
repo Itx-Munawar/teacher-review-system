@@ -237,6 +237,10 @@ export const updateAnswer = (id: number, data: { answer?: string; is_approved?: 
     return api.put(`/admin/answers/${id}`, data);
 };
 
+export const deleteAnswer = (id: number) => {
+    return api.delete(`/admin/answers/${id}`);
+};
+
 // ========== READER REPORTS (admin) ==========
 
 export const getAdminReports = (page: number = 1, limit: number = 50, status: 'open' | 'resolved' | 'dismissed' = 'open') => {

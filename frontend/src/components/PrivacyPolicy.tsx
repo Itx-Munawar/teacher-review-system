@@ -25,7 +25,9 @@ const PrivacyPolicy: React.FC = () => (
         <p>
             Our servers automatically collect basic technical information such as IP addresses, browser
             type, and timestamps. This data is used for security (for example, rate limiting and
-            preventing abuse) and is not sold or shared with third parties.
+            preventing abuse) and is not sold or shared with third parties. IP addresses written to our
+            security audit log are stored in a keyed hash rather than in readable form, and audit rows
+            older than 90 days are automatically deleted.
         </p>
 
         <h2>4. Cookies</h2>
