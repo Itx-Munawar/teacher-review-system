@@ -52,6 +52,7 @@ export interface AdminPanelProps {
     onDeleteQuestion: (id: number) => void;
     onUpdateQuestion: (id: number, data: { question?: string; is_approved?: boolean }) => void | Promise<void>;
     onUpdateAnswer: (id: number, data: { answer?: string; is_approved?: boolean }) => void | Promise<void>;
+    onDeleteAnswer: (id: number) => void | Promise<void>;
     onBulkReviewDecision: (ids: number[], action: 'approve' | 'reject') => void | Promise<void>;
     adminMutationLoading: boolean;
     adminLoadingMoreQuestions: boolean;
@@ -114,6 +115,7 @@ const AdminPanel = memo(({
     onDeleteQuestion,
     onUpdateQuestion,
     onUpdateAnswer,
+    onDeleteAnswer,
     onBulkReviewDecision,
     adminMutationLoading,
     adminLoadingMoreQuestions,
@@ -944,6 +946,14 @@ const AdminPanel = memo(({
                                                             <button onClick={() => onUpdateAnswer(ans.id, { is_approved: false })} className="admin-mini-btn admin-mini-reject" disabled={adminMutationLoading}>Reject</button>
                                                         </>
                                                     )}
+                                                    <button
+                                                        onClick={() => onDeleteAnswer(ans.id)}
+                                                        className="admin-mini-btn admin-mini-reject"
+                                                        disabled={adminMutationLoading}
+                                                        title="Delete this answer permanently"
+                                                    >
+                                                        Delete
+                                                    </button>
                                                 </div>
                                             ))}
                                         </div>

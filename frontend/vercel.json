@@ -13,6 +13,10 @@
     { "source": "/terms", "destination": "/index.html" },
     { "source": "/dmca", "destination": "/index.html" }
   ],
+  "redirects": [
+    { "source": "/about", "destination": "/", "permanent": true },
+    { "source": "/contact", "destination": "/", "permanent": true }
+  ],
   "headers": [
     {
       "source": "/(.*)",

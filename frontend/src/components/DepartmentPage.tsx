@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getTeachers } from '../services/api';
 import TiltCard from './TiltCard';
@@ -19,7 +19,13 @@ const DepartmentPage: React.FC = () => {
     const department = decodeURIComponent(name || '');
     const [teachers, setTeachers] = useState<Teacher[]>([]);
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
     const [total, setTotal] = useState(0);
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    // Bumped whenever the department changes so a slow "load more" for the old
+    // department cannot append its rows to the new one.
+    const loadGeneration = useRef(0);
 
     useEffect(() => {
         const baseUrl = SITE_URL;
@@ -40,18 +46,45 @@ const DepartmentPage: React.FC = () => {
         if (canonical) canonical.setAttribute('href', url);
 
         let cancelled = false;
+        loadGeneration.current += 1;
         setLoading(true);
+        setPage(1);
         getTeachers(1, 'name', department).then((res) => {
             if (cancelled) return;
             setTeachers(res.data.teachers || []);
             setTotal(res.data.pagination?.total || 0);
+            setTotalPages(res.data.pagination?.totalPages || 1);
         }).catch(() => {
-            if (!cancelled) setTeachers([]);
+            if (!cancelled) {
+                setTeachers([]);
+                setTotal(0);
+                setTotalPages(1);
+            }
         }).finally(() => {
             if (!cancelled) setLoading(false);
         });
         return () => { cancelled = true; };
     }, [department]);
+
+    // The API pages at 20 rows by default; the largest department has ~290
+    // teachers, so the first page alone used to hide most of it.
+    const handleLoadMore = async () => {
+        const nextPage = page + 1;
+        const generation = loadGeneration.current;
+        setLoadingMore(true);
+        try {
+            const res = await getTeachers(nextPage, 'name', department);
+            if (generation !== loadGeneration.current) return;
+            setTeachers((prev) => [...prev, ...(res.data.teachers || [])]);
+            setPage(nextPage);
+            setTotalPages(res.data.pagination?.totalPages || nextPage);
+            setTotal(res.data.pagination?.total ?? total);
+        } catch {
+            // Keep what is already on screen; the button stays available.
+        } finally {
+            setLoadingMore(false);
+        }
+    };
 
     return (
         <div className="app">
@@ -102,6 +135,17 @@ const DepartmentPage: React.FC = () => {
                                     </TiltCard>
                                 </div>
                             ))}
+                            {page < totalPages && (
+                                <button
+                                    type="button"
+                                    className="load-more-btn"
+                                    onClick={handleLoadMore}
+                                    disabled={loadingMore}
+                                    style={{ marginTop: '1rem', width: '100%' }}
+                                >
+                                    {loadingMore ? 'Loading…' : `Load more teachers (${teachers.length} of ${total})`}
+                                </button>
+                            )}
                         </>
                     )}
                 </div>

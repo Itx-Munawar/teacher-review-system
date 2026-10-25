@@ -42,6 +42,15 @@ if (missingVars.length > 0) {
     process.exit(1);
 }
 
+// An HS256 token is only as strong as its key. A short secret can be
+// brute-forced offline from one leaked admin cookie, so require the RFC 7518
+// minimum instead of starting with a key that only looks configured.
+if (JWT_SECRET.length < 32) {
+    console.error('❌ JWT_SECRET must be at least 32 characters. Generate one with:');
+    console.error('   node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'hex\'))"');
+    process.exit(1);
+}
+
 // ========== COOKIE HELPERS (no extra dependency) ==========
 const parseCookies = (req) => {
     const cookies = {};
@@ -311,6 +320,12 @@ const passwordProblem = (password) => {
     if (typeof password !== 'string' || password.length < 10) {
         return 'Password must be at least 10 characters';
     }
+    // bcrypt reads at most 72 bytes and silently ignores the rest. Without this
+    // cap, two different long passwords that share a prefix are interchangeable,
+    // and a multi-byte character costs more than one of those bytes.
+    if (Buffer.byteLength(password, 'utf8') > 72) {
+        return 'Password must be at most 72 bytes (special characters count as more than one)';
+    }
     if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
         return 'Password must include at least one letter and one number';
     }
@@ -321,11 +336,37 @@ const passwordProblem = (password) => {
 // "no such user" and "wrong password" indistinguishable by response timing.
 const DUMMY_HASH = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), BCRYPT_ROUNDS);
 
+// audit_logs used to keep req.ip forever, which turns a security log into a
+// long-term record of who used the site. Store an HMAC instead: the same
+// address always hashes to the same value (so abuse patterns still correlate)
+// but the column cannot be read back into an IP. AUDIT_IP_SALT should stay
+// stable if JWT_SECRET is ever rotated.
+const hashIpForAudit = (ip) => {
+    const value = String(ip || 'unknown').trim() || 'unknown';
+    if (value === 'unknown' || value === 'system') return value;
+    const salt = process.env.AUDIT_IP_SALT || JWT_SECRET;
+    return `sha256:${crypto.createHmac('sha256', salt).update(value).digest('hex').slice(0, 32)}`;
+};
+
+const AUDIT_LOG_RETENTION_DAYS = clampInt(process.env.AUDIT_LOG_RETENTION_DAYS, 90, 7, 3650);
+
+const pruneAuditLogs = async () => {
+    try {
+        const cutoff = new Date(Date.now() - AUDIT_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+        const [result] = await db.query('DELETE FROM audit_logs WHERE created_at < ?', [cutoff]);
+        if (result.affectedRows > 0) {
+            console.log(`🧹 Pruned ${result.affectedRows} audit log row(s) older than ${AUDIT_LOG_RETENTION_DAYS} days`);
+        }
+    } catch (error) {
+        console.error('Audit log prune error:', error.message);
+    }
+};
+
 const createAuditLog = async (adminId, action, details, ip = 'unknown') => {
     try {
         await db.query(
             'INSERT INTO audit_logs (admin_id, action, details, ip_address) VALUES (?, ?, ?, ?)',
-            [adminId, action, details, ip]
+            [adminId, action, details, hashIpForAudit(ip)]
         );
     } catch (error) {
         console.error('Audit log error:', error);
@@ -655,6 +696,8 @@ const runSchemaBootstrap = async () => {
         schemaBootstrapError = null;
         schemaBootstrapDone = true;
         console.log('✅ Schema bootstrap complete (questions, question_answers, custom_courses, review_reports, cleanup)');
+        // Keep the audit trail bounded (and the hashed IPs with it).
+        pruneAuditLogs();
         // Schema is up: retroactively filter any pre-existing reviews.
         runReviewFilterSweep();
         runQaFilterSweep();
@@ -675,6 +718,9 @@ const ensureTables = () => {
 };
 
 ensureTables();
+// Render instances can stay up for weeks, so prune on a timer as well as on
+// boot. unref() keeps the timer from holding the process open.
+setInterval(pruneAuditLogs, 24 * 60 * 60 * 1000).unref();
 
 // ========== PUBLIC API ENDPOINTS ==========
 
@@ -778,6 +824,10 @@ app.get('/api/teachers/search', searchLimiter, async (req, res) => {
         if (term.length > 100) {
             return res.status(400).json({ error: 'Search term is too long' });
         }
+        // LIKE wildcards are user input, not syntax: unescaped, q=_ matches
+        // every teacher and q=% returns the whole table. MySQL's default escape
+        // character is backslash, so doubling it is enough.
+        const like = term.replace(/[\\%_]/g, (ch) => `\\${ch}`);
         // Per-word SOUNDEX: MySQL's SOUNDEX truncates to 4 chars over the whole
         // string, so a multi-word name shifts the code. Compare first/last word
         // of the name against first/last word of the query so "Muhamad" matches
@@ -804,8 +854,8 @@ app.get('/api/teachers/search', searchLimiter, async (req, res) => {
             ORDER BY match_rank, t.name
             ${limit > 0 ? 'LIMIT ?' : ''}
         `, [
-            term, `${term}%`, `%${term}%`, term, term, `%${term}%`,
-            term, `${term}%`, `%${term}%`, term, term, `%${term}%`,
+            term, `${like}%`, `%${like}%`, term, term, `%${like}%`,
+            term, `${like}%`, `%${like}%`, term, term, `%${like}%`,
             ...(limit > 0 ? [limit] : [])
         ]);
 
@@ -972,36 +1022,50 @@ app.get('/api/questions', async (req, res) => {
         );
         const total = countResult[0].total;
 
-        const [rows] = await db.query(`
+        // Page over questions, not over the question x answer join. LIMIT/OFFSET
+        // on joined rows splits a question with many answers across pages (or
+        // repeats it) and makes totalPages disagree with what is rendered.
+        const [questionRows] = await db.query(`
             SELECT q.id as question_id, q.question, q.created_at as question_created_at,
-                   t.id as teacher_id, t.name as teacher_name, t.department as teacher_department,
-                   a.id as answer_id, a.answer, a.created_at as answer_created_at
+                   t.id as teacher_id, t.name as teacher_name, t.department as teacher_department
             FROM questions q
             JOIN teachers t ON t.id = q.teacher_id
-            LEFT JOIN question_answers a ON a.question_id = q.id AND a.is_approved = 1
             WHERE q.is_approved = 1
-            ORDER BY q.created_at DESC, a.created_at ASC
-            LIMIT ${limit} OFFSET ${offset}
-        `);
+            ORDER BY q.created_at DESC, q.id DESC
+            LIMIT ? OFFSET ?
+        `, [limit, offset]);
+
+        const questionIds = questionRows.map((row) => row.question_id);
+        let answerRows = [];
+        if (questionIds.length > 0) {
+            const placeholders = questionIds.map(() => '?').join(', ');
+            [answerRows] = await db.query(`
+                SELECT id as answer_id, question_id, answer, created_at as answer_created_at
+                FROM question_answers
+                WHERE question_id IN (${placeholders}) AND is_approved = 1
+                ORDER BY created_at ASC, id ASC
+            `, questionIds);
+        }
 
         // Group answers under their question (same shape as the teacher Q&A feed)
-        const grouped = [];
-        const map = {};
-        rows.forEach((row) => {
-            if (!map[row.question_id]) {
-                map[row.question_id] = {
-                    id: row.question_id,
-                    question: row.question,
-                    created_at: row.question_created_at,
-                    teacher_id: row.teacher_id,
-                    teacher_name: row.teacher_name,
-                    teacher_department: row.teacher_department,
-                    answers: []
-                };
-                grouped.push(map[row.question_id]);
-            }
-            if (row.answer_id) {
-                map[row.question_id].answers.push({
+        const byQuestion = new Map();
+        const grouped = questionRows.map((row) => {
+            const item = {
+                id: row.question_id,
+                question: row.question,
+                created_at: row.question_created_at,
+                teacher_id: row.teacher_id,
+                teacher_name: row.teacher_name,
+                teacher_department: row.teacher_department,
+                answers: []
+            };
+            byQuestion.set(row.question_id, item);
+            return item;
+        });
+        answerRows.forEach((row) => {
+            const item = byQuestion.get(row.question_id);
+            if (item) {
+                item.answers.push({
                     id: row.answer_id,
                     answer: row.answer,
                     created_at: row.answer_created_at
@@ -1074,7 +1138,7 @@ app.post('/api/questions/:id/answers', questionLimiter, [
         const { answer } = req.body;
         const sanitizedAnswer = answer.trim().slice(0, 1000);
 
-        const [questions] = await db.query('SELECT id FROM questions WHERE id = ?', [questionId]);
+        const [questions] = await db.query('SELECT id FROM questions WHERE id = ? AND is_approved = 1', [questionId]);
         if (questions.length === 0) return res.status(404).json({ error: 'Question not found' });
 
         // Moderation-first: every answer starts pending (is_approved=0)
@@ -2018,6 +2082,24 @@ app.put('/api/admin/answers/:id', verifyAdmin, csrfValidate, [
     }
 });
 
+// DELETE /api/admin/answers/:id - remove an answer permanently (admin only)
+app.delete('/api/admin/answers/:id', verifyAdmin, csrfValidate, async (req, res) => {
+    try {
+        const answerId = Number.parseInt(req.params.id, 10);
+        if (!Number.isInteger(answerId) || answerId < 1) {
+            return res.status(400).json({ error: 'Invalid answer ID' });
+        }
+        const [result] = await db.query('DELETE FROM question_answers WHERE id = ?', [answerId]);
+        if (result.affectedRows === 0) return res.status(404).json({ error: 'Answer not found' });
+
+        await createAuditLog(req.admin.id, 'DELETE_ANSWER', `Deleted answer ID: ${answerId}`, req.ip);
+        res.json({ success: true, message: 'Answer deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting answer:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
 // POST /api/admin/reviews/bulk - approve or reject many reviews at once
 app.post('/api/admin/reviews/bulk', verifyAdmin, csrfValidate, [
     body('ids').isArray({ min: 1, max: 500 }).withMessage('ids must be a non-empty array'),
@@ -2280,8 +2362,9 @@ app.get('/sitemap.xml', async (req, res) => {
         // Homepage
         xml += `  <url>\n    <loc>${baseUrl}/</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n`;
 
-        // Static pages
-        const staticPages = ['privacy', 'terms', 'dmca', 'about', 'contact'];
+        // Static pages. /about and /contact are intentionally absent: they have no
+        // route, and the SPA catch-all would answer them with a duplicate homepage.
+        const staticPages = ['privacy', 'terms', 'dmca'];
         staticPages.forEach(page => {
             xml += `  <url>\n    <loc>${baseUrl}/${page}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>yearly</changefreq>\n    <priority>0.3</priority>\n  </url>\n`;
         });
