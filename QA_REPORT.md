@@ -207,6 +207,31 @@ Roadmap: `ROADMAP.md`.
   confirmation, and (optionally) disabling 2FA.
 - A bare `2FA_FAILED` action is logged when a wrong code is submitted.
 
+## Phase 4 follow-up (2026-10-26, branch `review/2026-10-phase4`)
+
+Roadmap: `ROADMAP.md`.
+
+### CRA → Vite migration
+
+- Replaced `react-scripts` with Vite (`vite.config.ts`, root `index.html`).
+- Dev server on port 3000 with `/api` proxy to Render/localhost.
+- Tests migrated from Jest to Vitest (`vitest run`, jsdom environment).
+- `debounce.test.ts` updated: `jest.fn()` → `vi.fn()`, `jest.useFakeTimers()` → `vi.useFakeTimers()`, etc.
+- TypeScript config updated (`tsconfig.json` + `tsconfig.node.json`) for Vite's module resolution.
+- Environment variables use the `VITE_` prefix via `import.meta.env`.
+- Build output to `build/` (same as CRA) so Vercel deployment is unchanged.
+- Build: 137 modules, ~393 kB JS / 122 kB gzip, 5.6 s.
+
+### Course pages (`/course/:name`)
+
+- Backend: `GET /api/teachers?course=<name>` searches approved review `courses`
+  JSON arrays and returns matching teachers (paginated, with cache key including the filter).
+- Sitemap: generates `/course/<name>` entries from distinct courses mentioned in reviews (up to 100, weekly priority 0.5).
+- Frontend: new `CoursePage.tsx` component with teacher list, load-more pagination, SEO via `applySeo`, noindex for empty results (future).
+- Route added in `index.tsx`; `vercel.json` rewrites `/course/:name` to `index.html`.
+- Footer links still point to privacy/terms/dmca/contact; course links come from the sitemap and search results.
+
+
 ## Phase 4 — Product and architecture (planned)
 
 | # | Step | Status |

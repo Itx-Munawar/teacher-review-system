@@ -2,42 +2,31 @@
   "name": "teacher-review-frontend",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
   "dependencies": {
     "axios": "^1.20.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^7.18.4"
   },
-  "scripts": {
-    "start": "react-scripts start",
-    "build": "cross-env CI=false react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
-  },
-  "eslintConfig": {
-    "extends": [
-      "react-app"
-    ]
-  },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
-  },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.2",
     "@testing-library/jest-dom": "^7.0.1",
-    "@types/jest": "^30.0.0",
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^20.19.43",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
-    "cross-env": "^7.0.3",
-    "react-scripts": "5.0.1",
-    "typescript": "^4.9.5"
+    "@vitejs/plugin-react": "^4.7.0",
+    "jsdom": "^26.1.0",
+    "typescript": "^4.9.5",
+    "vite": "^6.4.0",
+    "vitest": "^3.1.1"
   }
 }

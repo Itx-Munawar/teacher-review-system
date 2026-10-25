@@ -12,7 +12,8 @@
     { "source": "/privacy", "destination": "/index.html" },
     { "source": "/terms", "destination": "/index.html" },
     { "source": "/dmca", "destination": "/index.html" },
-    { "source": "/contact", "destination": "/index.html" }
+    { "source": "/contact", "destination": "/index.html" },
+    { "source": "/course/:name", "destination": "/index.html" }
   ],
   "redirects": [
     { "source": "/about", "destination": "/", "permanent": true }

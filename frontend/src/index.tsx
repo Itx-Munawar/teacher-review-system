@@ -9,6 +9,7 @@ import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsOfUse from './components/TermsOfUse';
 import DmcaPolicy from './components/DmcaPolicy';
 import Contact from './components/Contact';
+import CoursePage from './components/CoursePage';
 import DepartmentPage from './components/DepartmentPage';
 import { registerServiceWorker } from './services/registerServiceWorker';
 
@@ -23,6 +24,7 @@ root.render(
                 <Route path="/terms" element={<TermsOfUse />} />
                 <Route path="/dmca" element={<DmcaPolicy />} />
                 <Route path="/contact" element={<Contact />} />
+                <Route path="/course/:name" element={<CoursePage />} />
                 <Route path="/department/:name" element={<DepartmentPage />} />
                 <Route path="/teacher/:id" element={<App />} />
                 <Route path="*" element={<App />} />

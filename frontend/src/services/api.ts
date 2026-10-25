@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE = process.env.REACT_APP_API_BASE || '/api';
+const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 
 const api = axios.create({
     baseURL: API_BASE,
@@ -52,9 +52,10 @@ api.interceptors.response.use(
 
 // ========== PUBLIC APIs ==========
 
-export const getTeachers = (page: number = 1, sort: string = 'name', department?: string, limit: number = 20) => {
+export const getTeachers = (page: number = 1, sort: string = 'name', department?: string, limit: number = 20, course?: string) => {
     const params = new URLSearchParams({ page: String(page), limit: String(limit), sort });
     if (department) params.set('department', department);
+    if (course) params.set('course', course);
     return api.get(`/teachers?${params.toString()}`);
 };
 
