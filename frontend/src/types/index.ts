@@ -23,6 +23,13 @@ export interface Review {
 export interface TeacherDetail extends Teacher {
     reviews: Review[];
     total_reviews: number;
+    /** Present on paginated teacher-detail responses. */
+    review_pagination?: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+    };
 }
 
 export interface AdminReview {
@@ -75,6 +82,29 @@ export interface CustomCourse {
     times_used: number;
     created_at: string;
     reviewed_at: string | null;
+}
+
+/** A reader-submitted report against a published review. */
+export interface AdminReport {
+    id: number;
+    review_id: number;
+    reason: string;
+    status: 'open' | 'resolved' | 'dismissed';
+    created_at: string;
+    comment: string;
+    user_name: string;
+    is_approved: boolean | number;
+    teacher_id: number;
+    teacher_name: string;
+}
+
+export interface AdminStats {
+    total_teachers: number;
+    total_reviews: number;
+    reviews_last_week: number;
+    pending_reviews?: number;
+    open_reports?: number;
+    last_sweep?: { scanned: number; queued: number; already_queued?: number; at: string } | null;
 }
 
 export interface Toast {

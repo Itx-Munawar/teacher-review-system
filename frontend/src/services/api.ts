@@ -35,8 +35,15 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        if (error.response?.status === 401 || error.response?.status === 403) {
-            // Dispatch a custom event that App can listen to
+        const status = error.response?.status;
+        const url = String(error.config?.url || '');
+        // Wrong credentials also answer 401, and a bad CSRF token answers 403.
+        // Never treat the login request itself as an expired session, or the
+        // form would unmount while the user is still typing.
+        const isLoginRequest = url.includes('/admin/login');
+        if (!isLoginRequest && (status === 401 || status === 403)) {
+            // Dispatch a custom event that App can listen to. App ignores it
+            // when no admin session is active, so public 403s are harmless.
             window.dispatchEvent(new CustomEvent('admin-session-expired'));
         }
         return Promise.reject(error);
@@ -68,8 +75,8 @@ export const searchAllTeachers = (query: string, limit?: number, signal?: AbortS
     return api.get(`/teachers/search?${params.toString()}`, { signal });
 };
 
-export const getTeacherDetail = (id: number) => {
-    return api.get(`/teachers/${id}`);
+export const getTeacherDetail = (id: number, reviewPage: number = 1, reviewLimit: number = 50) => {
+    return api.get(`/teachers/${id}?review_page=${reviewPage}&review_limit=${reviewLimit}`);
 };
 
 // ========== Q&A APIs ==========
@@ -228,6 +235,16 @@ export const updateQuestion = (id: number, data: { question?: string; is_approve
 
 export const updateAnswer = (id: number, data: { answer?: string; is_approved?: boolean }) => {
     return api.put(`/admin/answers/${id}`, data);
+};
+
+// ========== READER REPORTS (admin) ==========
+
+export const getAdminReports = (page: number = 1, limit: number = 50, status: 'open' | 'resolved' | 'dismissed' = 'open') => {
+    return api.get(`/admin/reports?page=${page}&limit=${limit}&status=${status}`);
+};
+
+export const updateReportStatus = (id: number, status: 'open' | 'resolved' | 'dismissed') => {
+    return api.put(`/admin/reports/${id}`, { status });
 };
 
 export const getAdminStats = () => {

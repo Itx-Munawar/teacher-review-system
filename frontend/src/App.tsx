@@ -27,7 +27,9 @@ import {
     getAdminCustomCourses,
     reviewCustomCourse,
     getAdminTeacherDetail,
-    cleanTeacherImages
+    cleanTeacherImages,
+    getAdminReports,
+    updateReportStatus
 } from './services/api';
 import { debounce } from './utils/debounce';
 import { SITE_URL } from './utils/siteUrl';
@@ -48,12 +50,19 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { TeacherCardSkeleton } from './components/Skeleton';
 import { ToastHost } from './components/Toast';
 import { haptic } from './utils/haptics';
-import type { Teacher, TeacherDetail, AdminReview, AdminQuestion, CustomCourse, AdminTeacherDetail, Toast } from './types';
+import type { Teacher, TeacherDetail, Review, AdminReview, AdminQuestion, CustomCourse, AdminTeacherDetail, AdminReport, AdminStats, Toast } from './types';
 import './App.css';
 
 // ========== HELPER: Map API response to TeacherDetail ==========
-const mapTeacherDetail = (data: any, fallback?: TeacherDetail): TeacherDetail => {
-    const teacherInfo = data.teacher || data;
+interface TeacherDetailResponse {
+    teacher?: Teacher;
+    reviews?: Review[];
+    total_reviews?: number;
+    review_pagination?: TeacherDetail['review_pagination'];
+}
+
+const mapTeacherDetail = (data: TeacherDetailResponse, fallback?: TeacherDetail): TeacherDetail => {
+    const teacherInfo: Teacher = data.teacher || fallback || (data as unknown as Teacher);
     const reviewsList = data.reviews || [];
     const totalReviews = data.total_reviews || 0;
     return {
@@ -62,8 +71,9 @@ const mapTeacherDetail = (data: any, fallback?: TeacherDetail): TeacherDetail =>
         department: teacherInfo.department,
         review_count: totalReviews,
         total_reviews: totalReviews,
-        image_url: teacherInfo.image_url || null,
+        image_url: teacherInfo.image_url || undefined,
         reviews: reviewsList,
+        review_pagination: data.review_pagination,
     };
 };
 
@@ -87,6 +97,7 @@ const App: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
 
     const [selectedTeacher, setSelectedTeacher] = useState<TeacherDetail | null>(null);
+    const [reviewsLoadingMore, setReviewsLoadingMore] = useState(false);
     const [relatedTeachers, setRelatedTeachers] = useState<Teacher[]>([]);
     const [compareList, setCompareList] = useState<Teacher[]>([]);
     const [isComparing, setIsComparing] = useState(false);
@@ -115,7 +126,7 @@ const App: React.FC = () => {
     const [newTeacherDepartment, setNewTeacherDepartment] = useState('');
     const [newTeacherImage, setNewTeacherImage] = useState('');
     const [reviewsForModeration, setReviewsForModeration] = useState<AdminReview[]>([]);
-    const [adminStats, setAdminStats] = useState<{ total_teachers: number; total_reviews: number; reviews_last_week: number; pending_reviews?: number; last_sweep?: { scanned: number; queued: number; already_queued?: number; at: string } | null } | null>(null);
+    const [adminStats, setAdminStats] = useState<AdminStats | null>(null);
 
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastIdRef = useRef(0);
@@ -317,24 +328,40 @@ const App: React.FC = () => {
     // When true, the admin reviews list fetches only pending (unapproved) rows.
     const [reviewsPendingOnly, setReviewsPendingOnly] = useState(false);
 
+    // Reader reports (Reports tab)
+    const [adminReports, setAdminReports] = useState<AdminReport[]>([]);
+    const [adminReportsPage, setAdminReportsPage] = useState(1);
+    const [adminReportsTotalPages, setAdminReportsTotalPages] = useState(1);
+    const [adminLoadingMoreReports, setAdminLoadingMoreReports] = useState(false);
+    const [adminReportsStatus, setAdminReportsStatus] = useState<'open' | 'resolved' | 'dismissed'>('open');
+
     // Mirror the loaded-page counters into refs so loadAdminData can reload
     // every page the admin has open without re-creating the callback itself.
     const adminReviewsPageRef = useRef(adminReviewsPage);
     const adminQuestionsPageRef = useRef(adminQuestionsPage);
+    const adminReportsPageRef = useRef(adminReportsPage);
+    // Read inside loadAdminData without making it a dependency: the status
+    // switch already fetches page 1, and an identity change here would make
+    // the login effect fire a second, redundant round of requests.
+    const adminReportsStatusRef = useRef(adminReportsStatus);
     useEffect(() => { adminReviewsPageRef.current = adminReviewsPage; }, [adminReviewsPage]);
     useEffect(() => { adminQuestionsPageRef.current = adminQuestionsPage; }, [adminQuestionsPage]);
+    useEffect(() => { adminReportsPageRef.current = adminReportsPage; }, [adminReportsPage]);
+    useEffect(() => { adminReportsStatusRef.current = adminReportsStatus; }, [adminReportsStatus]);
 
     const loadAdminData = useCallback(async () => {
-        // Re-fetch every review/Q&A page the admin already has open, not just
-        // page 1: resetting to a single page after a save collapsed the list
-        // and yanked the viewport to the top of the page.
+        // Re-fetch every review/Q&A/report page the admin already has open, not
+        // just page 1: resetting to a single page after a save collapsed the
+        // list and yanked the viewport to the top of the page.
         const reviewPages = Array.from({ length: Math.max(adminReviewsPageRef.current, 1) }, (_, i) => i + 1);
         const questionPages = Array.from({ length: Math.max(adminQuestionsPageRef.current, 1) }, (_, i) => i + 1);
+        const reportPages = Array.from({ length: Math.max(adminReportsPageRef.current, 1) }, (_, i) => i + 1);
 
-        const [reviewsResult, questionsResult, coursesResult] = await Promise.allSettled([
+        const [reviewsResult, questionsResult, coursesResult, reportsResult] = await Promise.allSettled([
             Promise.all(reviewPages.map((p) => getAdminReviews(p, 50, reviewsPendingOnly))),
             Promise.all(questionPages.map((p) => getAdminQuestions(p, 50))),
-            getAdminCustomCourses()
+            getAdminCustomCourses(),
+            Promise.all(reportPages.map((p) => getAdminReports(p, 50, adminReportsStatusRef.current)))
         ]);
 
         let reviewsData: AdminReview[] = [];
@@ -376,10 +403,25 @@ const App: React.FC = () => {
             console.error('Error loading custom courses:', coursesResult.reason);
         }
 
+        let reportsData: AdminReport[] = [];
+        let reportsTotalPages = 1;
+        if (reportsResult.status === 'fulfilled') {
+            for (const reportsRes of reportsResult.value) {
+                const d = reportsRes.data;
+                if (!d) continue;
+                reportsData = reportsData.concat(d.reports || []);
+                reportsTotalPages = d.pagination?.totalPages || reportsTotalPages;
+            }
+        } else {
+            console.error('Error loading review reports:', reportsResult.reason);
+        }
+
         setAdminReviewsTotalPages(totalPages);
         setAdminQuestionsTotalPages(questionsTotalPages);
+        setAdminReportsTotalPages(reportsTotalPages);
         setReviewsForModeration(reviewsData);
         setAdminQuestions(questionsData);
+        setAdminReports(reportsData);
         // No page-counter reset here: every already-loaded page was re-fetched
         // above, so the list keeps its length and the viewport stays put.
 
@@ -442,6 +484,52 @@ const App: React.FC = () => {
             setAdminLoadingMoreQuestions(false);
         }
     }, [adminQuestionsPage, adminQuestionsTotalPages, adminLoadingMoreQuestions, showToast]);
+
+    const handleLoadMoreReports = useCallback(async () => {
+        const nextPage = adminReportsPage + 1;
+        if (nextPage > adminReportsTotalPages || adminLoadingMoreReports) return;
+        setAdminLoadingMoreReports(true);
+        try {
+            const reportsRes = await getAdminReports(nextPage, 50, adminReportsStatus);
+            const reportsData = reportsRes.data?.reports || [];
+            setAdminReports(prev => [...prev, ...reportsData]);
+            setAdminReportsPage(nextPage);
+        } catch (error) {
+            console.error('Error loading more reports:', error);
+            showToast('Failed to load more reports', 'error');
+        } finally {
+            setAdminLoadingMoreReports(false);
+        }
+    }, [adminReportsPage, adminReportsTotalPages, adminLoadingMoreReports, adminReportsStatus, showToast]);
+
+    const handleReportsStatusChange = useCallback(async (status: 'open' | 'resolved' | 'dismissed') => {
+        setAdminReportsStatus(status);
+        setAdminReportsPage(1);
+        try {
+            const res = await getAdminReports(1, 50, status);
+            setAdminReports(res.data?.reports || []);
+            setAdminReportsTotalPages(res.data?.pagination?.totalPages || 1);
+        } catch (error) {
+            console.error('Error filtering reports:', error);
+            showToast('Failed to load reports', 'error');
+        }
+    }, [showToast]);
+
+    const handleUpdateReportStatus = useCallback(async (id: number, status: 'open' | 'resolved' | 'dismissed') => {
+        setAdminMutationLoading(true);
+        try {
+            await updateReportStatus(id, status);
+            showToast(`Report marked ${status}`, 'success');
+            // The row leaves the current filter, so refresh both the list and
+            // the open-report badge rather than patching local state.
+            await loadAdminData();
+        } catch (error) {
+            console.error('Error updating report:', error);
+            showToast('Failed to update report', 'error');
+        } finally {
+            setAdminMutationLoading(false);
+        }
+    }, [loadAdminData, showToast]);
 
     const handleReviewCustomCourse = useCallback(async (id: number, action: 'approve' | 'reject') => {
         try {
@@ -564,7 +652,7 @@ const App: React.FC = () => {
         let title = 'UMT Teacher Reviews – Anonymous Reviews for UMT Professors';
         let description = 'Read and write anonymous reviews for UMT teachers. Find the best professors at University of Management and Technology, Lahore.';
         let url = baseUrl + '/';
-        let jsonLd: any = null;
+        let jsonLd: Record<string, unknown> | null = null;
 
         if (selectedTeacher) {
             title = `${selectedTeacher.name} - ${selectedTeacher.department} | UMT Teacher Reviews`;
@@ -633,19 +721,27 @@ const App: React.FC = () => {
             setAdminUsername('');
             setAdminPassword('');
             showToast('Admin login successful!', 'success');
-            await loadAdminData();
-            await loadTeachers(1);
+            // The isAdminLoggedIn effect owns the data load; calling it here too
+            // fired every admin request twice on login.
         } catch (error) {
             const err = error as { response?: { data?: { error?: string } } };
             setAdminError(err.response?.data?.error || 'Login failed');
         }
-    }, [adminUsername, adminPassword, loadAdminData, loadTeachers, showToast]);
+    }, [adminUsername, adminPassword, showToast]);
+
+    const logoutInFlightRef = useRef(false);
 
     const handleAdminLogout = useCallback(async () => {
+        // Concurrent 401s used to fire several logouts, stacking toasts and
+        // re-running the panel teardown.
+        if (logoutInFlightRef.current) return;
+        logoutInFlightRef.current = true;
         try {
             await adminLogout();
         } catch (error) {
             console.error('Logout error:', error);
+        } finally {
+            logoutInFlightRef.current = false;
         }
         setIsAdminLoggedIn(false);
         closeAdminPanel();
@@ -927,7 +1023,7 @@ const App: React.FC = () => {
         setSubmitting(true);
         setReviewError('');
         try {
-            const reviewPayload: any = {
+            const reviewPayload: { teacher_id: number; comment: string; user_name: string; courses?: string[] } = {
                 teacher_id: selectedTeacher.id,
                 comment: reviewComment.trim(),
                 user_name: reviewUserName.trim() || 'Anonymous',
@@ -949,7 +1045,8 @@ const App: React.FC = () => {
             const response = await getTeacherDetail(selectedTeacher.id);
             setSelectedTeacher(mapTeacherDetail(response.data, selectedTeacher));
             await loadTeachers(1);
-            await loadAdminData();
+            // Public visitors must not trigger an authenticated admin reload.
+            if (isAdminLoggedIn) await loadAdminData();
         } catch (err) {
             console.error('Submit error:', err);
             const axiosErr = err as { response?: { data?: { error?: string } } };
@@ -957,7 +1054,7 @@ const App: React.FC = () => {
         } finally {
             setSubmitting(false);
         }
-    }, [selectedTeacher, reviewComment, reviewUserName, reviewCourses, loadTeachers, loadAdminData, showToast]);
+    }, [selectedTeacher, reviewComment, reviewUserName, reviewCourses, loadTeachers, loadAdminData, isAdminLoggedIn, showToast]);
 
     const handleTeacherClick = useCallback(async (teacher: Teacher) => {
         searchInputRef.current?.blur();
@@ -985,6 +1082,30 @@ const App: React.FC = () => {
             showToast('Failed to load teacher details', 'error');
         }
     }, [navigate, showToast, searchInputRef]);
+
+    // Reviews are paginated (50/page): append the next page instead of replacing
+    // the list the reader is already scrolling through.
+    const handleLoadMoreTeacherReviews = useCallback(async () => {
+        if (!selectedTeacher || reviewsLoadingMore) return;
+        const nextPage = (selectedTeacher.review_pagination?.page || 1) + 1;
+        setReviewsLoadingMore(true);
+        try {
+            const response = await getTeacherDetail(selectedTeacher.id, nextPage);
+            setSelectedTeacher((prev) => {
+                if (!prev || prev.id !== selectedTeacher.id) return prev;
+                const merged = mapTeacherDetail(response.data, prev);
+                const seen = new Set((prev.reviews || []).map((review) => review.id));
+                const extra = (merged.reviews || []).filter((review) => !seen.has(review.id));
+                return { ...merged, reviews: [...(prev.reviews || []), ...extra] };
+            });
+        } catch (error) {
+            console.error('Error loading more reviews:', error);
+            showToast('Failed to load more reviews', 'error');
+        } finally {
+            setReviewsLoadingMore(false);
+        }
+    }, [selectedTeacher, reviewsLoadingMore, showToast]);
+
     const restoreListScroll = useCallback(() => {
         if (window.innerWidth > 768) return;
         const pos = listScrollPosRef.current;
@@ -1285,6 +1406,15 @@ const App: React.FC = () => {
                         onCleanTeacherImages={handleCleanTeacherImages}
                         onApproveReview={handleApproveReview}
                         onRejectReview={handleRejectReview}
+                        reports={adminReports}
+                        openReportsCount={adminStats?.open_reports ?? 0}
+                        reportsStatus={adminReportsStatus}
+                        onReportsStatusChange={handleReportsStatusChange}
+                        onUpdateReportStatus={handleUpdateReportStatus}
+                        onLoadMoreReports={handleLoadMoreReports}
+                        adminReportsPage={adminReportsPage}
+                        adminReportsTotalPages={adminReportsTotalPages}
+                        adminLoadingMoreReports={adminLoadingMoreReports}
                     />
                     </ErrorBoundary>
                 </div>
@@ -1501,6 +1631,8 @@ const App: React.FC = () => {
                             onClearSelectedTeacher={clearSelectedTeacher}
                             onTeacherClick={handleTeacherClick}
                             showToast={showToast}
+                            reviewsLoading={reviewsLoadingMore}
+                            onLoadMoreReviews={handleLoadMoreTeacherReviews}
                         />
                     ) : (
                         <div className="welcome-message">

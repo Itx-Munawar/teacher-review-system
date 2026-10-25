@@ -4,6 +4,7 @@ import Avatar from './Avatar';
 import LazySection from './LazySection';
 import QASection from './QASection';
 import { reportReview } from '../services/api';
+import { extractCourses } from '../utils/courses';
 import type { TeacherDetail, Teacher, Review } from '../types';
 
 interface TeacherDetailViewProps {
@@ -15,29 +16,11 @@ interface TeacherDetailViewProps {
     onClearSelectedTeacher: () => void;
     onTeacherClick: (teacher: Teacher) => Promise<void>;
     showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
+    /** True while an older page of reviews is being fetched. */
+    reviewsLoading?: boolean;
+    /** Load the next page of reviews for long profiles. */
+    onLoadMoreReviews?: () => void | Promise<void>;
 }
-
-/** Extract course names from review — handles string, array, Buffer, double-encoded JSON */
-const extractCourses = (review: Review): string[] => {
-    const raw = (review as any).courses || (review as any).course;
-    if (!raw) return [];
-    try {
-        // Buffer → convert to string first
-        const str = typeof raw === 'object' && raw.type === 'Buffer'
-            ? Buffer.from(raw.data).toString('utf8')
-            : String(raw);
-        if (!str || str === 'null' || str === '[]') return [];
-        const parsed = JSON.parse(str);
-        const list = Array.isArray(parsed) ? parsed : [parsed];
-        return list
-            .map((c: unknown) => String(c).trim())
-            .filter((c: string) => c.length > 0);
-    } catch {
-        // If JSON.parse fails, treat the raw value as a single course name
-        const fallback = String(raw).trim();
-        return fallback && fallback !== 'null' ? [fallback] : [];
-    }
-};
 
 const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
     selectedTeacher,
@@ -48,6 +31,8 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
     onClearSelectedTeacher,
     onTeacherClick,
     showToast,
+    reviewsLoading = false,
+    onLoadMoreReviews,
 }) => {
     const sortedReviews = useMemo(
         () => [...(selectedTeacher.reviews || [])].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
@@ -63,7 +48,10 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
         return courses.size;
     }, [selectedTeacher.reviews]);
 
-    const reviewCount = sortedReviews.length || selectedTeacher.review_count || selectedTeacher.total_reviews || 0;
+    // Prefer the server's total: `reviews` now holds only the loaded page, so
+    // its length must never shadow the real count on long profiles.
+    const reviewCount = selectedTeacher.total_reviews || selectedTeacher.review_count || sortedReviews.length || 0;
+    const hasMoreReviews = typeof onLoadMoreReviews === 'function' && sortedReviews.length < reviewCount;
     const latestReview = sortedReviews[0]?.created_at
         ? new Date(sortedReviews[0].created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
         : '—';
@@ -171,7 +159,8 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                             </button>
                         </div>
                     ) : (
-                        sortedReviews.map((review: Review) => {
+                        <>
+                            {sortedReviews.map((review: Review) => {
                             const courses = extractCourses(review);
                             return (
                                 <article key={review.id} className="review-card">
@@ -243,7 +232,20 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                                     </div>
                                 </article>
                             );
-                        })
+                        })}
+                            {hasMoreReviews && (
+                                <button
+                                    type="button"
+                                    className="review-load-more"
+                                    onClick={onLoadMoreReviews}
+                                    disabled={reviewsLoading}
+                                >
+                                    {reviewsLoading
+                                        ? 'Loading…'
+                                        : `Load more reviews (${reviewCount - sortedReviews.length} remaining)`}
+                                </button>
+                            )}
+                        </>
                     )}
                 </div>
             </div>

@@ -392,24 +392,50 @@ const parseCourseList = (raw) => {
  * @returns {Promise<{scanned: number, toQueue: number, alreadyQueued: number,
  *                    flaggedIds: number[], dryRun: boolean}>}
  */
-const sweepExistingReviews = async (db, { dryRun = false } = {}) => {
-    const [rows] = await db.query(
-        'SELECT id, comment, user_name, courses, is_approved FROM reviews'
-    );
+// Scan large tables keyset-style instead of `SELECT *`-ing the whole thing into
+// memory at once. Every sweep row has a numeric id, so `id > lastId` is both
+// index-friendly and stable while rows are being updated.
+const SWEEP_BATCH_SIZE = 500;
 
+const yieldToEventLoop = () => new Promise((resolve) => setImmediate(resolve));
+
+const forEachRowBatch = async (db, columns, table, onRow) => {
+    let lastId = 0;
+    let scanned = 0;
+    for (;;) {
+        const [rows] = await db.query(
+            `SELECT id, ${columns} FROM ${table} WHERE id > ? ORDER BY id ASC LIMIT ?`,
+            [lastId, SWEEP_BATCH_SIZE]
+        );
+        if (rows.length === 0) break;
+        scanned += rows.length;
+        for (const row of rows) onRow(row);
+        lastId = Number(rows[rows.length - 1].id);
+        if (rows.length < SWEEP_BATCH_SIZE) break;
+        await yieldToEventLoop();
+    }
+    return scanned;
+};
+
+const sweepExistingReviews = async (db, { dryRun = false } = {}) => {
     const toQueueIds = [];
     let alreadyQueued = 0;
 
-    for (const row of rows) {
-        const fields = [row.comment, row.user_name, ...parseCourseList(row.courses)];
-        const flagged = fields.some((value) => detectFlaggedText(String(value)).flagged);
-        if (!flagged) continue;
-        if (Number(row.is_approved) === 0) {
-            alreadyQueued += 1;
-            continue;
+    const scanned = await forEachRowBatch(
+        db,
+        'comment, user_name, courses, is_approved',
+        'reviews',
+        (row) => {
+            const fields = [row.comment, row.user_name, ...parseCourseList(row.courses)];
+            const flagged = fields.some((value) => detectFlaggedText(String(value)).flagged);
+            if (!flagged) return;
+            if (Number(row.is_approved) === 0) {
+                alreadyQueued += 1;
+                return;
+            }
+            toQueueIds.push(row.id);
         }
-        toQueueIds.push(row.id);
-    }
+    );
 
     if (!dryRun && toQueueIds.length > 0) {
         const CHUNK = 500;
@@ -424,7 +450,7 @@ const sweepExistingReviews = async (db, { dryRun = false } = {}) => {
     }
 
     return {
-        scanned: rows.length,
+        scanned,
         toQueue: toQueueIds.length,
         alreadyQueued,
         flaggedIds: toQueueIds,
@@ -442,32 +468,28 @@ const sweepExistingReviews = async (db, { dryRun = false } = {}) => {
  * @param {{dryRun?: boolean}} options preview without updating anything
  */
 const sweepExistingQa = async (db, { dryRun = false } = {}) => {
-    const [questions] = await db.query('SELECT id, question, is_approved FROM questions');
-    const [answers] = await db.query('SELECT id, answer, is_approved FROM question_answers');
-    const [courses] = await db.query('SELECT id, name, status FROM custom_courses');
-
-    const partition = (rows, field) => {
+    const partition = async (table, field, isApprovedColumn = 'is_approved') => {
         const toQueue = [];
         let alreadyQueued = 0;
-        for (const row of rows) {
-            if (!detectFlaggedText(String(row[field] || '')).flagged) continue;
-            if (Number(row.is_approved) === 0) alreadyQueued += 1;
+        const scanned = await forEachRowBatch(db, `${field}, ${isApprovedColumn}`, table, (row) => {
+            if (!detectFlaggedText(String(row[field] || '')).flagged) return;
+            if (Number(row[isApprovedColumn]) === 0) alreadyQueued += 1;
             else toQueue.push(row.id);
-        }
-        return { toQueue, alreadyQueued };
+        });
+        return { scanned, toQueue, alreadyQueued };
     };
 
-    const q = partition(questions, 'question');
-    const a = partition(answers, 'answer');
+    const q = await partition('questions', 'question');
+    const a = await partition('question_answers', 'answer');
 
     const coursesToDemote = [];
     let coursesAlreadyPending = 0;
-    for (const row of courses) {
-        if (!detectFlaggedText(String(row.name || '')).flagged) continue;
+    const coursesScanned = await forEachRowBatch(db, 'name, status', 'custom_courses', (row) => {
+        if (!detectFlaggedText(String(row.name || '')).flagged) return;
         if (row.status === 'approved') coursesToDemote.push(row.id);
         else if (row.status === 'pending') coursesAlreadyPending += 1;
         // rejected stays rejected
-    }
+    });
 
     const updateByIds = async (sql, ids) => {
         const CHUNK = 500;
@@ -485,9 +507,9 @@ const sweepExistingQa = async (db, { dryRun = false } = {}) => {
     }
 
     return {
-        questions: { scanned: questions.length, toQueue: q.toQueue.length, alreadyQueued: q.alreadyQueued, flaggedIds: q.toQueue },
-        answers: { scanned: answers.length, toQueue: a.toQueue.length, alreadyQueued: a.alreadyQueued, flaggedIds: a.toQueue },
-        courses: { scanned: courses.length, toDemote: coursesToDemote.length, alreadyPending: coursesAlreadyPending, flaggedIds: coursesToDemote },
+        questions: { scanned: q.scanned, toQueue: q.toQueue.length, alreadyQueued: q.alreadyQueued, flaggedIds: q.toQueue },
+        answers: { scanned: a.scanned, toQueue: a.toQueue.length, alreadyQueued: a.alreadyQueued, flaggedIds: a.toQueue },
+        courses: { scanned: coursesScanned, toDemote: coursesToDemote.length, alreadyPending: coursesAlreadyPending, flaggedIds: coursesToDemote },
         dryRun
     };
 };
