@@ -92,7 +92,7 @@ const DepartmentPage: React.FC = () => {
             <header className="header">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', flexWrap: 'wrap' }}>
                     <img
-                        src={`${process.env.PUBLIC_URL}/umt-logo.png`}
+                        src={`${import.meta.env.BASE_URL}umt-logo.png`}
                         alt="UMT Logo"
                         width={60}
                         height={57}

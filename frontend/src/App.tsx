@@ -1491,7 +1491,7 @@ const App: React.FC = () => {
                             aria-label="UMT Teacher Reviews - go to start page"
                         >
                             <img
-                                src={`${process.env.PUBLIC_URL}/umt-logo.png`}
+                                src={`${import.meta.env.BASE_URL}umt-logo.png`}
                                 alt="UMT Logo"
                                 className="header-logo"
                                 width={48}
@@ -1691,7 +1691,7 @@ const App: React.FC = () => {
                             <div className="welcome-crest">
                                 <span className="welcome-crest-plate">
                                     <img
-                                        src={`${process.env.PUBLIC_URL}/umt-logo.png`}
+                                        src={`${import.meta.env.BASE_URL}umt-logo.png`}
                                         alt="University of Management and Technology"
                                         className="welcome-crest-img"
                                         width={96}
