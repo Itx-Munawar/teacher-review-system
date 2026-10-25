@@ -7,8 +7,15 @@ moderation.
 ## Structure
 
 ```
-backend/    Express + MySQL API (server.js, contentFilter.js, db.js)
-frontend/   React + TypeScript app (Create React App)
+backend/    Express + MySQL API
+  server.js   entry point: start HTTP server, background jobs, shutdown
+  app.js      Express app: security middleware, CORS, logging, route mounting
+  config.js   env validation and constants        state.js  shared schema flags
+  routes/     public, adminAuth, adminContent, adminInsights, customCourses, seo, health
+  lib/        auth, totp, cookies, limiters, audit, cache, email, validation, ...
+  jobs/       schema bootstrap, content-filter sweeps, daily digest
+  test/       API tests (see below); *.test.js files next to the code are unit tests
+frontend/   React + TypeScript app (Vite)
 QA_REPORT.md  Manual QA notes and hardening history
 ```
 
