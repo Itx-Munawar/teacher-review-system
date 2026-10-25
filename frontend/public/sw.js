@@ -7,8 +7,8 @@
      added a hop and a second code path in front of every photo.
 */
 
-const CACHE_NAME = 'umt-reviews-v2';
-const SHELL_CACHE = 'umt-reviews-shell-v2';
+const CACHE_NAME = 'umt-reviews-v3';
+const SHELL_CACHE = 'umt-reviews-shell-v3';
 
 const SHELL_URLS = [
     '/',
@@ -64,10 +64,10 @@ self.addEventListener('fetch', (event) => {
 
     // Same-origin static assets
     if (request.destination === 'script' || request.destination === 'style' || request.destination === 'image' || request.destination === 'font') {
-        // Build output under /static/ has a content hash in its name, so a cached copy is
+        // Vite build output under /assets/ has a content hash in its name, so a cached copy is
         // never stale: serve it without touching the network (the old code fired a network
         // request for every cached asset anyway, wasting bandwidth on slow connections).
-        const isHashed = url.pathname.startsWith('/static/');
+        const isHashed = url.pathname.startsWith('/assets/');
 
         event.respondWith(
             caches.match(request).then((cached) => {

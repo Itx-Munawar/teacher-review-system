@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { useSearchParams, useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
     getTeachers,
@@ -42,9 +42,6 @@ import PullToRefresh from './components/PullToRefresh';
 import Icon from './components/Icon';
 import Avatar from './components/Avatar';
 import BottomNav from './components/BottomNav';
-import AdminPanel from './components/AdminPanel';
-import LoginForm from './components/LoginForm';
-import CompareView from './components/CompareView';
 import TeacherDetailView from './components/TeacherDetailView';
 import ReviewFormModal from './components/ReviewFormModal';
 import QuestionsView from './components/QuestionsView';
@@ -54,6 +51,14 @@ import { ToastHost } from './components/Toast';
 import { haptic } from './utils/haptics';
 import type { Teacher, TeacherDetail, Review, AdminReview, AdminQuestion, CustomCourse, AdminTeacherDetail, AdminReport, AdminStats, Toast } from './types';
 import './App.css';
+
+// Admin and compare screens are rarely opened, so they are split into their
+// own chunks instead of shipping in the bundle every visitor downloads.
+const AdminPanel = lazy(() => import('./components/AdminPanel'));
+const LoginForm = lazy(() => import('./components/LoginForm'));
+const CompareView = lazy(() => import('./components/CompareView'));
+
+const ChunkFallback = () => <div className="loading" role="status">Loading…</div>;
 
 // ========== HELPER: Map API response to TeacherDetail ==========
 interface TeacherDetailResponse {
@@ -1384,6 +1389,7 @@ const App: React.FC = () => {
                     </header>
                     <div className="container">
                         <ErrorBoundary>
+                        <Suspense fallback={<ChunkFallback />}>
                         <LoginForm
                             adminUsername={adminUsername}
                             setAdminUsername={setAdminUsername}
@@ -1395,6 +1401,7 @@ const App: React.FC = () => {
                             admin_totp_code={admin_totp_code}
                             setAdmin_totp_code={setAdmin_totp_code}
                         />
+                        </Suspense>
                         </ErrorBoundary>
                     </div>
                 </div>
@@ -1409,6 +1416,7 @@ const App: React.FC = () => {
                 </header>
                 <div className="container">
                     <ErrorBoundary>
+                    <Suspense fallback={<ChunkFallback />}>
                     <AdminPanel
                         teachers={teachers}
                         reviewsForModeration={reviewsForModeration}
@@ -1470,6 +1478,7 @@ const App: React.FC = () => {
                         adminLoadingMoreReports={adminLoadingMoreReports}
                         totpEnabled={adminTotpEnabled}
                     />
+                    </Suspense>
                     </ErrorBoundary>
                 </div>
             </div>
@@ -1491,7 +1500,7 @@ const App: React.FC = () => {
                             aria-label="UMT Teacher Reviews - go to start page"
                         >
                             <img
-                                src={`${import.meta.env.BASE_URL}umt-logo.png`}
+                                src={`${import.meta.env.BASE_URL}umt-logo.webp`}
                                 alt="UMT Logo"
                                 className="header-logo"
                                 width={48}
@@ -1660,6 +1669,7 @@ const App: React.FC = () => {
                     {showQnA ? (
                         <QuestionsView onOpenTeacher={handleTeacherClick} onBack={handleTabHome} />
                     ) : isComparing ? (
+                        <Suspense fallback={<ChunkFallback />}>
                         <CompareView
                             compareDetails={compareDetails}
                             compareList={compareList}
@@ -1673,6 +1683,7 @@ const App: React.FC = () => {
                             setCompareList={setCompareList}
                             setCompareDetails={setCompareDetails}
                         />
+                        </Suspense>
                     ) : selectedTeacher ? (
                         <TeacherDetailView
                             selectedTeacher={selectedTeacher}
@@ -1691,7 +1702,7 @@ const App: React.FC = () => {
                             <div className="welcome-crest">
                                 <span className="welcome-crest-plate">
                                     <img
-                                        src={`${import.meta.env.BASE_URL}umt-logo.png`}
+                                        src={`${import.meta.env.BASE_URL}umt-logo.webp`}
                                         alt="University of Management and Technology"
                                         className="welcome-crest-img"
                                         width={96}
