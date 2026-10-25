@@ -1424,7 +1424,6 @@ const App: React.FC = () => {
 
     return (
         <div className="app">
-            <a href="#main-content" className="skip-link">Skip to main content</a>
             <ToastHost toasts={toasts} onDismiss={dismissToast} />
             {reviewSuccess && compareList.length === 0 && !isComparing && !showQnA && <InstallPrompt />}
             <PullToRefresh onRefresh={handlePullRefresh}>

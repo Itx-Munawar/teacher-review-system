@@ -5503,25 +5503,6 @@ select:focus-visible {
     box-shadow: 0 0 0 3px rgba(75, 49, 89, 0.15);
 }
 
-/* Skip to main content link */
-.skip-link {
-    position: absolute;
-    top: -40px;
-    left: 0;
-    background: #4b3159;
-    color: white;
-    padding: 0.5rem 1rem;
-    z-index: 10001;
-    font-weight: 600;
-    text-decoration: none;
-    border-radius: 0 0 8px 0;
-    transition: top 0.2s ease;
-}
-
-.skip-link:focus {
-    top: 0;
-}
-
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
     *,
@@ -9964,7 +9945,6 @@ body {
     background: transparent;
 }
 
-.skip-link,
 .header-brand {
     min-height: 44px;
 }
