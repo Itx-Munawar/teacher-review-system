@@ -11,7 +11,7 @@ const nodemailer = require('nodemailer');
 const db = require('./db');
 // sameSiteFor is shared with the CSRF cookie so both cookies always agree.
 const { csrfSetCookie, csrfValidate, sameSiteFor } = require('./csrf');
-const { detectFlaggedText, moderationFlagFor, sweepExistingReviews, sweepExistingQa } = require('./contentFilter');
+const { detectFlaggedText, moderationFlagFor, sweepExistingReviews, sweepExistingQa, parseCourseList } = require('./contentFilter');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -2807,25 +2807,29 @@ app.get('/sitemap.xml', async (req, res) => {
         const [questionMeta] = await db.query(
             'SELECT MAX(created_at) AS last_question FROM questions WHERE is_approved = 1'
         );
-        // Distinct courses mentioned in approved reviews — used for /course/:name pages.
-        // Kept lightweight: simple distinct list from the JSON array column.
-        const [courses] = await db.query(`
-            SELECT DISTINCT TRIM(JSON_UNQUOTE(JSON_EXTRACT(c.name, '$')) ) AS name
-            FROM (
-                SELECT SUBSTRING_INDEX(SUBSTRING_INDEX(courses, ',', n.n), ',', -1) AS name
-                FROM reviews
-                JOIN (
-                    SELECT 1 AS n UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4
-                    UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8
-                    UNION ALL SELECT 9 UNION ALL SELECT 10 UNION ALL SELECT 11 UNION ALL SELECT 12
-                ) n
-                WHERE is_approved = 1 AND courses IS NOT NULL AND courses != ''
-                  AND LENGTH(courses) - LENGTH(REPLACE(courses, ',', '')) >= n.n - 1
-            ) c
-            WHERE TRIM(c.name) != ''
-            ORDER BY c.name
-            LIMIT 100
-        `);
+        // Courses mentioned in approved reviews, for the /course/:name pages.
+        // reviews.courses holds a JSON array (older rows: plain text), so it is
+        // parsed here rather than in SQL. The previous SQL split the JSON on
+        // commas and fed the fragments to JSON_EXTRACT, which MySQL 8 rejects as
+        // invalid JSON - that error took the whole sitemap down with a 500.
+        const [courseRows] = await db.query(
+            "SELECT courses FROM reviews WHERE is_approved = 1 AND courses IS NOT NULL AND courses != ''"
+        );
+        const courseCounts = new Map(); // lower-cased name -> { name, count }
+        courseRows.forEach((row) => {
+            parseCourseList(row.courses).forEach((raw) => {
+                const name = raw.replace(/\s+/g, ' ').trim();
+                if (name.length < 2 || name.length > 200) return;
+                const key = name.toLowerCase();
+                const entry = courseCounts.get(key);
+                if (entry) entry.count += 1;
+                else courseCounts.set(key, { name, count: 1 });
+            });
+        });
+        // Most-reviewed courses first; cap keeps the sitemap focused.
+        const courses = [...courseCounts.values()]
+            .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+            .slice(0, 100);
         const baseUrl = PUBLIC_SITE_URL;
 
         const asDate = (value) => {
@@ -2878,31 +2882,11 @@ app.get('/sitemap.xml', async (req, res) => {
             );
         });
 
-        // Course pages: each distinct course gets a listing page.
-        // Only include courses that have at least one teacher in the directory.
-        if (courses.length > 0) {
-            const [teachersWithCourses] = await db.query(`
-                SELECT DISTINCT t.id, t.name
-                FROM teachers t
-                JOIN reviews r ON r.teacher_id = t.id AND r.is_approved = 1
-                WHERE r.courses IS NOT NULL AND r.courses != ''
-            `);
-            const courseTeacherIds = new Set(teachersWithCourses.map((t) => t.id));
-            const seen = [];
-            courses.forEach((row) => {
-                const name = String(row.name || '').trim();
-                if (!name || name.length < 2 || seen.includes(name)) return;
-                // Only include if there are actual teachers for it
-                // (we check at render time; if empty the page is noindexed client-side)
-                addUrl(
-                    `${baseUrl}/course/${encodeURIComponent(name)}`,
-                    today,
-                    'weekly',
-                    '0.5'
-                );
-                seen.push(name);
-            });
-        }
+        // Course pages: each distinct course gets a listing page (the page
+        // itself noindexes when no teacher matches).
+        courses.forEach(({ name }) => {
+            addUrl(`${baseUrl}/course/${encodeURIComponent(name)}`, today, 'weekly', '0.5');
+        });
 
         xml += '</urlset>';
 
