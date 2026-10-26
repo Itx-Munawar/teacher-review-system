@@ -21,7 +21,7 @@ QA_REPORT.md  Manual QA notes and hardening history
 
 ## Local setup
 
-Prerequisites: Node.js 18+ and a MySQL 8 database.
+Prerequisites: Node.js 22+ and a MySQL 8 database.
 
 ### Backend
 

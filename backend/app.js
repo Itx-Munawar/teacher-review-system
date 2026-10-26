@@ -110,13 +110,17 @@ app.use((req, res) => {
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
     if (res.headersSent) return next(err);
-    console.error(`Unhandled error on ${req.method} ${req.path}:`, err);
+    // Malformed or oversized bodies are the client's mistake: one short line,
+    // not a stack trace per junk request.
     if (err.type === 'entity.parse.failed') {
+        console.warn(`Bad JSON body on ${req.method} ${req.path}`);
         return res.status(400).json({ error: 'Request body is not valid JSON' });
     }
     if (err.type === 'entity.too.large' || err.status === 413) {
+        console.warn(`Oversized body on ${req.method} ${req.path}`);
         return res.status(413).json({ error: 'Request body is too large' });
     }
+    console.error(`Unhandled error on ${req.method} ${req.path}:`, err);
     const status = Number.isInteger(err.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
     res.status(status).json({ error: 'Server error' });
 });
