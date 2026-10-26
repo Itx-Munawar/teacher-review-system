@@ -3,6 +3,7 @@
     { "source": "/sitemap.xml", "destination": "https://teacher-review-system.onrender.com/sitemap.xml" },
     { "source": "/robots.txt", "destination": "https://teacher-review-system.onrender.com/robots.txt" },
     { "source": "/api/:path*", "destination": "https://teacher-review-system.onrender.com/api/:path*" },
+    { "source": "/teacher/:id(\\d+)", "has": [{ "type": "header", "key": "user-agent", "value": { "re": ".*(WhatsApp|facebookexternalhit|Facebot|Twitterbot|LinkedInBot|Slackbot|TelegramBot|Discordbot|Pinterestbot|SkypeUriPreview|redditbot|Embedly|Iframely|vkShare|Viber|Snapchat|Mastodon).*" } }], "destination": "https://teacher-review-system.onrender.com/seo/teacher/:id" },
     { "source": "/teacher/:id", "destination": "/index.html" },
     { "source": "/department/:name", "destination": "/index.html" },
     { "source": "/admin", "destination": "/index.html" },

@@ -18,6 +18,10 @@ const { createAuditLog } = require('../lib/audit');
 
 const router = express.Router();
 
+// Wrong passwords in a row before the account locks, and for how long.
+const MAX_FAILED_LOGINS = 5;
+const LOCK_MINUTES = 15;
+
 // ========== ADMIN API ENDPOINTS ==========
 
 router.post('/api/admin/login', loginLimiter, csrfValidate, async (req, res) => {
@@ -33,21 +37,37 @@ router.post('/api/admin/login', loginLimiter, csrfValidate, async (req, res) => 
             return res.status(401).json({ error: 'Invalid credentials' });
         }
         const admin = admins[0];
+        // A locked account refuses every password, the right one included, until
+        // the lock runs out. Otherwise the lock would only be a counter: an
+        // attacker guessing from many IPs (the rate limiter is per IP) could
+        // keep going. The password is still hashed so the reply takes the same
+        // time either way, and failures during the lock do not extend it, so
+        // the real admin is never shut out for longer than LOCK_MINUTES.
+        // A password reset clears the lock straight away.
+        const lockedUntil = admin.locked_until ? new Date(admin.locked_until) : null;
+        if (lockedUntil && lockedUntil > new Date()) {
+            await bcrypt.compare(password, admin.password);
+            const minutes = Math.max(1, Math.ceil((lockedUntil.getTime() - Date.now()) / 60000));
+            res.set('Retry-After', String(minutes * 60));
+            return res.status(429).json({
+                error: `Too many failed attempts. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}, or reset your password.`,
+                locked_until: lockedUntil.toISOString(),
+            });
+        }
         const isValid = await bcrypt.compare(password, admin.password);
         if (!isValid) {
-            const alreadyLocked = admin.locked_until && new Date(admin.locked_until) > new Date();
-            if (!alreadyLocked) {
-                const failedAttempts = (admin.failed_attempts || 0) + 1;
-                const lockedUntil = failedAttempts >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null;
-                await db.query('UPDATE admins SET failed_attempts = ?, locked_until = ? WHERE id = ?', [failedAttempts, lockedUntil, admin.id]);
-                if (lockedUntil) {
-                    await createAuditLog(null, 'LOGIN_LOCKOUT', `Locked after ${failedAttempts} failed attempts`, req.ip);
-                    sendEmail(
-                        admin.email,
-                        'Security alert: repeated failed admin logins',
-                        `<p>There were ${failedAttempts} failed login attempts for the admin account <strong>${admin.username}</strong> from ${req.ip || 'an unknown address'}.</p><p>Your password still works. If this was not you, change it now.</p>`
-                    );
-                }
+            // After an expired lock the count starts again from zero.
+            const previous = lockedUntil ? 0 : (admin.failed_attempts || 0);
+            const failedAttempts = previous + 1;
+            const lockUntil = failedAttempts >= MAX_FAILED_LOGINS ? new Date(Date.now() + LOCK_MINUTES * 60 * 1000) : null;
+            await db.query('UPDATE admins SET failed_attempts = ?, locked_until = ? WHERE id = ?', [failedAttempts, lockUntil, admin.id]);
+            if (lockUntil) {
+                await createAuditLog(null, 'LOGIN_LOCKOUT', `Locked after ${failedAttempts} failed attempts`, req.ip);
+                sendEmail(
+                    admin.email,
+                    'Security alert: repeated failed admin logins',
+                    `<p>There were ${failedAttempts} failed login attempts for the admin account <strong>${admin.username}</strong> from ${req.ip || 'an unknown address'}.</p><p>The account is locked for ${LOCK_MINUTES} minutes. If this was you, wait or use "Forgot password" to unlock it at once. If it was not you, reset your password now.</p>`
+                );
             }
             return res.status(401).json({ error: 'Invalid credentials' });
         }

@@ -4,7 +4,8 @@ const db = require('../db');
 const state = require('../state');
 const { pruneAuditLogs } = require('../lib/audit');
 const { pruneSearchGaps } = require('../lib/searchGaps');
-const { runReviewFilterSweep, runQaFilterSweep, runSensitiveReviewBackfill } = require('./sweeps');
+const { pruneChatData } = require('../lib/chatUsage');
+const { runReviewFilterSweep, runQaFilterSweep, runSensitiveReviewBackfill, runTeacherTidySweep } = require('./sweeps');
 
 // ========== SCHEMA BOOTSTRAP ==========
 // Creates tables that may be added after the initial deployment, so the
@@ -179,6 +180,39 @@ const runSchemaBootstrap = async () => {
             console.error('⚠️ Could not ensure search_gaps table:', gapsErr.message);
         }
 
+        // Review assistant: daily usage counters (never the text of a question)
+        // and the answers students rated. Both pruned after 90 days.
+        try {
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS chat_usage_daily (
+                    day DATE NOT NULL,
+                    metric VARCHAR(24) NOT NULL,
+                    mkey VARCHAR(120) NOT NULL,
+                    count INT UNSIGNED NOT NULL DEFAULT 0,
+                    PRIMARY KEY (day, metric, mkey)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS chat_feedback (
+                    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                    token_hash CHAR(64) NOT NULL,
+                    rating TINYINT NOT NULL,
+                    question VARCHAR(600) NOT NULL,
+                    answer TEXT NOT NULL,
+                    teacher_ids VARCHAR(100) NOT NULL DEFAULT '',
+                    comment VARCHAR(500) DEFAULT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    PRIMARY KEY (id),
+                    UNIQUE KEY uq_chat_feedback_token (token_hash),
+                    KEY idx_chat_feedback_created (created_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `);
+            state.chatUsageReady = true;
+        } catch (chatErr) {
+            console.error('⚠️ Could not ensure chat usage tables:', chatErr.message);
+        }
+
         // Composite indexes for the two hottest list queries: department pages
         // (WHERE department = ? ORDER BY name) and the public Q&A board
         // (WHERE is_approved = 1 ORDER BY created_at DESC).
@@ -191,10 +225,12 @@ const runSchemaBootstrap = async () => {
         // Keep the audit trail bounded (and the hashed IPs with it).
         pruneAuditLogs();
         pruneSearchGaps();
+        pruneChatData();
         // Schema is up: retroactively filter any pre-existing reviews.
         runReviewFilterSweep();
         runQaFilterSweep();
         runSensitiveReviewBackfill();
+        runTeacherTidySweep();
     } catch (error) {
         schemaBootstrapError = error.message;
         console.error('❌ Schema bootstrap failed:', error.message);

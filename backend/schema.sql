@@ -102,3 +102,27 @@ CREATE TABLE IF NOT EXISTS question_answers (
     PRIMARY KEY (id),
     KEY idx_answers_question (question_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Review assistant: daily usage counters (no message text) and answer ratings.
+CREATE TABLE IF NOT EXISTS chat_usage_daily (
+    day DATE NOT NULL,
+    metric VARCHAR(24) NOT NULL,
+    mkey VARCHAR(120) NOT NULL,
+    count INT UNSIGNED NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, metric, mkey)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS chat_feedback (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    token_hash CHAR(64) NOT NULL,
+    rating TINYINT NOT NULL,
+    question VARCHAR(600) NOT NULL,
+    answer TEXT NOT NULL,
+    teacher_ids VARCHAR(100) NOT NULL DEFAULT '',
+    comment VARCHAR(500) DEFAULT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_chat_feedback_token (token_hash),
+    KEY idx_chat_feedback_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

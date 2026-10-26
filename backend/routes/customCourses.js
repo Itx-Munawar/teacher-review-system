@@ -13,7 +13,7 @@ const router = express.Router();
 
 // ========== CUSTOM COURSES (community-added, admin-approved) ==========
 // POST /api/custom-courses – student suggests a custom course for admin approval
-router.post('/api/custom-courses', questionLimiter, [
+router.post('/api/custom-courses', csrfValidate, questionLimiter, [
     body('name').trim().isLength({ min: 2, max: 200 }).withMessage('Course name must be 2-200 characters')
 ], async (req, res) => {
     const errors = validationResult(req);

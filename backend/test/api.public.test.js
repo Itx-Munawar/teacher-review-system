@@ -142,6 +142,46 @@ describe('public API', { skip: SKIP }, () => {
         });
     });
 
+    describe('CSRF on public forms', () => {
+        const forms = () => [
+            ['/api/reviews', { teacher_id: teacherB, comment: 'Forged review from another site.' }],
+            ['/api/questions', { question: 'Is this a forged question from elsewhere?' }],
+            ['/api/questions/1/answers', { answer: 'Forged answer text' }],
+            ['/api/reviews/1/report', { reason: 'spam' }],
+            ['/api/custom-courses', { name: 'Forged Course' }],
+        ];
+
+        it('refuses every public form without the token', async () => {
+            for (const [url, body] of forms()) {
+                const client = createClient(server.baseUrl);
+                await client.primeCsrf(); // has the cookie, but a forged request cannot read it
+                const res = await client.post(url, body, { csrf: false });
+                assert.equal(res.status, 403, url);
+                assert.equal(res.body.error, 'CSRF token missing', url);
+            }
+        });
+
+        it('refuses a wrong token and a cookie-less request', async () => {
+            const client = createClient(server.baseUrl);
+            await client.primeCsrf();
+            const wrong = await client.post('/api/reviews', forms()[0][1], { csrf: false, headers: { 'X-CSRF-Token': 'b'.repeat(64) } });
+            assert.equal(wrong.status, 403);
+            assert.equal(wrong.body.error, 'CSRF token mismatch');
+            const bare = await createClient(server.baseUrl).post('/api/reviews', forms()[0][1], { csrf: false });
+            assert.equal(bare.status, 403);
+        });
+
+        it('a refused request does not use up the review rate limit', async () => {
+            const client = createClient(server.baseUrl);
+            await client.primeCsrf();
+            for (let i = 0; i < 12; i += 1) {
+                await client.post('/api/reviews', forms()[0][1], { csrf: false });
+            }
+            const real = await client.post('/api/reviews', { teacher_id: teacherB, comment: 'Genuine review after forged attempts.' });
+            assert.equal(real.status, 200, real.text);
+        });
+    });
+
     describe('reviews', () => {
         it('accepts a valid review as pending', async () => {
             const res = await createClient(server.baseUrl).post('/api/reviews', {

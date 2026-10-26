@@ -1,13 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import ChatWidget from './ChatWidget';
-import { sendChatMessage } from '../services/api';
+import { sendChatMessage, sendChatFeedback } from '../services/api';
 
 vi.mock('../services/api', () => ({
     sendChatMessage: vi.fn(),
+    sendChatFeedback: vi.fn(),
 }));
 
 const mockedSend = vi.mocked(sendChatMessage);
+const mockedFeedback = vi.mocked(sendChatFeedback);
+const signed = (reply: string, teachers = [] as { id: number; name: string; department: string }[]) =>
+    Promise.resolve({ data: { reply, teachers, replyToken: '1790000000.tok' } } as Awaited<ReturnType<typeof sendChatMessage>>);
 const ok = (reply: string, teachers = [] as { id: number; name: string; department: string }[]) =>
     Promise.resolve({ data: { reply, teachers } } as Awaited<ReturnType<typeof sendChatMessage>>);
 
@@ -21,6 +25,7 @@ describe('ChatWidget', () => {
     beforeEach(() => {
         sessionStorage.clear();
         mockedSend.mockReset();
+        mockedFeedback.mockReset();
         // jsdom has no layout; the list auto-scroll only needs these to exist.
         Element.prototype.scrollTo = vi.fn();
     });
@@ -85,5 +90,49 @@ describe('ChatWidget', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
         await waitFor(() => expect(screen.getByText('Umer answer')).toBeInTheDocument());
         expect(mockedSend).toHaveBeenCalledWith({ message: 'umer usman?', history: [], teacherId: null });
+    });
+
+    it('rates an answer, can switch, and sends an optional comment after thumbs-down', async () => {
+        mockedSend.mockReturnValue(signed('He grades fairly.', [{ id: 7, name: 'Waqar Ashiq', department: 'SST' }]));
+        mockedFeedback.mockResolvedValue({ data: { success: true } } as Awaited<ReturnType<typeof sendChatFeedback>>);
+        render(<ChatWidget pageTeacher={null} onOpenTeacher={() => {}} />);
+        openAndAsk('waqar ki grading?');
+        await screen.findByText('He grades fairly.');
+        expect(screen.getByText(/rating an answer shares it with the site admins/i)).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Helpful answer' }));
+        await screen.findByText('Thanks for the feedback!');
+        expect(mockedFeedback).toHaveBeenLastCalledWith({
+            token: '1790000000.tok', question: 'waqar ki grading?', answer: 'He grades fairly.', teacherIds: [7], rating: 1,
+        });
+        expect(screen.getByRole('button', { name: 'Helpful answer' })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.queryByPlaceholderText(/what was wrong/i)).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Not helpful answer' }));
+        const box = await screen.findByPlaceholderText(/what was wrong/i);
+        expect(mockedFeedback).toHaveBeenLastCalledWith(expect.objectContaining({ rating: -1 }));
+        fireEvent.change(box, { target: { value: 'It ignored attendance' } });
+        fireEvent.submit(box.closest('form')!);
+        await waitFor(() => expect(mockedFeedback).toHaveBeenLastCalledWith(expect.objectContaining({ rating: -1, comment: 'It ignored attendance' })));
+        await waitFor(() => expect(screen.queryByPlaceholderText(/what was wrong/i)).toBeNull());
+    });
+
+    it('shows an error and undoes the rating when saving fails', async () => {
+        mockedSend.mockReturnValue(signed('Answer.'));
+        mockedFeedback.mockRejectedValue(new Error('network'));
+        render(<ChatWidget pageTeacher={null} onOpenTeacher={() => {}} />);
+        openAndAsk('kon acha hai?');
+        await screen.findByText('Answer.');
+        fireEvent.click(screen.getByRole('button', { name: 'Not helpful answer' }));
+        await screen.findByText(/could not save/i);
+        expect(screen.getByRole('button', { name: 'Not helpful answer' })).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('offers no rating buttons for answers without a token', async () => {
+        mockedSend.mockReturnValue(ok('Old-style answer.'));
+        render(<ChatWidget pageTeacher={null} onOpenTeacher={() => {}} />);
+        openAndAsk('hello');
+        await screen.findByText('Old-style answer.');
+        expect(screen.queryByRole('button', { name: 'Helpful answer' })).toBeNull();
     });
 });

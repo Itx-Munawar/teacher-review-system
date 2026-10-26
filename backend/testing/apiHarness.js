@@ -140,6 +140,12 @@ const createClient = (baseUrl, { ip = nextIp() } = {}) => {
     const jar = new Map();
 
     const request = async (method, urlPath, { body, headers = {}, csrf = true, raw } = {}) => {
+        // Like the browser, which always loads a page (and gets the cookie)
+        // before posting a form: fetch the CSRF cookie first when it is missing.
+        // Pass csrf: false to test what happens without it.
+        if (csrf && !jar.has('csrf_token') && !['GET', 'HEAD'].includes(method)) {
+            await request('GET', '/api/health', { csrf: false });
+        }
         const h = { 'X-Forwarded-For': ip, ...headers };
         if (jar.size) h.Cookie = [...jar].map(([k, v]) => `${k}=${v}`).join('; ');
         if (csrf && jar.has('csrf_token') && !['GET', 'HEAD'].includes(method)) {

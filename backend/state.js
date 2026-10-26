@@ -9,6 +9,8 @@ module.exports = {
     searchGapsReady: false,
     // reviews.moderation_flag exists.
     reviewModerationColumnReady: false,
+    // chat_usage_daily and chat_feedback tables exist.
+    chatUsageReady: false,
     // review_reports table exists.
     reviewReportsReady: false,
     // retroactive review filter sweep has run.

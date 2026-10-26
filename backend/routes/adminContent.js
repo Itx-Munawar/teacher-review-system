@@ -10,7 +10,7 @@ const { clampInt } = require('../lib/validation');
 const { verifyAdmin } = require('../lib/auth');
 const { createAuditLog } = require('../lib/audit');
 const { invalidateCache } = require('../lib/cache');
-const { isUsableTeacherImageUrl, canonicalDepartment } = require('../lib/content');
+const { isUsableTeacherImageUrl, canonicalDepartment, normalizeTeacherName } = require('../lib/content');
 
 const router = express.Router();
 
@@ -23,7 +23,8 @@ router.post('/api/admin/teachers', verifyAdmin, csrfValidate, [
     if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
     try {
         const { name, department, image_url } = req.body;
-        const sanitizedName = name.trim().slice(0, 200);
+        const sanitizedName = normalizeTeacherName(name).slice(0, 100);
+        if (sanitizedName.length < 2) return res.status(400).json({ error: 'Name must be 2-100 characters' });
         const sanitizedDept = await canonicalDepartment(department);
         if (sanitizedDept.length < 2) return res.status(400).json({ error: 'Department must be 2-100 characters' });
         const sanitizedImageUrl = image_url ? image_url.trim().slice(0, 500) : null;
@@ -158,7 +159,8 @@ router.put('/api/admin/teachers/:id', verifyAdmin, csrfValidate, [
     try {
         const teacherId = req.params.id;
         const { name, department, image_url } = req.body;
-        const sanitizedName = name.trim().slice(0, 200);
+        const sanitizedName = normalizeTeacherName(name).slice(0, 100);
+        if (sanitizedName.length < 2) return res.status(400).json({ error: 'Name must be 2-100 characters' });
         const sanitizedDept = await canonicalDepartment(department);
         if (sanitizedDept.length < 2) return res.status(400).json({ error: 'Department must be 2-100 characters' });
         const sanitizedImageUrl = image_url ? image_url.trim().slice(0, 500) : null;

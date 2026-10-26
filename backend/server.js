@@ -8,6 +8,7 @@ const app = require('./app');
 const db = require('./db');
 const { pruneAuditLogs } = require('./lib/audit');
 const { pruneSearchGaps } = require('./lib/searchGaps');
+const { pruneChatData } = require('./lib/chatUsage');
 const { sendModerationDigest } = require('./jobs/digest');
 const { ensureTables } = require('./jobs/schema');
 
@@ -24,6 +25,7 @@ ensureTables();
 // boot. unref() keeps the timer from holding the process open.
 setInterval(pruneAuditLogs, 24 * 60 * 60 * 1000).unref();
 setInterval(pruneSearchGaps, 24 * 60 * 60 * 1000).unref();
+setInterval(pruneChatData, 24 * 60 * 60 * 1000).unref();
 // Hourly check; the marker row makes it a at-most-once-per-day digest.
 setInterval(() => sendModerationDigest(), 60 * 60 * 1000).unref();
 // Give the schema bootstrap a moment on cold start, then try once today.

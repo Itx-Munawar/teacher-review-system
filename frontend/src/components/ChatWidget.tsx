@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { sendChatMessage, type ChatTeacherRef } from '../services/api';
+import { sendChatMessage, sendChatFeedback, type ChatTeacherRef } from '../services/api';
 import Icon from './Icon';
 import './ChatWidget.css';
 
@@ -11,6 +11,12 @@ interface ChatMessage {
     /** Shown in the chat but never sent back to the server. */
     local?: boolean;
     error?: boolean;
+    /** Assistant answers: the question it answered and the server's token for rating it. */
+    question?: string;
+    replyToken?: string;
+    rating?: 1 | -1;
+    feedback?: 'sending' | 'saved' | 'failed';
+    commentSent?: boolean;
 }
 
 interface ChatWidgetProps {
@@ -82,6 +88,13 @@ const SparkIcon = () => (
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         <path d="M12 7.5l.9 1.9 1.9.9-1.9.9-.9 1.9-.9-1.9-1.9-.9 1.9-.9z" fill="currentColor" stroke="none" />
+    </svg>
+);
+
+const ThumbIcon = ({ down = false }: { down?: boolean }) => (
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={down ? { transform: 'rotate(180deg)' } : undefined}>
+        <path d="M7 10v12" />
+        <path d="M15 5.88L14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z" />
     </svg>
 );
 
@@ -173,7 +186,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ pageTeacher, onOpenTeacher, rai
         try {
             const res = await sendChatMessage({ message, history, teacherId: pageTeacher?.id ?? null });
             if (conversation !== conversationRef.current) return;
-            setMessages((prev) => [...prev, { id: ++nextId, role: 'assistant', text: res.data.reply, teachers: res.data.teachers }]);
+            setMessages((prev) => [...prev, { id: ++nextId, role: 'assistant', text: res.data.reply, teachers: res.data.teachers, question: message, replyToken: res.data.replyToken }]);
         } catch (err) {
             const e = err as { response?: { data?: { error?: string } }; code?: string };
             const text = e.response?.data?.error
@@ -184,6 +197,31 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ pageTeacher, onOpenTeacher, rai
             if (conversation === conversationRef.current) setSending(false);
         }
     }, [messages, sending, pageTeacher?.id]);
+
+    const updateMessage = (id: number, patch: Partial<ChatMessage>) =>
+        setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+
+    // 👍/👎: a second tap on the other thumb changes the rating of the same answer.
+    const rate = async (m: ChatMessage, rating: 1 | -1, comment?: string) => {
+        if (!m.replyToken || !m.question) return;
+        const previous = m.rating;
+        updateMessage(m.id, { rating, feedback: 'sending' });
+        try {
+            await sendChatFeedback({
+                token: m.replyToken,
+                question: m.question,
+                answer: m.text,
+                teacherIds: (m.teachers || []).map((t) => t.id),
+                rating,
+                ...(comment ? { comment } : {}),
+            });
+            updateMessage(m.id, { feedback: 'saved', ...(comment ? { commentSent: true } : {}) });
+        } catch {
+            updateMessage(m.id, { rating: previous, feedback: 'failed' });
+        }
+    };
+
+    const [commentDrafts, setCommentDrafts] = useState<Record<number, string>>({});
 
     const retry = useCallback(() => {
         // Drop the error and the question it answered, then ask again.
@@ -270,6 +308,54 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ pageTeacher, onOpenTeacher, rai
                                 <div className="chat-bubble">
                                     {m.role === 'assistant' ? renderRich(m.text) : m.text}
                                 </div>
+                                {m.role === 'assistant' && m.replyToken && m.question && (
+                                    <div className="chat-feedback">
+                                        <button
+                                            type="button"
+                                            className={`chat-feedback-btn${m.rating === 1 ? ' chat-feedback-btn-on' : ''}`}
+                                            onClick={() => rate(m, 1)}
+                                            disabled={m.feedback === 'sending' || m.rating === 1}
+                                            aria-pressed={m.rating === 1}
+                                            aria-label="Helpful answer"
+                                            title="Helpful (shares this question and answer with the site admins)"
+                                        >
+                                            <ThumbIcon />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`chat-feedback-btn${m.rating === -1 ? ' chat-feedback-btn-on' : ''}`}
+                                            onClick={() => rate(m, -1)}
+                                            disabled={m.feedback === 'sending' || m.rating === -1}
+                                            aria-pressed={m.rating === -1}
+                                            aria-label="Not helpful answer"
+                                            title="Not helpful (shares this question and answer with the site admins)"
+                                        >
+                                            <ThumbIcon down />
+                                        </button>
+                                        {m.feedback === 'saved' && <span className="chat-feedback-note">Thanks for the feedback!</span>}
+                                        {m.feedback === 'failed' && <span className="chat-feedback-note chat-feedback-note-error">Could not save. Try again.</span>}
+                                    </div>
+                                )}
+                                {m.role === 'assistant' && m.rating === -1 && m.feedback === 'saved' && !m.commentSent && (
+                                    <form
+                                        className="chat-feedback-comment"
+                                        onSubmit={(e) => {
+                                            e.preventDefault();
+                                            const text = (commentDrafts[m.id] || '').trim();
+                                            if (text) rate(m, -1, text);
+                                        }}
+                                    >
+                                        <input
+                                            type="text"
+                                            maxLength={500}
+                                            placeholder="What was wrong? (optional)"
+                                            aria-label="What was wrong with this answer?"
+                                            value={commentDrafts[m.id] || ''}
+                                            onChange={(e) => setCommentDrafts((d) => ({ ...d, [m.id]: e.target.value }))}
+                                        />
+                                        <button type="submit" disabled={!(commentDrafts[m.id] || '').trim()}>Send</button>
+                                    </form>
+                                )}
                                 {m.teachers && m.teachers.length > 0 && (
                                     <div className="chat-teacher-links">
                                         {m.teachers.map((t) => (
@@ -317,7 +403,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ pageTeacher, onOpenTeacher, rai
                         </button>
                     </form>
                     <p className="chat-disclaimer">
-                        AI summary of student reviews. It can be wrong{input.length > MAX_LENGTH - 100 ? ` · ${MAX_LENGTH - input.length} characters left` : ''}.
+                        AI summary of student reviews. It can be wrong. Rating an answer shares it with the site admins{input.length > MAX_LENGTH - 100 ? ` · ${MAX_LENGTH - input.length} characters left` : ''}.
                     </p>
                 </section>
             )}

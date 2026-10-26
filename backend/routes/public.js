@@ -3,6 +3,10 @@
 const express = require('express');
 const crypto = require('crypto');
 const db = require('../db');
+// Public forms use the same double-submit CSRF check as the admin panel. It
+// runs before the rate limiters, so a forged cross-site request is refused
+// without spending the visitor's own review/question budget.
+const { csrfValidate } = require('../csrf');
 const { body, validationResult } = require('express-validator');
 const { detectFlaggedText, moderationFlagFor } = require('../contentFilter');
 const state = require('../state');
@@ -408,7 +412,7 @@ router.get('/api/questions', async (req, res) => {
 });
 
 // POST /api/questions - ask a question about a teacher
-router.post('/api/questions', questionLimiter, [
+router.post('/api/questions', csrfValidate, questionLimiter, [
     body('teacher_id').isInt({ min: 1 }).withMessage('Invalid teacher ID'),
     body('question').isLength({ min: 3, max: 500 }).withMessage('Question must be 3-500 characters')
 ], async (req, res) => {
@@ -441,7 +445,7 @@ router.post('/api/questions', questionLimiter, [
 });
 
 // POST /api/questions/:id/answers - answer an existing question
-router.post('/api/questions/:id/answers', questionLimiter, [
+router.post('/api/questions/:id/answers', csrfValidate, questionLimiter, [
     body('answer').isLength({ min: 1, max: 500 }).withMessage('Answer must be 1-500 characters')
 ], async (req, res) => {
     const errors = validationResult(req);
@@ -477,7 +481,7 @@ router.post('/api/questions/:id/answers', questionLimiter, [
 });
 
 // POST /api/reviews - submit a new review
-router.post('/api/reviews', reviewLimiter, [
+router.post('/api/reviews', csrfValidate, reviewLimiter, [
     body('teacher_id').isInt({ min: 1 }).withMessage('Invalid teacher ID'),
     // 15 characters is the point where a review says something. Three-character
     // entries ("ok", "bad") were 23% of the corpus and carry no information.
@@ -565,7 +569,7 @@ router.post('/api/reviews', reviewLimiter, [
 });
 
 // POST /api/reviews/:id/report - flag a published review for an admin
-router.post('/api/reviews/:id/report', reportLimiter, [
+router.post('/api/reviews/:id/report', csrfValidate, reportLimiter, [
     body('reason')
         .customSanitizer((value) => String(value || '').trim())
         .isLength({ min: 3, max: 300 })

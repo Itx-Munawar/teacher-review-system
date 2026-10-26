@@ -1,6 +1,7 @@
 // One-time retroactive content-filter sweeps over existing reviews and Q&A.
 
 const db = require('../db');
+const { createAuditLog } = require('../lib/audit');
 const { moderationFlagFor, sweepExistingReviews, sweepExistingQa } = require('../contentFilter');
 const state = require('../state');
 const { invalidateCache } = require('../lib/cache');
@@ -141,7 +142,47 @@ const runSensitiveReviewBackfill = async () => {
     }
 };
 
+// Tidies teacher rows written before names and departments were normalised:
+// stray/double spaces ("Dr  Nosheen Qamar") and a school typed as its short
+// form ("SST" next to 289 rows of "School of Systems and Technology"), which
+// showed up as its own one-teacher department filter. Idempotent and cheap
+// (one SELECT of ~1000 short rows), so it simply runs on every boot and only
+// writes rows that actually change.
+const runTeacherTidySweep = async () => {
+    try {
+        const { normalizeTeacherName, normalizeDepartment, departmentForAcronym } = require('../lib/content');
+        const [rows] = await db.query('SELECT id, name, department FROM teachers');
+        const departments = rows.map((r) => normalizeDepartment(r.department));
+        const changes = [];
+        for (const row of rows) {
+            const name = normalizeTeacherName(row.name);
+            let department = normalizeDepartment(row.department);
+            department = departmentForAcronym(department, departments) || department;
+            if (name.length >= 2 && department.length >= 2 && (name !== row.name || department !== row.department)) {
+                changes.push({ id: row.id, name, department, before: `${row.name} / ${row.department}` });
+            }
+        }
+        for (const change of changes) {
+            await db.query('UPDATE teachers SET name = ?, department = ? WHERE id = ?', [change.name, change.department, change.id]);
+        }
+        if (changes.length > 0) {
+            const details = changes
+                .map((c) => `#${c.id} "${c.before}" -> "${c.name} / ${c.department}"`)
+                .join('; ')
+                .slice(0, 1000);
+            await createAuditLog(null, 'TIDY_TEACHERS', `Normalised ${changes.length} teacher row(s): ${details}`, 'system');
+            invalidateCache('teachers');
+            console.log(`🧹 Tidied ${changes.length} teacher row(s)`);
+        }
+        return changes.length;
+    } catch (error) {
+        console.error('⚠️ Teacher tidy sweep failed:', error.message);
+        return 0;
+    }
+};
+
 module.exports = {
+    runTeacherTidySweep,
     yieldToEventLoop,
     runReviewFilterSweep,
     runQaFilterSweep,

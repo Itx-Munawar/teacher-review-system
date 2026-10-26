@@ -19,11 +19,28 @@ function getCookie(name: string): string | null {
 
 // ========== INTERCEPTORS ==========
 
+// The server sets the csrf_token cookie on any response that lacks it. It
+// lives for 24 hours, so a tab left open overnight can try to post a form
+// without one; fetch a fresh cookie first instead of failing with a 403.
+let csrfCookieRequest: Promise<unknown> | null = null;
+function ensureCsrfCookie(): Promise<unknown> {
+    if (!csrfCookieRequest) {
+        csrfCookieRequest = fetch(`${API_BASE}/health`, { credentials: 'include', cache: 'no-store' })
+            .catch(() => undefined)
+            .finally(() => { csrfCookieRequest = null; });
+    }
+    return csrfCookieRequest;
+}
+
 // Request interceptor – attach CSRF token header on state-changing requests
-api.interceptors.request.use((config) => {
+api.interceptors.request.use(async (config) => {
     const safeMethods = ['get', 'head', 'options'];
     if (!safeMethods.includes((config.method || 'get').toLowerCase())) {
-        const csrfToken = getCookie('csrf_token');
+        let csrfToken = getCookie('csrf_token');
+        if (!csrfToken) {
+            await ensureCsrfCookie();
+            csrfToken = getCookie('csrf_token');
+        }
         if (csrfToken) {
             config.headers.set('X-CSRF-Token', csrfToken);
         }
@@ -308,6 +325,8 @@ export interface ChatTeacherRef {
 export interface ChatReply {
     reply: string;
     teachers: ChatTeacherRef[];
+    /** Signed by the server; needed to rate this answer. */
+    replyToken?: string;
 }
 
 /** Whether the assistant is switched on (the server has a Gemini key). */
@@ -319,3 +338,43 @@ export const sendChatMessage = (data: {
     history: { role: 'user' | 'assistant'; text: string }[];
     teacherId?: number | null;
 }) => api.post<ChatReply>('/chat', data, { timeout: 45000 });
+
+/** 👍 (1) or 👎 (-1) for one answer. Sends that question and answer to the admins. */
+export const sendChatFeedback = (data: {
+    token: string;
+    question: string;
+    answer: string;
+    teacherIds: number[];
+    rating: 1 | -1;
+    comment?: string;
+}) => api.post<{ success: boolean }>('/chat/feedback', data, { timeout: 20000 });
+
+export interface ChatInsightsFeedback {
+    id: number;
+    rating: 1 | -1;
+    question: string;
+    answer: string;
+    comment: string | null;
+    created_at: string;
+    updated_at: string;
+    teachers: { id: number; name: string }[];
+}
+
+export interface ChatInsights {
+    available: boolean;
+    days: number;
+    requests?: Record<string, number>;
+    byDay?: { day: string; questions: number }[];
+    modes?: Record<string, number>;
+    languages?: Record<string, number>;
+    aspects?: Record<string, number>;
+    models?: Record<string, number>;
+    topTeachers?: { id: number; name: string; department: string; count: number }[];
+    topTopics?: { name: string; count: number }[];
+    ratings?: { up: number; down: number };
+    feedback?: ChatInsightsFeedback[];
+}
+
+export const getChatInsights = (days: 7 | 30 | 90 = 30) => api.get<ChatInsights>(`/admin/chat/insights?days=${days}`);
+
+export const deleteChatFeedback = (id: number) => api.delete(`/admin/chat/feedback/${id}`);
