@@ -14,7 +14,7 @@ interface TeacherAutocompleteProps {
     onCompare?: (teacher: Teacher) => void;
     isInCompare?: (teacher: Teacher) => boolean;
     placeholder?: string;
-    inputRef?: React.RefObject<HTMLInputElement>;
+    inputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
 const TeacherAutocomplete: React.FC<TeacherAutocompleteProps> = ({

@@ -12,7 +12,7 @@ interface CompareViewProps {
     compareList: Teacher[];
     compareSearchTerm: string;
     setCompareSearchTerm: (v: string) => void;
-    compareSearchInputRef: React.RefObject<HTMLInputElement>;
+    compareSearchInputRef: React.RefObject<HTMLInputElement | null>;
     handleCompareAdd: (teacher: Teacher) => void;
     setIsComparing: (v: boolean) => void;
     restoreListScroll: () => void;

@@ -1,6 +1,7 @@
 import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
-import { Simulate } from 'react-dom/test-utils';
+// react-dom/test-utils (Simulate) is gone in React 19; a real DOM event does the same job.
+import { fireEvent } from '@testing-library/dom';
 import Avatar from './Avatar';
 import { isUsableImageUrl } from '../utils/imageThumb';
 
@@ -74,7 +75,7 @@ describe('Avatar — thumbnail loading across every screen', () => {
                 render(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className={className} size={size} />);
                 expect(srcOf()).not.toBe(UMT_PHOTO);
 
-                act(() => { Simulate.error(img()!); });
+                act(() => { fireEvent.error(img()!); });
 
                 expect(srcOf()).toBe(UMT_PHOTO);
                 expect(img()!.getAttribute('srcset')).toBeNull();
@@ -82,8 +83,8 @@ describe('Avatar — thumbnail loading across every screen', () => {
 
             it('falls back to initials if both the thumbnail and the original fail', () => {
                 render(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className={className} size={size} />);
-                act(() => { Simulate.error(img()!); }); // thumbnail failed
-                act(() => { Simulate.error(img()!); }); // original failed
+                act(() => { fireEvent.error(img()!); }); // thumbnail failed
+                act(() => { fireEvent.error(img()!); }); // original failed
 
                 expect(img()).toBeNull();
                 // Initials come from the first two words (pre-existing behaviour)
@@ -159,7 +160,7 @@ describe('Avatar — data the app really contains', () => {
 
     it('recovers the thumbnail when the avatar is reused for a different teacher', () => {
         render(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className="teacher-card-image" />);
-        act(() => { Simulate.error(img()!); });
+        act(() => { fireEvent.error(img()!); });
         expect(srcOf()).toBe(UMT_PHOTO);
 
         // Same component instance, new teacher (e.g. autocomplete list reuse)

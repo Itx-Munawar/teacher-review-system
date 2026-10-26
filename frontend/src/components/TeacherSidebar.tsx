@@ -10,7 +10,7 @@ interface TeacherSidebarProps {
     hiddenOnMobile: boolean;
     searchTerm: string;
     handleSearch: (value: string) => void;
-    searchInputRef: React.RefObject<HTMLInputElement>;
+    searchInputRef: React.RefObject<HTMLInputElement | null>;
     handleAutocompleteSelect: (teacher: Teacher) => void;
     handleCompareToggle: (teacher: Teacher) => void;
     compareList: Teacher[];

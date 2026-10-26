@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 // Entry point: validates config, starts the HTTP server, kicks off
 // background jobs and handles graceful shutdown.
 
