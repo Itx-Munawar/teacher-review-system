@@ -2,7 +2,7 @@
 // review text goes to the model. Pure functions - no DB.
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { buildKnowledge, matchTeachers, matchTopics, selectContext } = require('../lib/chatKnowledge');
+const { buildKnowledge, matchTeachers, matchTopics, selectContext, detectReplyLanguage } = require('../lib/chatKnowledge');
 
 // Enough "Muhammad"s and "Ali"s that those name parts are common, like in
 // the real data, plus a few distinctive names.
@@ -141,5 +141,23 @@ describe('chat: context for the model', () => {
     it('says when a matched teacher has no reviews yet', () => {
         const sel = selectContext(kn, { message: 'ayesha noor kaisi hain' });
         assert.match(sel.context, /no approved reviews yet/);
+    });
+});
+
+describe('detectReplyLanguage', () => {
+    it('spots Roman Urdu questions', () => {
+        for (const q of ['sir waqar ashiq ki grading kesi hai?', 'aur attendance?', 'review kaise likhun', 'Calculus ke liye best teacher kaun hai?', 'grading kesi krte hn']) {
+            assert.equal(detectReplyLanguage(q), 'roman-urdu', q);
+        }
+    });
+
+    it('keeps English questions in English', () => {
+        for (const q of ['is he strict?', 'How is Sania Qamar as a teacher?', 'Which teachers are lenient in grading?', 'is sir ali good for beginners', 'What do students say about her?', 'mere details are enough']) {
+            assert.equal(detectReplyLanguage(q), 'english', q);
+        }
+    });
+
+    it('recognises Urdu script', () => {
+        assert.equal(detectReplyLanguage('سر وقار کیسے پڑھاتے ہیں؟'), 'urdu');
     });
 });

@@ -367,7 +367,31 @@ const selectContext = (knowledge, { message, history = [], pageTeacherId = null,
     };
 };
 
+// Words that only show up when someone writes Urdu in English letters. Kept to
+// words that are not also common English words ("main", "he", "to" are left out).
+const ROMAN_URDU_MARKERS = new Set(`
+hai hain hn hy hen kesi kaisi kaise kese kaisa kesa kesy kya kia kyun kyu kaun kon konsa konsi aur nahi nhi nai
+mein ki ka ke ko se sy wala wali waly krte karte krta karta krti karti krty karty krain karein parhate parhaty
+parhata parhatay padhate parhati achy acha achi achay achha achhe bata batao btao batayen chahiye chahye chaiye
+hoga hogi hoge raha rahi rahe kitna kitni kitne mujhe mjhe mujhy mera meri aap apka apki unka unki unke inka
+inki yeh woh lena lun loon likhun likhon kab kahan kidhar theek thik bhi sab koi kuch lekin laikin magar agar toh
+tou phir bohat bht boht zyada ziada thora thori dete dety deti lagate lagaty lgaty milta milti jata jati sakta sakti
+`.split(/\s+/).filter(Boolean));
+
+/**
+ * Which language the reply should be in, judged from the latest message.
+ * The reviews are mostly Roman Urdu, so without an explicit instruction the
+ * model tends to drift into the language of the data rather than the user's.
+ */
+const detectReplyLanguage = (message) => {
+    const text = String(message || '');
+    if (/[\u0600-\u06FF]/.test(text)) return 'urdu';
+    const words = text.toLowerCase().match(/[a-z]+/g) || [];
+    return words.some((w) => ROMAN_URDU_MARKERS.has(w)) ? 'roman-urdu' : 'english';
+};
+
 module.exports = {
+    detectReplyLanguage,
     loadKnowledge,
     invalidateKnowledge,
     buildKnowledge,
