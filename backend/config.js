@@ -39,6 +39,11 @@ if (JWT_SECRET.length < 32) {
     process.exit(1);
 }
 
+// The review assistant is optional: without a key the widget simply stays hidden.
+if (!process.env.GEMINI_API_KEY) {
+    console.log('ℹ️  GEMINI_API_KEY not set: the chat assistant is disabled.');
+}
+
 module.exports = {
     PORT,
     JWT_SECRET,

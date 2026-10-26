@@ -6,7 +6,8 @@ import {
     getRelatedTeachers,
     searchAllTeachers,
     getTeacherDetail,
-    submitReview
+    submitReview,
+    getChatStatus
 } from './services/api';
 import { SITE_URL } from './utils/siteUrl';
 import { applySeo } from './utils/seo';
@@ -36,6 +37,8 @@ import './App.css';
 // instead of shipping in the bundle every visitor downloads (the admin
 // screens are split the same way inside AdminScreen).
 const CompareView = lazy(() => import('./components/CompareView'));
+// The review assistant only loads once the server says it is switched on.
+const ChatWidget = lazy(() => import('./components/ChatWidget'));
 
 // ========== MAIN APP ==========
 const App: React.FC = () => {
@@ -157,6 +160,12 @@ const App: React.FC = () => {
     useEffect(() => {
         loadDepartments();
     }, [loadDepartments]);
+
+    // Review assistant (Gemini): shown only when the backend has a key.
+    const [chatEnabled, setChatEnabled] = useState(false);
+    useEffect(() => {
+        getChatStatus().then((res) => setChatEnabled(Boolean(res.data?.enabled))).catch(() => setChatEnabled(false));
+    }, []);
 
     // ========== ADMIN (session, moderation data and actions) ==========
     const admin = useAdmin({
@@ -829,6 +838,15 @@ const App: React.FC = () => {
                     clearCompare={clearCompare}
                     runCompare={runCompare}
                 />
+            )}
+            {chatEnabled && (
+                <Suspense fallback={null}>
+                    <ChatWidget
+                        pageTeacher={selectedTeacher && !isComparing && !showQnA ? { id: selectedTeacher.id, name: selectedTeacher.name } : null}
+                        onOpenTeacher={(t) => handleTeacherClick({ id: t.id, name: t.name, department: t.department, review_count: 0 })}
+                        raised={compareList.length > 0 && !isComparing}
+                    />
+                </Suspense>
             )}
             <BottomNav
                 items={[

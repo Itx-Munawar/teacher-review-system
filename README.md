@@ -11,8 +11,8 @@ backend/    Express + MySQL API
   server.js   entry point: start HTTP server, background jobs, shutdown
   app.js      Express app: security middleware, CORS, logging, route mounting
   config.js   env validation and constants        state.js  shared schema flags
-  routes/     public, adminAuth, adminContent, adminInsights, customCourses, seo, health
-  lib/        auth, totp, cookies, limiters, audit, cache, email, validation, ...
+  routes/     public, chat, adminAuth, adminContent, adminInsights, customCourses, seo, health
+  lib/        auth, totp, cookies, limiters, audit, cache, email, validation, gemini, chatKnowledge, ...
   jobs/       schema bootstrap, content-filter sweeps, daily digest
   test/       API tests (see below); *.test.js files next to the code are unit tests
 frontend/   React + TypeScript app (Vite)
@@ -97,6 +97,31 @@ in the **Reports** tab of the admin panel.
 
 Do not commit `.env` files. Never commit a scraped faculty directory or seeded
 admin credentials.
+
+## Review assistant (chat widget)
+
+A floating **Ask AI** button answers questions such as "how is Sir X?" or
+"grading kesi krte hn?" in English or Roman Urdu, using only approved reviews,
+and explains how to use the site. It is powered by Google Gemini (free tier).
+
+- Set `GEMINI_API_KEY` on the backend (Render) to turn it on. Without it,
+  `GET /api/chat/status` returns `{ "enabled": false }` and the button is
+  hidden. The key never reaches the browser.
+- `POST /api/chat` takes `{ message, history?, teacherId? }`. The server
+  finds the teachers the question is about (fuzzy name matching, course
+  names and acronyms like PF or OOP), sends their reviews to Gemini with a
+  strict "answer only from these reviews" prompt, and returns
+  `{ reply, teachers }`. The `teachers` are shown as links under the answer.
+- On a teacher's page the widget asks about that teacher by default.
+- If several teachers match ("sir ali"), the assistant asks which one,
+  or answers for the one with the most reviews and names the others.
+- Free-tier protection: per-IP limits (`CHAT_PER_MINUTE`, `CHAT_PER_DAY`),
+  a 10-minute answer cache for repeated first questions, and automatic
+  fallback across `GEMINI_MODELS` when one model's quota runs out.
+- Message text is never logged; logs record only the model, timing and
+  which teachers were matched.
+
+See `backend/.env.example` for all settings.
 
 ## Health and readiness
 

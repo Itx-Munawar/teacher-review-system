@@ -296,3 +296,26 @@ export const cleanTeacherImages = (dryRun: boolean = false) => {
 };
 
 export default api;
+
+// ========== CHAT ASSISTANT ==========
+
+export interface ChatTeacherRef {
+    id: number;
+    name: string;
+    department: string;
+}
+
+export interface ChatReply {
+    reply: string;
+    teachers: ChatTeacherRef[];
+}
+
+/** Whether the assistant is switched on (the server has a Gemini key). */
+export const getChatStatus = () => api.get<{ enabled: boolean }>('/chat/status', { timeout: 15000 });
+
+/** Ask the assistant. `history` is the visible conversation so far (oldest first). */
+export const sendChatMessage = (data: {
+    message: string;
+    history: { role: 'user' | 'assistant'; text: string }[];
+    teacherId?: number | null;
+}) => api.post<ChatReply>('/chat', data, { timeout: 45000 });
