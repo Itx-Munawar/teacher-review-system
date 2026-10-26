@@ -90,6 +90,7 @@ app.use('/api/admin', (req, res, next) => {
 // ========== ROUTES ==========
 // Mounted in the same order the routes were originally declared.
 app.use(require('./routes/public'));
+app.use(require('./routes/chat'));
 app.use(require('./routes/adminAuth'));
 app.use(require('./routes/adminContent'));
 app.use(require('./routes/customCourses'));
