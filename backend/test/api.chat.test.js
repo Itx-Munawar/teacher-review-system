@@ -3,7 +3,7 @@
 const { describe, it, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const { SKIP, resetDatabase, dbQuery, startServer, createClient } = require('../testing/apiHarness');
+const { SKIP, resetDatabase, dbQuery, startServer, createClient, createAdminAndLogin } = require('../testing/apiHarness');
 
 const startFakeGemini = async () => {
     const calls = [];
@@ -99,12 +99,30 @@ describe('chat API', { skip: SKIP }, () => {
         assert.deepEqual(call.body.contents, [{ role: 'user', parts: [{ text: 'sir waqar ki grading kesi hai?' }] }]);
     });
 
-    it('a general question sends every reviewed teacher', async () => {
+    it('a general question gets a digest of every reviewed teacher', async () => {
+        const res = await createClient(server.baseUrl).post('/api/chat', { message: 'who is the best teacher here?' });
+        assert.equal(res.status, 200, res.text);
+        const sys = systemText(fake.calls[0]);
+        assert.match(sys, /Digest of reviewed teachers/);
+        assert.match(sys, /Grading is fair/);
+        assert.match(sys, /Attendance is strict/);
+    });
+
+    it('a general question about one aspect only carries excerpts about it', async () => {
         const res = await createClient(server.baseUrl).post('/api/chat', { message: 'which teachers are strict about attendance?' });
         assert.equal(res.status, 200, res.text);
         const sys = systemText(fake.calls[0]);
-        assert.match(sys, /Grading is fair/);
         assert.match(sys, /Attendance is strict/);
+        assert.doesNotMatch(sys, /Grading is fair/);
+        assert.match(sys, /have no review that mentions attendance/);
+    });
+
+    it('a question about the website does not send review data', async () => {
+        const res = await createClient(server.baseUrl).post('/api/chat', { message: 'how do I write a review on this site?' });
+        assert.equal(res.status, 200, res.text);
+        const sys = systemText(fake.calls[0]);
+        assert.doesNotMatch(sys, /Attendance is strict|Grading is fair/);
+        assert.match(sys, /question about using the website/);
     });
 
     it('passes the conversation on and resolves follow-ups to the earlier teacher', async () => {
@@ -139,7 +157,9 @@ describe('chat API', { skip: SKIP }, () => {
         const second = await createClient(server.baseUrl).post('/api/chat', { message: 'how do i  write a review?' });
         assert.equal(first.status, 200);
         assert.equal(second.status, 200);
-        assert.deepEqual(second.body, first.body);
+        assert.equal(second.body.reply, first.body.reply);
+        assert.deepEqual(second.body.teachers, first.body.teachers);
+        assert.notEqual(second.body.replyToken, first.body.replyToken, 'each answer is signed for its own question');
         assert.equal(fake.calls.length, 1);
     });
 
@@ -169,6 +189,103 @@ describe('chat API', { skip: SKIP }, () => {
     });
 
     // Leaves model-a cooling down, so it runs after the tests that check model names.
+    describe('ratings and usage', () => {
+        const ask = async (client, message) => {
+            const res = await client.post('/api/chat', { message });
+            assert.equal(res.status, 200, res.text);
+            assert.match(res.body.replyToken, /^\d+\.[A-Za-z0-9_-]{43}$/);
+            return res.body;
+        };
+        const rate = (client, question, body, extra = {}) => client.post('/api/chat/feedback', {
+            token: body.replyToken,
+            question,
+            answer: body.reply,
+            teacherIds: body.teachers.map((t) => t.id),
+            ...extra
+        });
+
+        it('stores a rating for a real answer and lets the user change it', async () => {
+            const client = createClient(server.baseUrl);
+            const question = 'sania qamar attendance kesi hai?';
+            const body = await ask(client, question);
+            const down = await rate(client, question, body, { rating: -1, comment: '  It   ignored the grading part. ' });
+            assert.equal(down.status, 200, down.text);
+            let rows = await dbQuery('SELECT rating, question, answer, teacher_ids, comment FROM chat_feedback');
+            assert.equal(rows.length, 1);
+            assert.deepEqual({ ...rows[0] }, { rating: -1, question, answer: body.reply, teacher_ids: String(sania), comment: 'It ignored the grading part.' });
+
+            const up = await rate(client, question, body, { rating: 1, comment: 'ignored for a thumbs up' });
+            assert.equal(up.status, 200);
+            rows = await dbQuery('SELECT rating, comment FROM chat_feedback');
+            assert.equal(rows.length, 1, 'same answer, same row');
+            assert.deepEqual({ ...rows[0] }, { rating: 1, comment: null });
+        });
+
+        it('refuses a rating for an answer the server did not give', async () => {
+            const client = createClient(server.baseUrl);
+            const question = 'waqar ashiq quizzes kaise lete hain?';
+            const body = await ask(client, question);
+            const forgedAnswer = await rate(client, question, { ...body, reply: 'Something the bot never said.' }, { rating: -1 });
+            assert.equal(forgedAnswer.status, 400);
+            const forgedQuestion = await rate(client, 'a different question', body, { rating: -1 });
+            assert.equal(forgedQuestion.status, 400);
+            const forgedTeachers = await rate(client, question, { ...body, teachers: [{ id: 99999 }] }, { rating: -1 });
+            assert.equal(forgedTeachers.status, 400);
+            const badRating = await rate(client, question, body, { rating: 5 });
+            assert.equal(badRating.status, 400);
+            const noCsrf = await client.post('/api/chat/feedback', { token: body.replyToken, question, answer: body.reply, rating: 1 }, { csrf: false });
+            assert.equal(noCsrf.status, 403);
+            const [count] = await dbQuery('SELECT COUNT(*) AS n FROM chat_feedback WHERE question = ?', [question]);
+            assert.equal(Number(count.n), 0);
+        });
+
+        it('cached answers get their own token', async () => {
+            const question = 'bilal ahmed teaching kesi hai?';
+            const first = await ask(createClient(server.baseUrl), question);
+            const second = await ask(createClient(server.baseUrl), question);
+            assert.equal(fake.calls.length, 1, 'second one came from the cache');
+            assert.equal(second.reply, first.reply);
+            const res = await rate(createClient(server.baseUrl), question, second, { rating: -1 });
+            assert.equal(res.status, 200);
+        });
+
+        it('counts usage without storing question text, and shows it to admins only', async () => {
+            const secret = 'kis teacher ki grading lenient hai PRIVATEWORD?';
+            await ask(createClient(server.baseUrl), secret);
+            const usage = await dbQuery('SELECT metric, mkey, count FROM chat_usage_daily');
+            assert.ok(usage.length > 0);
+            assert.ok(!usage.some((r) => /PRIVATEWORD/i.test(r.mkey)), 'question text is never a usage key');
+            const metrics = new Set(usage.map((r) => `${r.metric}:${r.mkey}`));
+            for (const expected of ['request:answered', 'request:cached', 'mode:general', 'mode:focused', 'lang:roman-urdu', 'aspect:grading', `teacher:${sania}`]) {
+                assert.ok(metrics.has(expected), `missing ${expected}`);
+            }
+
+            assert.equal((await createClient(server.baseUrl).get('/api/admin/chat/insights')).status, 401);
+            const admin = await createAdminAndLogin(server.baseUrl);
+            const res = await admin.get('/api/admin/chat/insights?days=7');
+            assert.equal(res.status, 200, res.text);
+            assert.equal(res.body.available, true);
+            assert.equal(res.body.days, 7);
+            assert.equal(res.body.byDay.length, 7);
+            assert.ok(res.body.byDay[6].questions >= 4);
+            assert.ok(res.body.requests.answered >= 3);
+            assert.ok(res.body.aspects.grading >= 1);
+            assert.equal(res.body.topTeachers.find((t) => t.id === sania).name, 'Sania Qamar');
+            assert.deepEqual(res.body.ratings, { up: 1, down: 1 });
+            assert.equal(res.body.feedback[0].rating, -1, 'thumbs-down first');
+            assert.deepEqual(res.body.feedback.find((f) => f.rating === 1).teachers, [{ id: sania, name: 'Sania Qamar' }]);
+
+            const id = res.body.feedback[0].id;
+            const noCsrf = await admin.del(`/api/admin/chat/feedback/${id}`, { csrf: false });
+            assert.equal(noCsrf.status, 403);
+            const del = await admin.del(`/api/admin/chat/feedback/${id}`);
+            assert.equal(del.status, 200);
+            assert.equal((await admin.del(`/api/admin/chat/feedback/${id}`)).status, 404);
+            const after = await admin.get('/api/admin/chat/insights?days=7');
+            assert.deepEqual(after.body.ratings, { up: 1, down: 0 });
+        });
+    });
+
     it('falls back to the next model when one is over quota, then skips the busy one', async () => {
         fake.queue.push({ status: 429 });
         const res = await createClient(server.baseUrl).post('/api/chat', { message: 'waqar ashiq exams kaise hote hain?' });

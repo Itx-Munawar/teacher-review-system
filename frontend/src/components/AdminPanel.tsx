@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, memo, useCallback } from 'react';
 import Icon from './Icon';
+import AdminAssistantTab from './AdminAssistantTab';
 import { getTeachers, getAdminAuditLogs, getSearchGaps, getAdmin2faProvision, confirmAdmin2fa, disableAdmin2fa } from '../services/api';
 import { extractCourses } from '../utils/courses';
 import Avatar from './Avatar';
 import type { Teacher, AdminReview, AdminQuestion, CustomCourse, AdminTeacherDetail, AdminReport, AdminAuditLog, SearchGap } from '../types';
 
-type AdminTab = 'teachers' | 'reviews' | 'qa' | 'courses' | 'reports' | 'audit' | 'security';
+type AdminTab = 'teachers' | 'reviews' | 'qa' | 'courses' | 'reports' | 'assistant' | 'audit' | 'security';
 
 type TeacherSortKey = 'name' | 'department' | 'reviews' | 'newest';
 
@@ -640,6 +641,12 @@ const AdminPanel = memo(({
                     <Icon name="flag" size={15} /> Reports{openReportsCount > 0 ? ` (${openReportsCount})` : ''}
                 </button>
                 <button
+                    className={`admin-tab ${activeTab === 'assistant' ? 'admin-tab-active' : ''}`}
+                    onClick={() => setActiveTab('assistant')}
+                >
+                    <Icon name="help" size={15} /> Assistant
+                </button>
+                <button
                     className={`admin-tab ${activeTab === 'audit' ? 'admin-tab-active' : ''}`}
                     onClick={() => setActiveTab('audit')}
                 >
@@ -1255,6 +1262,8 @@ const AdminPanel = memo(({
                 )}
             </div>
             )}
+
+            {activeTab === 'assistant' && <AdminAssistantTab />}
 
             {activeTab === 'audit' && (
             <div className="admin-section">

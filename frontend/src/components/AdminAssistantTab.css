@@ -1,0 +1,72 @@
+/* Admin "Assistant" tab */
+.aa-root { display: flex; flex-direction: column; gap: 16px; }
+.aa-muted { color: #64748b; font-size: 0.85rem; margin: 4px 0 0; }
+.aa-error { color: #b42318; font-size: 0.9rem; }
+.aa-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.aa-header h3 { margin: 0; }
+.aa-header .aa-muted { max-width: 640px; }
+
+.aa-range { display: inline-flex; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; flex-shrink: 0; }
+.aa-range button {
+    padding: 6px 12px;
+    border: 0;
+    border-right: 1px solid #e2e8f0;
+    background: #fff;
+    color: #334155;
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+.aa-range button:last-child { border-right: 0; }
+.aa-range button.aa-range-on { background: #1F1229; color: #fff; }
+
+.aa-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.aa-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fff;
+    color: #475569;
+    font-size: 0.8rem;
+}
+.aa-stat-num { font-size: 1.5rem; font-weight: 700; color: #1F1229; }
+
+.aa-card { padding: 14px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; min-width: 0; }
+.aa-card h4, .aa-feedback-header h4 { margin: 0 0 10px; font-size: 0.95rem; color: #1e293b; }
+.aa-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+
+.aa-bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.aa-bars li { display: grid; grid-template-columns: minmax(90px, 40%) 1fr auto; gap: 8px; align-items: center; font-size: 0.82rem; color: #334155; }
+.aa-bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aa-bar-track { height: 8px; border-radius: 999px; background: #f1f5f9; overflow: hidden; }
+.aa-bar-fill { display: block; height: 100%; border-radius: 999px; background: #C6A15B; }
+.aa-bar-count { font-variant-numeric: tabular-nums; font-weight: 600; color: #1e293b; margin-left: auto; }
+
+.aa-ranked { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 0.85rem; }
+.aa-ranked li { display: flex; align-items: baseline; gap: 6px; }
+.aa-ranked li::marker { color: #94a3b8; }
+.aa-ranked a { color: #5E3A72; font-weight: 600; text-decoration: none; }
+.aa-ranked a:hover { text-decoration: underline; }
+
+.aa-chart { display: flex; align-items: flex-end; gap: 2px; height: 90px; padding-top: 4px; }
+.aa-chart-col { flex: 1; height: 100%; display: flex; align-items: flex-end; }
+.aa-chart-bar { display: block; width: 100%; min-height: 2px; border-radius: 3px 3px 0 0; background: #5E3A72; }
+.aa-chart-axis { display: flex; justify-content: space-between; font-size: 0.72rem; }
+
+.aa-feedback-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+.aa-feedback-header h4 { margin: 0; }
+.aa-feedback-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.aa-feedback { padding: 12px 14px; border: 1px solid #e2e8f0; border-left-width: 4px; border-radius: 10px; background: #fff; }
+.aa-feedback-down { border-left-color: #d92d20; }
+.aa-feedback-up { border-left-color: #12b76a; }
+.aa-feedback-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.aa-feedback-head .aa-muted { margin: 0; }
+.aa-feedback-rating { font-size: 1.05rem; }
+.aa-feedback-teachers { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+.aa-feedback-teachers a { color: #5E3A72; font-weight: 600; text-decoration: none; }
+.aa-feedback-delete { margin-left: auto; }
+.aa-feedback p { margin: 8px 0 0; font-size: 0.88rem; color: #334155; white-space: pre-wrap; overflow-wrap: anywhere; }
+.aa-feedback-comment { background: #fef3f2; border-radius: 8px; padding: 6px 10px; color: #7a271a !important; }
+.aa-link-btn { border: 0; background: none; color: #5E3A72; font-weight: 600; cursor: pointer; padding: 0 0 0 6px; font-size: 0.82rem; }

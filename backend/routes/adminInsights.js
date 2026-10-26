@@ -207,4 +207,116 @@ router.get('/api/admin/search-gaps', verifyAdmin, async (req, res) => {
     }
 });
 
+// ========== REVIEW ASSISTANT (admin) ==========
+// Usage counters (no question text) plus the answers students rated, worst
+// first, so a moderator can see what the assistant is asked and gets wrong.
+
+router.get('/api/admin/chat/insights', verifyAdmin, async (req, res) => {
+    const days = [7, 30, 90].includes(Number(req.query.days)) ? Number(req.query.days) : 30;
+    if (!state.chatUsageReady) return res.json({ available: false, days });
+    try {
+        const since = new Date(Date.now() - (days - 1) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        const [rows] = await db.query(
+            'SELECT DATE_FORMAT(day, \'%Y-%m-%d\') AS day, metric, mkey, count FROM chat_usage_daily WHERE day >= ?',
+            [since]
+        );
+        const sum = (metric) => {
+            const totals = {};
+            rows.filter((r) => r.metric === metric).forEach((r) => { totals[r.mkey] = (totals[r.mkey] || 0) + Number(r.count); });
+            return totals;
+        };
+        const top = (metric, limit) => Object.entries(sum(metric))
+            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+            .slice(0, limit)
+            .map(([key, count]) => ({ key, count }));
+
+        const perDay = {};
+        rows.filter((r) => r.metric === 'request' && (r.mkey === 'answered' || r.mkey === 'cached'))
+            .forEach((r) => { perDay[r.day] = (perDay[r.day] || 0) + Number(r.count); });
+        const byDay = [];
+        for (let i = days - 1; i >= 0; i -= 1) {
+            const day = new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+            byDay.push({ day, questions: perDay[day] || 0 });
+        }
+
+        const teacherCounts = top('teacher', 10);
+        const ids = teacherCounts.map((t) => Number(t.key)).filter((n) => Number.isInteger(n) && n > 0);
+        const names = new Map();
+        if (ids.length) {
+            const [teachers] = await db.query(`SELECT id, name, department FROM teachers WHERE id IN (${ids.map(() => '?').join(',')})`, ids);
+            teachers.forEach((t) => names.set(String(t.id), t));
+        }
+
+        const [ratingRows] = await db.query(
+            'SELECT rating, COUNT(*) AS n FROM chat_feedback WHERE created_at >= ? GROUP BY rating',
+            [since]
+        );
+        const ratings = { up: 0, down: 0 };
+        ratingRows.forEach((r) => { if (Number(r.rating) === 1) ratings.up = Number(r.n); else ratings.down = Number(r.n); });
+
+        const [feedback] = await db.query(
+            `SELECT id, rating, question, answer, teacher_ids, comment, created_at, updated_at
+             FROM chat_feedback WHERE created_at >= ?
+             ORDER BY rating ASC, updated_at DESC LIMIT 100`,
+            [since]
+        );
+        const feedbackTeacherIds = [...new Set(feedback.flatMap((f) => String(f.teacher_ids || '').split(',').filter(Boolean).map(Number)))]
+            .filter((id) => !names.has(String(id)));
+        if (feedbackTeacherIds.length) {
+            const [more] = await db.query(`SELECT id, name, department FROM teachers WHERE id IN (${feedbackTeacherIds.map(() => '?').join(',')})`, feedbackTeacherIds);
+            more.forEach((t) => names.set(String(t.id), t));
+        }
+
+        res.set('Cache-Control', 'no-store');
+        res.json({
+            available: true,
+            days,
+            requests: sum('request'),
+            byDay,
+            modes: sum('mode'),
+            languages: sum('lang'),
+            aspects: sum('aspect'),
+            models: sum('model'),
+            topTeachers: teacherCounts.map(({ key, count }) => ({
+                id: Number(key),
+                name: names.get(key)?.name || `Teacher #${key} (deleted)`,
+                department: names.get(key)?.department || '',
+                count
+            })),
+            topTopics: top('topic', 10).map(({ key, count }) => ({ name: key, count })),
+            ratings,
+            feedback: feedback.map((f) => ({
+                id: f.id,
+                rating: Number(f.rating),
+                question: f.question,
+                answer: f.answer,
+                comment: f.comment,
+                created_at: f.created_at,
+                updated_at: f.updated_at,
+                teachers: String(f.teacher_ids || '').split(',').filter(Boolean)
+                    .map((id) => names.get(id)).filter(Boolean)
+                    .map((t) => ({ id: t.id, name: t.name }))
+            }))
+        });
+    } catch (error) {
+        console.error('Chat insights error:', error);
+        res.status(500).json({ error: 'Could not load assistant insights' });
+    }
+});
+
+router.delete('/api/admin/chat/feedback/:id', verifyAdmin, csrfValidate, async (req, res) => {
+    const id = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid id' });
+    if (!state.chatUsageReady) return res.status(404).json({ error: 'Not found' });
+    try {
+        const [result] = await db.query('DELETE FROM chat_feedback WHERE id = ?', [id]);
+        if (!result.affectedRows) return res.status(404).json({ error: 'Not found' });
+        await createAuditLog(req.admin.id, 'DELETE_CHAT_FEEDBACK', `Deleted assistant rating #${id}`, req.ip);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Delete chat feedback error:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
 module.exports = router;

@@ -281,5 +281,61 @@ describe('admin API', { skip: SKIP }, () => {
             assert.ok(row.locked_until && new Date(row.locked_until) > new Date());
             await dbQuery('UPDATE admins SET failed_attempts = 0, locked_until = NULL');
         });
+
+        it('refuses even the right password while locked, without extending the lock', async () => {
+            await dbQuery('UPDATE admins SET failed_attempts = 5, locked_until = DATE_ADD(NOW(), INTERVAL 10 MINUTE) WHERE username = ?', [ADMIN.username]);
+            const [before] = await dbQuery('SELECT locked_until FROM admins WHERE username = ?', [ADMIN.username]);
+            const client = createClient(server.baseUrl);
+            await client.primeCsrf();
+
+            const right = await client.post('/api/admin/login', { username: ADMIN.username, password: ADMIN.password });
+            assert.equal(right.status, 429);
+            assert.match(right.body.error, /Too many failed attempts\. Try again in (10|11) minutes/);
+            assert.ok(Number(right.headers.get('retry-after')) > 0);
+            assert.equal(client.jar.has('admin_token'), false);
+            assert.equal((await client.get('/api/admin/me')).status, 401);
+
+            const wrong = await client.post('/api/admin/login', { username: ADMIN.username, password: 'still-wrong-1' });
+            assert.equal(wrong.status, 429);
+            const [after] = await dbQuery('SELECT failed_attempts, locked_until FROM admins WHERE username = ?', [ADMIN.username]);
+            assert.equal(after.failed_attempts, 5);
+            assert.equal(new Date(after.locked_until).getTime(), new Date(before.locked_until).getTime());
+            await dbQuery('UPDATE admins SET failed_attempts = 0, locked_until = NULL');
+        });
+
+        it('lets the admin back in once the lock expires, with a fresh count', async () => {
+            await dbQuery('UPDATE admins SET failed_attempts = 5, locked_until = DATE_SUB(NOW(), INTERVAL 1 MINUTE) WHERE username = ?', [ADMIN.username]);
+            const client = createClient(server.baseUrl);
+            await client.primeCsrf();
+
+            const wrong = await client.post('/api/admin/login', { username: ADMIN.username, password: 'wrong-again-1' });
+            assert.equal(wrong.status, 401);
+            const [mid] = await dbQuery('SELECT failed_attempts, locked_until FROM admins WHERE username = ?', [ADMIN.username]);
+            assert.equal(mid.failed_attempts, 1);
+            assert.equal(mid.locked_until, null);
+
+            const right = await client.post('/api/admin/login', { username: ADMIN.username, password: ADMIN.password });
+            assert.equal(right.status, 200);
+            const [row] = await dbQuery('SELECT failed_attempts, locked_until FROM admins WHERE username = ?', [ADMIN.username]);
+            assert.equal(row.failed_attempts, 0);
+            assert.equal(row.locked_until, null);
+        });
+
+        it('a password reset unlocks the account at once', async () => {
+            const crypto = require('node:crypto');
+            const token = crypto.randomBytes(32).toString('hex');
+            const hash = crypto.createHash('sha256').update(token).digest('hex');
+            await dbQuery(
+                `UPDATE admins SET failed_attempts = 5, locked_until = DATE_ADD(NOW(), INTERVAL 15 MINUTE),
+                        reset_token = ?, reset_token_expires = DATE_ADD(NOW(), INTERVAL 1 HOUR) WHERE username = ?`,
+                [hash, ADMIN.username]
+            );
+            const client = createClient(server.baseUrl);
+            await client.primeCsrf();
+            const reset = await client.post('/api/admin/reset-password', { token, newPassword: ADMIN.password });
+            assert.equal(reset.status, 200, reset.text);
+            const login = await client.post('/api/admin/login', { username: ADMIN.username, password: ADMIN.password });
+            assert.equal(login.status, 200);
+        });
     });
 });

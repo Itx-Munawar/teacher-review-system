@@ -12,6 +12,12 @@ const KNOWLEDGE_TTL_MS = 5 * 60 * 1000;
 // for English, fewer for Roman Urdu, so this stays well under the free-tier
 // tokens-per-minute budget while today's whole corpus still fits.
 const DEFAULT_CONTEXT_CHARS = 90000;
+// General questions ("best teacher?", "who grades leniently?") used to get
+// every review up to DEFAULT_CONTEXT_CHARS - about 20k tokens per question on
+// the free tier. They now get one summary line per teacher plus short
+// excerpts on the topic asked about, within this smaller budget.
+const DEFAULT_GENERAL_CONTEXT_CHARS = 16000;
+const SNIPPET_CHARS = 220;
 const MAX_FOCUSED_TEACHERS = 4;
 const MAX_REVIEW_CHARS = 1200;
 
@@ -283,6 +289,72 @@ const formatTeacher = (t, { maxReviews = Infinity } = {}) => {
     return lines.join('\n');
 };
 
+// What a question is about, so a general question only carries the parts of
+// reviews that answer it. Stems match the start of a word, which covers
+// English and Roman Urdu spellings ("parhata", "parhati", "parhane").
+const ASPECTS = {
+    grading: ['grad', 'marks', 'marking', 'number', 'nambar', 'gpa', 'cgpa', 'lenient', 'generous', 'curve', 'relative', 'absolute', 'a+'],
+    attendance: ['attend', 'atend', 'absent', 'haziri', 'hazri', 'proxy', 'late'],
+    teaching: ['teaching', 'teaches', 'taught', 'parha', 'parhe', 'parhi', 'parh', 'prha', 'prhe', 'prhi', 'explain', 'concept', 'lecture', 'samjh', 'samajh', 'smjh', 'delivery', 'method', 'slides'],
+    exams: ['exam', 'paper', 'mid', 'final', 'test', 'quiz', 'checking', 'check'],
+    assignments: ['assign', 'project', 'presentation', 'lab', 'workload', 'task', 'quiz', 'deadline'],
+    behaviour: ['behav', 'attitude', 'rude', 'polite', 'friendly', 'nice', 'strict', 'cooperat', 'support', 'helpful', 'akhlaq', 'ghuss', 'guss', 'mood', 'respect', 'humble', 'arrogant', 'insult', 'easygoing', 'chill'],
+};
+const stemRegex = (stems) => new RegExp(`(?:^|[^a-z0-9])(${stems.map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'i');
+const ASPECT_REGEX = Object.fromEntries(Object.entries(ASPECTS).map(([k, stems]) => [k, stemRegex(stems)]));
+
+const detectAspects = (text) => Object.keys(ASPECT_REGEX).filter((k) => ASPECT_REGEX[k].test(String(text || '')));
+
+// "How do I write a review?" needs the site facts, not 400 reviews.
+const SITE_HELP_REGEX = /\b(website|site|app|install|account|log ?in|sign ?up|password|contact|email|privacy|terms|dmca|delete|remove|report|compare|search|sort|filter|anonymous|post|submit|moderat\w*|write|likh\w*|add|suggest)\b/i;
+const RECOMMEND_REGEX = /\b(best|acha|achi|achay|ache|achey|worst|recommend\w*|top|kon|kaun|konsa|konsi|kis|which|who|easy|asan|aasan|tough|mushkil|lenient|strict)\b/i;
+const isSiteHelpQuestion = (text, aspects) => aspects.length === 0
+    && SITE_HELP_REGEX.test(text)
+    && !RECOMMEND_REGEX.test(text);
+
+// A ~SNIPPET_CHARS window of the review around the first aspect word, cut at
+// word boundaries. Without aspects, the start of the review.
+const snippetOf = (text, aspects) => {
+    const clean = String(text || '');
+    let at = 0;
+    if (aspects.length) {
+        let best = -1;
+        for (const a of aspects) {
+            const m = ASPECT_REGEX[a].exec(clean);
+            if (m && (best === -1 || m.index < best)) best = m.index;
+        }
+        if (best === -1) return null;
+        at = Math.max(0, best - Math.floor(SNIPPET_CHARS * 0.35));
+    }
+    if (clean.length <= SNIPPET_CHARS && at === 0) return clean;
+    let start = at;
+    if (start > 0) {
+        const space = clean.indexOf(' ', start);
+        start = space === -1 || space - start > 20 ? start : space + 1;
+    }
+    let end = Math.min(clean.length, start + SNIPPET_CHARS);
+    if (end < clean.length) {
+        const space = clean.lastIndexOf(' ', end);
+        if (space > start + SNIPPET_CHARS * 0.6) end = space;
+    }
+    return `${start > 0 ? '…' : ''}${clean.slice(start, end).trim()}${end < clean.length ? '…' : ''}`;
+};
+
+// One line per teacher plus a few excerpts: enough to compare and recommend.
+const formatTeacherCompact = (t, { aspects = [], maxSnippets = 2 } = {}) => {
+    const courseList = [...t.courses].slice(0, 6);
+    const lines = [`### ${t.name} (teacher id ${t.id}) | ${t.department || 'department unknown'} | ${t.reviews.length} review${t.reviews.length === 1 ? '' : 's'}${courseList.length ? ` | courses: ${courseList.join(', ')}` : ''}`];
+    let shown = 0;
+    for (const r of t.reviews) {
+        if (shown >= maxSnippets) break;
+        const snip = snippetOf(r.text, aspects);
+        if (!snip) continue;
+        lines.push(`- "${snip.replace(/"/g, "'")}"`);
+        shown += 1;
+    }
+    return { text: lines.join('\n'), snippets: shown };
+};
+
 /**
  * Pick what the model gets to read for this conversation.
  *
@@ -293,7 +365,7 @@ const formatTeacher = (t, { maxReviews = Infinity } = {}) => {
  *   calculus?"): teachers matching a course/department come first, then every
  *   other reviewed teacher until the size budget is used.
  */
-const selectContext = (knowledge, { message, history = [], pageTeacherId = null, maxChars = DEFAULT_CONTEXT_CHARS }) => {
+const selectContext = (knowledge, { message, history = [], pageTeacherId = null, maxChars = DEFAULT_CONTEXT_CHARS, generalChars = DEFAULT_GENERAL_CONTEXT_CHARS }) => {
     let { matches, ambiguous } = matchTeachers(knowledge, message);
     let focusSource = matches.length ? 'message' : null;
 
@@ -333,28 +405,43 @@ const selectContext = (knowledge, { message, history = [], pageTeacherId = null,
     topics.courses.forEach((c) => c.teacherIds.forEach((id) => topicIds.add(id)));
     topics.departments.forEach((d) => d.teacherIds.forEach((id) => topicIds.add(id)));
 
-    // A specific-teacher question does not need the rest of the corpus; a
-    // general one gets as much of it as fits.
-    if (!focused.length || ambiguous) {
+    // Aspects come from the latest message, or from the earlier question when
+    // the follow-up is short ("aur attendance?" already names one).
+    const aspects = detectAspects(message);
+    let mode = focused.length && !ambiguous ? 'focused' : 'general';
+    const siteHelp = !focused.length && !topicIds.size && isSiteHelpQuestion(message, aspects);
+    if (siteHelp) mode = 'site';
+
+    // A specific-teacher question does not need the rest of the corpus, and a
+    // question about the website needs none of it. A general one gets a compact
+    // digest: topic matches first (with more excerpts), then the most-reviewed.
+    if (mode === 'general') {
+        const budget = Math.min(maxChars, Math.max(used + 500, used + generalChars));
         const rank = (t) => (topicIds.has(t.id) ? 1e6 : 0) + t.reviews.length;
         const rest = knowledge.teachers
             .filter((t) => !included.has(t.id) && t.reviews.length > 0)
             .sort((a, b) => rank(b) - rank(a));
+        const topicLabel = [...topics.courses.map((c) => c.name), ...topics.departments.map((d) => d.name)].slice(0, 5).join(', ');
+        push([
+            '## Digest of reviewed teachers',
+            `Each teacher has one summary line and a few short excerpts${aspects.length ? ` about ${aspects.join(', ')}` : ''}, not every review.${topicLabel ? ` Teachers matching ${topicLabel} come first.` : ' Most-reviewed teachers come first.'}`,
+        ].join('\n'));
         let omitted = 0;
-        let headerDone = false;
+        let silent = 0;
         for (const t of rest) {
-            const block = formatTeacher(t);
-            if (used + block.length > maxChars) { omitted++; continue; }
-            if (!headerDone) {
-                push(topicIds.size
-                    ? `## Reviews of teachers (those matching ${[...topics.courses.map((c) => c.name), ...topics.departments.map((d) => d.name)].slice(0, 5).join(', ')} first)`
-                    : '## Reviews of all reviewed teachers');
-                headerDone = true;
-            }
-            push(block);
+            const onTopic = topicIds.has(t.id);
+            const { text, snippets } = formatTeacherCompact(t, { aspects, maxSnippets: onTopic ? 5 : (aspects.length ? 3 : 2) });
+            // On an aspect question, a teacher whose reviews never mention it
+            // adds nothing (unless they match the course/department asked about).
+            if (aspects.length && snippets === 0 && !onTopic) { silent++; continue; }
+            if (used + text.length > budget) { omitted++; continue; }
+            push(text);
             included.add(t.id);
         }
-        if (omitted) push(`(${omitted} more reviewed teachers were left out for length.)`);
+        if (silent) push(`(${silent} other reviewed teachers have no review that mentions ${aspects.join(' or ')}.)`);
+        if (omitted) push(`(${omitted} more reviewed teachers were left out for length; they have fewer reviews.)`);
+    } else if (mode === 'site') {
+        push('(This is a question about using the website: answer it from the website facts. No review data is needed.)');
     }
 
     return {
@@ -363,7 +450,9 @@ const selectContext = (knowledge, { message, history = [], pageTeacherId = null,
         focusSource,
         ambiguous,
         includedTeacherIds: included,
-        topics
+        topics,
+        aspects,
+        mode
     };
 };
 
@@ -399,5 +488,8 @@ module.exports = {
     matchTopics,
     selectContext,
     normalize,
-    DEFAULT_CONTEXT_CHARS
+    detectAspects,
+    snippetOf,
+    DEFAULT_CONTEXT_CHARS,
+    DEFAULT_GENERAL_CONTEXT_CHARS
 };

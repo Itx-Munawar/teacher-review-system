@@ -119,6 +119,133 @@ router.get('/sitemap.xml', async (req, res) => {
     }
 });
 
+// ========== LINK PREVIEWS FOR CHAT APPS ==========
+// WhatsApp, Facebook, Telegram, Discord etc. do not run JavaScript, so they
+// only ever saw the generic homepage tags from index.html. Vercel sends their
+// crawlers (matched by user-agent in vercel.json) here instead, and this
+// answers a tiny HTML page whose Open Graph tags describe the actual teacher.
+// Real visitors never reach this route: they get the SPA as before.
+
+const escapeHtml = (value) => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+// Same rule as the frontend's isUsableImageUrl: an absolute http(s) URL that
+// ends in an image file name (the data has a few bare directory URLs).
+const usableImage = (url) => {
+    const trimmed = String(url || '').trim();
+    if (!/^https?:\/\//i.test(trimmed)) return null;
+    try {
+        const { pathname } = new URL(trimmed);
+        const file = pathname.split('/').filter(Boolean).pop() || '';
+        return /\.(jpe?g|png|webp|gif)$/i.test(file) ? trimmed.replace(/^http:/i, 'https:') : null;
+    } catch (err) {
+        return null;
+    }
+};
+
+const previewPage = ({ title, description, url, image, imageAlt, card = 'summary' }) => `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>${escapeHtml(title)}</title>
+<meta name="description" content="${escapeHtml(description)}">
+<link rel="canonical" href="${escapeHtml(url)}">
+<meta property="og:type" content="profile">
+<meta property="og:site_name" content="UMT Teacher Reviews">
+<meta property="og:url" content="${escapeHtml(url)}">
+<meta property="og:title" content="${escapeHtml(title)}">
+<meta property="og:description" content="${escapeHtml(description)}">
+<meta property="og:image" content="${escapeHtml(image)}">
+<meta property="og:image:alt" content="${escapeHtml(imageAlt)}">
+<meta name="twitter:card" content="${card}">
+<meta name="twitter:title" content="${escapeHtml(title)}">
+<meta name="twitter:description" content="${escapeHtml(description)}">
+<meta name="twitter:image" content="${escapeHtml(image)}">
+</head>
+<body>
+<h1>${escapeHtml(title)}</h1>
+<p>${escapeHtml(description)}</p>
+<p><a href="${escapeHtml(url)}">Open on UMT Teacher Reviews</a></p>
+</body>
+</html>
+`;
+
+const sendPreview = (res, status, page) => {
+    res.status(status);
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    // "private" keeps Vercel's CDN from caching this crawler-only page and
+    // handing it to a real visitor of the same URL.
+    res.set('Cache-Control', 'private, max-age=600');
+    res.set('Vary', 'User-Agent');
+    res.set('X-Robots-Tag', 'noindex');
+    res.send(page);
+};
+
+router.get('/seo/teacher/:id', async (req, res) => {
+    const baseUrl = PUBLIC_SITE_URL;
+    const fallback = {
+        title: 'UMT Teacher Reviews – Anonymous Reviews for UMT Professors',
+        description: 'Read and write anonymous reviews for UMT teachers. Find the best professors at University of Management and Technology, Lahore.',
+        url: `${baseUrl}/`,
+        image: `${baseUrl}/logo512.png`,
+        imageAlt: 'UMT Teacher Reviews',
+    };
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1 || id > 4294967295) {
+        return sendPreview(res, 404, previewPage(fallback));
+    }
+    try {
+        const [rows] = await db.query('SELECT id, name, department, image_url FROM teachers WHERE id = ?', [id]);
+        if (!rows.length) return sendPreview(res, 404, previewPage(fallback));
+        const teacher = rows[0];
+        const [reviews] = await db.query(
+            'SELECT courses FROM reviews WHERE teacher_id = ? AND is_approved = 1',
+            [id]
+        );
+
+        // Most-mentioned courses, so the preview says what they teach.
+        const courseCounts = new Map();
+        reviews.forEach((row) => {
+            parseCourseList(row.courses).forEach((raw) => {
+                const name = String(raw).replace(/\s+/g, ' ').trim();
+                if (name.length < 2 || name.length > 80) return;
+                const key = name.toLowerCase();
+                const entry = courseCounts.get(key) || { name, count: 0 };
+                entry.count += 1;
+                courseCounts.set(key, entry);
+            });
+        });
+        const topCourses = [...courseCounts.values()]
+            .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+            .slice(0, 3)
+            .map((c) => c.name);
+
+        const count = reviews.length;
+        const name = String(teacher.name).replace(/\s+/g, ' ').trim();
+        const department = String(teacher.department).replace(/\s+/g, ' ').trim();
+        const summary = count === 0
+            ? 'No reviews yet. Be the first to share an anonymous review.'
+            : `${count} anonymous student review${count === 1 ? '' : 's'}.`;
+        const courses = topCourses.length ? ` Courses: ${topCourses.join(', ')}.` : '';
+        const image = usableImage(teacher.image_url);
+
+        sendPreview(res, 200, previewPage({
+            title: `${name} - ${department} | UMT Teacher Reviews`,
+            description: `${summary}${courses} See what UMT students say about grading, attendance and teaching.`,
+            url: `${baseUrl}/teacher/${teacher.id}`,
+            image: image || fallback.image,
+            imageAlt: image ? `Photo of ${name}` : fallback.imageAlt,
+        }));
+    } catch (error) {
+        console.error('Error building teacher preview:', error);
+        sendPreview(res, 500, previewPage(fallback));
+    }
+});
+
 // ========== DYNAMIC ROBOTS.TXT ==========
 router.get('/robots.txt', (req, res) => {
     const baseUrl = PUBLIC_SITE_URL;

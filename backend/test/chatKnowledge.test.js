@@ -2,7 +2,7 @@
 // review text goes to the model. Pure functions - no DB.
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { buildKnowledge, matchTeachers, matchTopics, selectContext, detectReplyLanguage } = require('../lib/chatKnowledge');
+const { buildKnowledge, matchTeachers, matchTopics, selectContext, detectReplyLanguage, detectAspects, snippetOf } = require('../lib/chatKnowledge');
 
 // Enough "Muhammad"s and "Ali"s that those name parts are common, like in
 // the real data, plus a few distinctive names.
@@ -159,5 +159,47 @@ describe('detectReplyLanguage', () => {
 
     it('recognises Urdu script', () => {
         assert.equal(detectReplyLanguage('سر وقار کیسے پڑھاتے ہیں؟'), 'urdu');
+    });
+});
+
+describe('chat: smaller context for general questions', () => {
+    it('reads the topic of a question in English and Roman Urdu', () => {
+        assert.deepEqual(detectAspects('Which teacher grades leniently?'), ['grading']);
+        assert.deepEqual(detectAspects('marks kese deti hain'), ['grading']);
+        assert.deepEqual(detectAspects('kon acha parhata hai'), ['teaching']);
+        assert.deepEqual(detectAspects('quiz aur assignments kis ke easy hain?'), ['exams', 'assignments']);
+        assert.deepEqual(detectAspects('best teacher kaun hai?'), [], '"teacher" is not "teaching"');
+    });
+
+    it('cuts a review down to the part about the topic', () => {
+        const long = `${'Very kind person and always on time for class. '.repeat(6)}Her grading is relative and quite lenient in the final. ${'She shares slides after class. '.repeat(5)}`;
+        const snip = snippetOf(long, ['grading']);
+        assert.ok(snip.length <= 230, snip);
+        assert.match(snip, /grading is relative/);
+        assert.equal(snippetOf('Attendance is strict.', ['grading']), null);
+        assert.equal(snippetOf('Short review.', []), 'Short review.');
+    });
+
+    it('stays within the general budget however large the corpus is', () => {
+        const teachers = [];
+        const reviews = [];
+        for (let i = 1; i <= 300; i += 1) {
+            teachers.push({ id: 1000 + i, name: `Teacher Number${i}`, department: 'School of Testing' });
+            for (let j = 0; j < 4; j += 1) {
+                reviews.push({ teacher_id: 1000 + i, comment: `Review ${j}: grading is fair and lectures are clear. `.repeat(8), courses: '[]', created_at: '2026-01-01' });
+            }
+        }
+        const big = buildKnowledge(teachers, reviews, []);
+        const sel = selectContext(big, { message: 'who grades fairly?', generalChars: 8000 });
+        assert.equal(sel.mode, 'general');
+        assert.ok(sel.context.length <= 8600, String(sel.context.length));
+        assert.match(sel.context, /left out for length/);
+    });
+
+    it('a teacher question still gets every review in full', () => {
+        const sel = selectContext(kn, { message: 'how is sir waqar ashiq?', generalChars: 3000 });
+        assert.equal(sel.mode, 'focused');
+        assert.match(sel.context, /Explains calculus really well/);
+        assert.match(sel.context, /Quizzes every week/);
     });
 });
