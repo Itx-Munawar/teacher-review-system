@@ -99,7 +99,7 @@ const App: React.FC = () => {
         return () => window.removeEventListener('scroll', onScroll);
     }, []);
 
-    const [sortBy, setSortBy] = useState('name');
+    const [sortBy, setSortBy] = useState('reviews');
     const [departmentFilter, setDepartmentFilter] = useState('');
     const [departments, setDepartments] = useState<{ department: string; teacher_count: number }[]>([]);
 

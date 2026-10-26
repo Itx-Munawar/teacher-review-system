@@ -85,8 +85,8 @@ const TeacherSidebar: React.FC<TeacherSidebarProps> = ({
                     value={sortBy}
                     onChange={(e) => { setSortBy(e.target.value); }}
                 >
-                    <option value="name">Sort: Name</option>
                     <option value="reviews">Sort: Most Reviews</option>
+                    <option value="name">Sort: Name</option>
                 </select>
                 <select
                     className="filter-select"
