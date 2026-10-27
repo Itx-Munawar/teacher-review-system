@@ -1,0 +1,178 @@
+// AI summary of a teacher's approved reviews, in Roman Urdu.
+//
+// A summary is generated once and cached in teacher_summaries. Its signature
+// (approved review ids + text lengths) changes whenever a review is approved,
+// edited or removed, and only then is Gemini asked again - so normal page
+// views cost no quota at all.
+
+const crypto = require('crypto');
+const db = require('../db');
+const state = require('../state');
+const gemini = require('./gemini');
+const { parseCourseList } = require('../contentFilter');
+const { logJson } = require('./log');
+
+const MIN_REVIEWS = 3;
+const MAX_REVIEWS_IN_PROMPT = 150;
+const MAX_CHARS_IN_PROMPT = 40000;
+const DAILY_LIMIT = () => Math.max(0, parseInt(process.env.SUMMARY_PER_DAY, 10) || 150);
+
+const inFlight = new Map(); // teacherId -> Promise
+let budget = { day: '', used: 0 };
+
+const takeBudget = () => {
+    const day = new Date().toISOString().slice(0, 10);
+    if (budget.day !== day) budget = { day, used: 0 };
+    if (budget.used >= DAILY_LIMIT()) return false;
+    budget.used += 1;
+    return true;
+};
+
+const SYSTEM_PROMPT = `You summarise anonymous student reviews of one university teacher for "UMT Teacher Reviews" (University of Management and Technology, Lahore).
+
+Write in Roman Urdu (Urdu in English letters), the way Pakistani students text: simple, natural, short sentences. English words for things like grading, quizzes, assignments, attendance, concepts are fine.
+
+Rules:
+- Use ONLY what the reviews say. Never invent facts, numbers or courses.
+- Reflect the balance of opinion honestly: if most reviews are positive, say so; mention a concern only if more than one review raises it, or say "kuch students" when it is a minority view.
+- Never name or quote reviewers. Never include phone numbers, emails or personal details.
+- Do not repeat serious personal allegations (harassment, misconduct, discrimination). If such complaints exist, at most write "Kuch reviews mein rawaiye (behaviour) ke baare mein concerns hain."
+- Be fair and respectful to the teacher. No insults, no exaggeration.
+- Ignore reviews that are only "good", "best" etc. except to count them as general praise.
+
+Return ONLY a JSON object, no markdown:
+{"overview": "1-2 sentences overall picture", "pros": ["2-4 short points students like"], "cons": ["0-3 short points students find difficult"]}
+Each point is at most 15 words. Use an empty array if there is nothing real to say.`;
+
+const signatureFor = (reviews) => crypto
+    .createHash('sha1')
+    .update(reviews.map((r) => `${r.id}:${String(r.comment || '').length}`).join(','))
+    .digest('hex');
+
+const clean = (text, max) => String(text || '').replace(/\s+/g, ' ').trim().slice(0, max);
+
+/** Parse and validate the model's JSON; returns null when unusable. */
+const parseSummary = (raw) => {
+    if (!raw) return null;
+    let text = String(raw).trim().replace(/^```(?:json)?\s*/i, '').replace(/```$/, '').trim();
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start === -1 || end <= start) return null;
+    text = text.slice(start, end + 1);
+    let data;
+    try { data = JSON.parse(text); } catch (_) { return null; }
+    const overview = clean(data && data.overview, 400);
+    const list = (v, n) => (Array.isArray(v) ? v : []).map((x) => clean(x, 180)).filter(Boolean).slice(0, n);
+    const pros = list(data && data.pros, 4);
+    const cons = list(data && data.cons, 3);
+    if (!overview && pros.length === 0) return null;
+    return { overview, pros, cons };
+};
+
+const buildPrompt = (teacher, reviews) => {
+    let used = 0;
+    const lines = [];
+    for (const r of reviews) {
+        const courses = parseCourseList(r.courses);
+        const line = `- ${courses.length ? `[${courses.join(', ')}] ` : ''}${clean(r.comment, 1000)}`;
+        if (used + line.length > MAX_CHARS_IN_PROMPT) break;
+        used += line.length;
+        lines.push(line);
+    }
+    return `Teacher: ${teacher.name} (${teacher.department || 'UMT'})
+Number of approved reviews: ${reviews.length}
+
+Reviews (newest first):
+${lines.join('\n')}`;
+};
+
+const readCached = async (teacherId) => {
+    const [rows] = await db.query('SELECT summary, signature, review_count, generated_at FROM teacher_summaries WHERE teacher_id = ?', [teacherId]);
+    if (rows.length === 0) return null;
+    const parsed = parseSummary(rows[0].summary);
+    return parsed ? { ...rows[0], parsed } : null;
+};
+
+const respond = (row, extra = {}) => ({
+    available: true,
+    ...row.parsed,
+    review_count: row.review_count,
+    generated_at: row.generated_at,
+    ...extra
+});
+
+/**
+ * @returns {Promise<object>} { available: true, overview, pros, cons, review_count, generated_at, stale? }
+ *   or { available: false, reason: 'disabled' | 'few_reviews' | 'busy' | 'not_found' }
+ */
+const getTeacherSummary = async (teacherId) => {
+    if (!state.teacherSummariesReady || !gemini.isConfigured()) return { available: false, reason: 'disabled' };
+
+    const [teachers] = await db.query('SELECT id, name, department FROM teachers WHERE id = ?', [teacherId]);
+    if (teachers.length === 0) return { available: false, reason: 'not_found' };
+
+    const [reviews] = await db.query(
+        `SELECT id, comment, courses FROM reviews
+         WHERE teacher_id = ? AND is_approved = 1
+         ORDER BY created_at DESC, id DESC LIMIT ?`,
+        [teacherId, MAX_REVIEWS_IN_PROMPT]
+    );
+    if (reviews.length < MIN_REVIEWS) return { available: false, reason: 'few_reviews', min_reviews: MIN_REVIEWS };
+
+    const signature = signatureFor(reviews);
+    const cached = await readCached(teacherId);
+    if (cached && cached.signature === signature) return respond(cached);
+
+    if (inFlight.has(teacherId)) return inFlight.get(teacherId);
+
+    const job = (async () => {
+        if (!takeBudget()) {
+            return cached ? respond(cached, { stale: true }) : { available: false, reason: 'busy' };
+        }
+        try {
+            const { text, model } = await gemini.generate({
+                system: SYSTEM_PROMPT,
+                contents: [{ role: 'user', parts: [{ text: buildPrompt(teachers[0], reviews) }] }],
+                maxOutputTokens: 700,
+                temperature: 0.3,
+                responseMimeType: 'application/json'
+            });
+            const parsed = parseSummary(text);
+            if (!parsed) {
+                logJson('warn', 'summary_unparseable', { teacher_id: teacherId, model });
+                return cached ? respond(cached, { stale: true }) : { available: false, reason: 'busy' };
+            }
+            await db.query(
+                `INSERT INTO teacher_summaries (teacher_id, summary, signature, review_count, model, generated_at)
+                 VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                 ON DUPLICATE KEY UPDATE summary = VALUES(summary), signature = VALUES(signature),
+                    review_count = VALUES(review_count), model = VALUES(model), generated_at = CURRENT_TIMESTAMP`,
+                [teacherId, JSON.stringify(parsed), signature, reviews.length, model]
+            );
+            logJson('info', 'summary_generated', { teacher_id: teacherId, reviews: reviews.length, model });
+            return { available: true, ...parsed, review_count: reviews.length, generated_at: new Date().toISOString() };
+        } catch (err) {
+            logJson('warn', 'summary_failed', { teacher_id: teacherId, kind: err && err.kind, reason: String(err && err.message).slice(0, 200) });
+            return cached ? respond(cached, { stale: true }) : { available: false, reason: 'busy' };
+        }
+    })();
+    inFlight.set(teacherId, job);
+    try {
+        return await job;
+    } finally {
+        inFlight.delete(teacherId);
+    }
+};
+
+const deleteTeacherSummary = async (teacherId) => {
+    if (!state.teacherSummariesReady) return;
+    await db.query('DELETE FROM teacher_summaries WHERE teacher_id = ?', [teacherId]);
+};
+
+module.exports = {
+    getTeacherSummary,
+    deleteTeacherSummary,
+    parseSummary,
+    MIN_REVIEWS,
+    _resetBudget: () => { budget = { day: '', used: 0 }; },
+};

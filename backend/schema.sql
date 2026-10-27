@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS reviews (
     user_name VARCHAR(100) NOT NULL DEFAULT 'Anonymous',
     is_approved TINYINT(1) NOT NULL DEFAULT 0,
     moderation_flag VARCHAR(40) DEFAULT NULL,
+    helpful_count INT UNSIGNED NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY idx_reviews_teacher (teacher_id, is_approved),
@@ -47,6 +48,73 @@ CREATE TABLE IF NOT EXISTS review_replies (
     PRIMARY KEY (id),
     KEY idx_review_replies_review (review_id, is_approved),
     KEY idx_review_replies_pending (is_approved, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- One helpful vote per review per browser. voter_hash is a keyed hash of a
+-- random cookie id; no IP address is stored.
+CREATE TABLE IF NOT EXISTS review_votes (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    review_id INT UNSIGNED NOT NULL,
+    voter_hash CHAR(64) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_review_vote_once (review_id, voter_hash),
+    KEY idx_review_votes_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Cached AI summary of a teacher's approved reviews. signature changes when
+-- the set of approved reviews changes, which triggers a regeneration.
+CREATE TABLE IF NOT EXISTS teacher_summaries (
+    teacher_id INT UNSIGNED NOT NULL,
+    summary TEXT NOT NULL,
+    signature CHAR(40) NOT NULL,
+    review_count INT UNSIGNED NOT NULL DEFAULT 0,
+    model VARCHAR(64) DEFAULT NULL,
+    generated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (teacher_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Backend and browser errors, grouped by fingerprint.
+CREATE TABLE IF NOT EXISTS error_logs (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    fingerprint CHAR(40) NOT NULL,
+    source VARCHAR(16) NOT NULL,
+    message VARCHAR(500) NOT NULL,
+    stack TEXT,
+    path VARCHAR(300) DEFAULT NULL,
+    method VARCHAR(10) DEFAULT NULL,
+    user_agent VARCHAR(300) DEFAULT NULL,
+    occurrences INT UNSIGNED NOT NULL DEFAULT 1,
+    first_seen TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_seen TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    alerted_at DATETIME DEFAULT NULL,
+    resolved TINYINT(1) NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_error_fingerprint (fingerprint),
+    KEY idx_error_logs_open (resolved, last_seen)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Anonymous daily counters for the admin Analytics tab (no per-user data).
+CREATE TABLE IF NOT EXISTS site_visits_daily (
+    day DATE NOT NULL,
+    visits INT UNSIGNED NOT NULL DEFAULT 0,
+    PRIMARY KEY (day)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS teacher_views_daily (
+    day DATE NOT NULL,
+    teacher_id INT UNSIGNED NOT NULL,
+    views INT UNSIGNED NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, teacher_id),
+    KEY idx_teacher_views_teacher (teacher_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS search_terms_daily (
+    day DATE NOT NULL,
+    term VARCHAR(100) NOT NULL,
+    searches INT UNSIGNED NOT NULL DEFAULT 0,
+    results INT UNSIGNED NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, term)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Admin users (password column stores a bcrypt hash)

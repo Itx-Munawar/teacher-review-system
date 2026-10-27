@@ -11,12 +11,37 @@ const { detectFlaggedText, moderationFlagFor } = require('../contentFilter');
 const state = require('../state');
 const { clampInt } = require('../lib/validation');
 const { parseCookies } = require('../lib/cookies');
-const { reviewLimiter, searchLimiter, questionLimiter, replyLimiter } = require('../lib/limiters');
+const { reviewLimiter, searchLimiter, questionLimiter, replyLimiter, voteLimiter, trackLimiter, clientErrorLimiter } = require('../lib/limiters');
 const { recordSearchGap } = require('../lib/searchGaps');
 const { getCached, setCache, invalidateCache } = require('../lib/cache');
 const { normalizeReviewText } = require('../lib/content');
+const crypto = require('crypto');
+const { JWT_SECRET } = require('../config');
+const { parseCourseList } = require('../contentFilter');
+const { getTeacherSummary } = require('../lib/summaries');
+const analytics = require('../lib/analytics');
+const { recordError, isIgnored } = require('../lib/errorTracker');
 
 const router = express.Router();
+
+// Helpful votes are keyed on a random, HttpOnly per-browser id (not the IP:
+// a whole campus shares one address). Only a keyed hash of it is stored.
+const VOTER_COOKIE = 'vid';
+const voterHashFor = (req) => {
+    const id = parseCookies(req)[VOTER_COOKIE];
+    if (!id || !/^[0-9a-f]{32}$/.test(id)) return null;
+    return crypto.createHash('sha256').update(`vote|${id}|${JWT_SECRET}`).digest('hex');
+};
+const ensureVoterId = (req, res) => {
+    let id = parseCookies(req)[VOTER_COOKIE];
+    if (!id || !/^[0-9a-f]{32}$/.test(id)) {
+        id = crypto.randomBytes(16).toString('hex');
+        const secure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+        res.cookie(VOTER_COOKIE, id, { httpOnly: true, secure, sameSite: 'lax', maxAge: 365 * 24 * 60 * 60 * 1000, path: '/' });
+        req.headers.cookie = `${req.headers.cookie ? `${req.headers.cookie}; ` : ''}${VOTER_COOKIE}=${id}`;
+    }
+    return voterHashFor(req);
+};
 
 const REVIEW_MIN_CHARS = 5;
 const REPLY_MIN_CHARS = 2;
@@ -179,6 +204,9 @@ router.get('/api/teachers/search', searchLimiter, async (req, res) => {
         if (teachers.length === 0 && state.searchGapsReady) {
             recordSearchGap(term);
         }
+        if (!analytics.isBot(req.get('user-agent'))) {
+            analytics.trackSearch(term, teachers.length);
+        }
 
         res.set('Cache-Control', 'public, max-age=120');
         res.json(teachers);
@@ -202,6 +230,9 @@ router.get('/api/teachers/:id', async (req, res) => {
         const reviewPage = clampInt(req.query.review_page, 1, 1, 100000);
         const reviewLimit = clampInt(req.query.review_limit, 50, 1, 100);
         const reviewOffset = (reviewPage - 1) * reviewLimit;
+        // Optional ordering and course filter for the reviews list.
+        const reviewSort = req.query.review_sort === 'helpful' && state.reviewVotesReady ? 'helpful' : 'newest';
+        const reviewCourse = typeof req.query.review_course === 'string' ? req.query.review_course.trim().slice(0, 200) : '';
 
         // Get teacher
         const [teachers] = await db.query(
@@ -215,21 +246,68 @@ router.get('/api/teachers/:id', async (req, res) => {
         // Get approved reviews for this teacher. Columns are listed explicitly
         // so internal moderation fields (moderation_flag) never reach the
         // public API, even though the row is approved.
+        const courseWhere = reviewCourse ? ' AND r.courses LIKE ?' : '';
+        const courseParams = reviewCourse ? [`%${reviewCourse.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`] : [];
+        const orderBy = reviewSort === 'helpful'
+            ? 'r.helpful_count DESC, r.created_at DESC, r.id DESC'
+            : 'r.created_at DESC, r.id DESC';
         const [reviews] = await db.query(
-            `SELECT r.id, r.teacher_id, r.comment, r.user_name, r.courses, r.is_approved, r.created_at
+            `SELECT r.id, r.teacher_id, r.comment, r.user_name, r.courses, r.is_approved, r.created_at${state.reviewVotesReady ? ', r.helpful_count' : ''}
              FROM reviews r
-             WHERE r.teacher_id = ? AND r.is_approved = 1
-             ORDER BY r.created_at DESC
+             WHERE r.teacher_id = ? AND r.is_approved = 1${courseWhere}
+             ORDER BY ${orderBy}
              LIMIT ? OFFSET ?`,
-            [teacherId, reviewLimit, reviewOffset]
+            [teacherId, ...courseParams, reviewLimit, reviewOffset]
         );
 
-        // Get total review count
+        // Total for the current filter (drives pagination) and the overall total.
         const [countData] = await db.query(
-            'SELECT COUNT(*) as total FROM reviews WHERE teacher_id = ? AND is_approved = 1',
-            [teacherId]
+            `SELECT COUNT(*) as total FROM reviews r WHERE r.teacher_id = ? AND r.is_approved = 1${courseWhere}`,
+            [teacherId, ...courseParams]
         );
         const totalReviews = countData[0].total || 0;
+        let allReviews = totalReviews;
+        if (reviewCourse) {
+            const [allCount] = await db.query('SELECT COUNT(*) as total FROM reviews WHERE teacher_id = ? AND is_approved = 1', [teacherId]);
+            allReviews = allCount[0].total || 0;
+        }
+
+        // Course chips: every course mentioned across ALL approved reviews,
+        // not just the loaded page, with how many reviews mention it.
+        const [courseRows] = await db.query(
+            "SELECT courses FROM reviews WHERE teacher_id = ? AND is_approved = 1 AND courses IS NOT NULL AND courses <> ''",
+            [teacherId]
+        );
+        const courseMap = new Map();
+        courseRows.forEach((row) => {
+            const seen = new Set();
+            parseCourseList(row.courses).forEach((course) => {
+                const key = course.toLowerCase();
+                if (seen.has(key)) return;
+                seen.add(key);
+                const entry = courseMap.get(key) || { course, count: 0 };
+                entry.count += 1;
+                courseMap.set(key, entry);
+            });
+        });
+        const courseCounts = [...courseMap.values()]
+            .sort((a, b) => b.count - a.count || a.course.localeCompare(b.course))
+            .slice(0, 20);
+
+        // Which of these reviews this browser already marked helpful.
+        reviews.forEach((r) => {
+            r.helpful_count = Number(r.helpful_count) || 0;
+            r.voted = false;
+        });
+        const voterHash = voterHashFor(req);
+        if (voterHash && state.reviewVotesReady && reviews.length > 0) {
+            const [votes] = await db.query(
+                `SELECT review_id FROM review_votes WHERE voter_hash = ? AND review_id IN (${reviews.map(() => '?').join(',')})`,
+                [voterHash, ...reviews.map((r) => r.id)]
+            );
+            const votedIds = new Set(votes.map((v) => v.review_id));
+            reviews.forEach((r) => { r.voted = votedIds.has(r.id); });
+        }
 
         // Approved replies under each review on this page, oldest first, so a
         // thread reads top to bottom. Only public columns are selected.
@@ -254,7 +332,11 @@ router.get('/api/teachers/:id', async (req, res) => {
         res.json({
             teacher: teachers[0],
             reviews: reviews,
-            total_reviews: totalReviews,
+            total_reviews: allReviews,
+            filtered_reviews: totalReviews,
+            review_sort: reviewSort,
+            review_course: reviewCourse || null,
+            course_counts: courseCounts,
             review_pagination: {
                 page: reviewPage,
                 limit: reviewLimit,
@@ -642,6 +724,82 @@ router.post('/api/reviews/:id/replies', csrfValidate, replyLimiter, [
         console.error('Error saving reply:', error);
         res.status(500).json({ error: 'Database error' });
     }
+});
+
+// POST/DELETE /api/reviews/:id/helpful - mark (or unmark) a review helpful.
+const helpfulVote = (add) => async (req, res) => {
+    if (!state.reviewVotesReady) return res.status(503).json({ error: 'Voting is temporarily unavailable.' });
+    try {
+        const reviewId = Number.parseInt(req.params.id, 10);
+        if (!Number.isInteger(reviewId) || reviewId < 1) return res.status(400).json({ error: 'Invalid review ID' });
+        const [reviews] = await db.query('SELECT id FROM reviews WHERE id = ? AND is_approved = 1', [reviewId]);
+        if (reviews.length === 0) return res.status(404).json({ error: 'Review not found' });
+
+        const voterHash = ensureVoterId(req, res);
+        if (add) {
+            const [result] = await db.query('INSERT IGNORE INTO review_votes (review_id, voter_hash) VALUES (?, ?)', [reviewId, voterHash]);
+            if (result.affectedRows > 0) await db.query('UPDATE reviews SET helpful_count = helpful_count + 1 WHERE id = ?', [reviewId]);
+        } else {
+            const [result] = await db.query('DELETE FROM review_votes WHERE review_id = ? AND voter_hash = ?', [reviewId, voterHash]);
+            if (result.affectedRows > 0) await db.query('UPDATE reviews SET helpful_count = GREATEST(helpful_count, 1) - 1 WHERE id = ?', [reviewId]);
+        }
+        const [[row]] = await db.query('SELECT helpful_count FROM reviews WHERE id = ?', [reviewId]);
+        res.json({ success: true, voted: add, helpful_count: Number(row.helpful_count) || 0 });
+    } catch (error) {
+        console.error('Error saving helpful vote:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+};
+router.post('/api/reviews/:id/helpful', csrfValidate, voteLimiter, helpfulVote(true));
+router.delete('/api/reviews/:id/helpful', csrfValidate, voteLimiter, helpfulVote(false));
+
+// GET /api/teachers/:id/summary - AI summary of the approved reviews (Roman Urdu)
+router.get('/api/teachers/:id/summary', async (req, res) => {
+    try {
+        const teacherId = Number.parseInt(req.params.id, 10);
+        if (!Number.isInteger(teacherId) || teacherId < 1) return res.status(400).json({ error: 'Invalid teacher ID' });
+        const summary = await getTeacherSummary(teacherId);
+        if (summary.reason === 'not_found') return res.status(404).json({ error: 'Teacher not found' });
+        // A fresh summary may be cached briefly; failures must not be.
+        res.set('Cache-Control', summary.available && !summary.stale ? 'public, max-age=300' : 'no-store');
+        res.json(summary);
+    } catch (error) {
+        console.error('Error loading teacher summary:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// POST /api/track - anonymous counters: { type: 'visit' } once per browser
+// session, { type: 'teacher_view', teacher_id } once per profile per session.
+router.post('/api/track', csrfValidate, trackLimiter, async (req, res) => {
+    if (analytics.isBot(req.get('user-agent'))) return res.status(204).end();
+    const type = req.body && req.body.type;
+    if (type === 'visit') {
+        await analytics.trackVisit();
+        return res.status(204).end();
+    }
+    if (type === 'teacher_view') {
+        const teacherId = Number.parseInt(req.body.teacher_id, 10);
+        if (!Number.isInteger(teacherId) || teacherId < 1) return res.status(400).json({ error: 'Invalid teacher ID' });
+        await analytics.trackTeacherView(teacherId);
+        return res.status(204).end();
+    }
+    return res.status(400).json({ error: 'Unknown event type' });
+});
+
+// POST /api/client-errors - JavaScript errors from the browser.
+router.post('/api/client-errors', csrfValidate, clientErrorLimiter, async (req, res) => {
+    const body = req.body || {};
+    const message = typeof body.message === 'string' ? body.message.slice(0, 500) : '';
+    if (!message) return res.status(400).json({ error: 'message is required' });
+    const stack = typeof body.stack === 'string' ? body.stack.slice(0, 6000) : '';
+    if (isIgnored(message, stack) || analytics.isBot(req.get('user-agent'))) return res.status(204).end();
+    let path = null;
+    if (typeof body.url === 'string') {
+        try { path = new URL(body.url, 'https://x.invalid').pathname.slice(0, 300); } catch (_) { path = null; }
+    }
+    await recordError({ source: 'frontend', message, stack, path, method: null, userAgent: req.get('user-agent') || null });
+    res.status(204).end();
 });
 
 module.exports = router;
