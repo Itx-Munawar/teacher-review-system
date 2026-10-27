@@ -33,12 +33,11 @@ const questionLimiter = rateLimit({
     message: { error: 'Too many questions. Please try again later.' }
 });
 
-// Reporting is cheap for a user and expensive for a moderator, so keep the
-// per-IP budget tight. Duplicate reports for the same review are collapsed.
-const reportLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000,
-    max: 10,
-    message: { error: 'Too many reports. Please try again later.' }
+// Replies to reviews: every one is moderated, so keep the per-IP budget modest.
+const replyLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 15,
+    message: { error: 'Too many replies. Please try again later.' }
 });
 
 // Admin account creation must not be reachable by a scanner. One attempt per
@@ -64,7 +63,7 @@ module.exports = {
     searchLimiter,
     resetLimiter,
     questionLimiter,
-    reportLimiter,
+    replyLimiter,
     setupLimiter,
     resetUseLimiter
 };

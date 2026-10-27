@@ -55,12 +55,12 @@ router.delete('/api/admin/teachers/:id', verifyAdmin, csrfValidate, async (req, 
             return res.status(404).json({ error: 'Teacher not found' });
         }
 
-        // Q&A and review reports deliberately have no foreign key (the column
+        // Q&A and review replies deliberately have no foreign key (the column
         // types differ across deployments), so they must be removed explicitly
         // or they linger as rows nothing can ever display or delete.
-        if (state.reviewReportsReady) {
+        if (state.reviewRepliesReady) {
             await connection.query(
-                'DELETE rr FROM review_reports rr JOIN reviews r ON r.id = rr.review_id WHERE r.teacher_id = ?',
+                'DELETE rp FROM review_replies rp JOIN reviews r ON r.id = rp.review_id WHERE r.teacher_id = ?',
                 [teacherId]
             );
         }
@@ -104,11 +104,8 @@ router.get('/api/admin/teachers/:id', verifyAdmin, async (req, res) => {
         }
 
         // ALL reviews (approved + pending) — admins see everything
-        const reportSelect = state.reviewReportsReady
-            ? `, (SELECT COUNT(*) FROM review_reports rr WHERE rr.review_id = r.id AND rr.status = 'open') AS open_reports`
-            : '';
         const [reviews] = await db.query(
-            `SELECT r.*, t.name as teacher_name${reportSelect}
+            `SELECT r.*, t.name as teacher_name
              FROM reviews r
              JOIN teachers t ON r.teacher_id = t.id
              WHERE r.teacher_id = ?
@@ -271,12 +268,9 @@ router.get('/api/admin/reviews', verifyAdmin, async (req, res) => {
         // rows (used by the dashboard "pending" counter click-through).
         const pendingOnly = req.query.pending === '1' || req.query.pending === 'true';
         const whereClause = pendingOnly ? 'WHERE r.is_approved = 0' : '';
-        const reportSelect = state.reviewReportsReady
-            ? `, (SELECT COUNT(*) FROM review_reports rr WHERE rr.review_id = r.id AND rr.status = 'open') AS open_reports`
-            : '';
 
         const [reviews] = await db.query(`
-            SELECT r.*, t.name as teacher_name${reportSelect}
+            SELECT r.*, t.name as teacher_name
             FROM reviews r
             JOIN teachers t ON r.teacher_id = t.id
             ${whereClause}
@@ -310,8 +304,8 @@ router.delete('/api/admin/reviews/:id', verifyAdmin, csrfValidate, async (req, r
         if (!Number.isInteger(reviewId) || reviewId < 1) {
             return res.status(400).json({ error: 'Invalid review ID' });
         }
-        if (state.reviewReportsReady) {
-            await db.query('DELETE FROM review_reports WHERE review_id = ?', [reviewId]);
+        if (state.reviewRepliesReady) {
+            await db.query('DELETE FROM review_replies WHERE review_id = ?', [reviewId]);
         }
         const [result] = await db.query('DELETE FROM reviews WHERE id = ?', [reviewId]);
         if (result.affectedRows === 0) return res.status(404).json({ error: 'Review not found' });
@@ -599,6 +593,102 @@ router.delete('/api/admin/answers/:id', verifyAdmin, csrfValidate, async (req, r
         res.json({ success: true, message: 'Answer deleted successfully' });
     } catch (error) {
         console.error('Error deleting answer:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// ========== REVIEW REPLIES (admin) ==========
+// GET /api/admin/replies?status=pending|approved|all&page=&limit=
+// Each row carries the parent review and teacher so a moderator can judge
+// the reply in context without opening the profile.
+router.get('/api/admin/replies', verifyAdmin, async (req, res) => {
+    if (!state.reviewRepliesReady) {
+        return res.json({ replies: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 1 } });
+    }
+    try {
+        const page = clampInt(req.query.page, 1, 1, 100000);
+        const limit = clampInt(req.query.limit, 20, 1, 100);
+        const offset = (page - 1) * limit;
+        const status = ['pending', 'approved', 'all'].includes(req.query.status) ? req.query.status : 'pending';
+        const where = status === 'pending' ? 'WHERE rp.is_approved = 0'
+            : status === 'approved' ? 'WHERE rp.is_approved = 1' : '';
+
+        const [replies] = await db.query(
+            `SELECT rp.id, rp.review_id, rp.reply, rp.user_name, rp.is_approved, rp.moderation_flag, rp.created_at,
+                    r.comment AS review_comment, r.user_name AS review_user_name, r.is_approved AS review_is_approved,
+                    t.id AS teacher_id, t.name AS teacher_name
+             FROM review_replies rp
+             LEFT JOIN reviews r ON r.id = rp.review_id
+             LEFT JOIN teachers t ON t.id = r.teacher_id
+             ${where}
+             ORDER BY rp.created_at DESC, rp.id DESC
+             LIMIT ? OFFSET ?`,
+            [limit, offset]
+        );
+        const [countRows] = await db.query(`SELECT COUNT(*) AS total FROM review_replies rp ${where}`);
+        const total = countRows[0].total || 0;
+        res.json({ replies, pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) } });
+    } catch (error) {
+        console.error('Error fetching replies:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// PUT /api/admin/replies/:id - approve/unapprove (or edit) a reply
+router.put('/api/admin/replies/:id', verifyAdmin, csrfValidate, [
+    body('reply').optional().isString().isLength({ min: 1, max: 500 }).withMessage('Reply must be 1-500 characters'),
+    body('is_approved').optional().isBoolean().withMessage('is_approved must be a boolean')
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
+    if (!state.reviewRepliesReady) return res.status(503).json({ error: 'Replies are not available yet' });
+    try {
+        const replyId = Number.parseInt(req.params.id, 10);
+        if (!Number.isInteger(replyId) || replyId < 1) return res.status(400).json({ error: 'Invalid reply ID' });
+        const { reply, is_approved } = req.body;
+
+        const updates = [];
+        const values = [];
+        if (reply !== undefined) {
+            updates.push('reply = ?');
+            values.push(String(reply).trim().slice(0, 500));
+        }
+        if (is_approved !== undefined) {
+            updates.push('is_approved = ?');
+            values.push(is_approved === true || is_approved === 'true' || is_approved === 1 || is_approved === '1' ? 1 : 0);
+        }
+        if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
+
+        const [result] = await db.query(`UPDATE review_replies SET ${updates.join(', ')} WHERE id = ?`, [...values, replyId]);
+        if (result.affectedRows === 0) return res.status(404).json({ error: 'Reply not found' });
+
+        const approved = is_approved === undefined ? undefined : values[values.length - 1] === 1;
+        const action = approved === undefined ? 'EDIT_REPLY' : (approved ? 'APPROVE_REPLY' : 'REJECT_REPLY');
+        await createAuditLog(req.admin.id, action, `Reply ID: ${replyId}`, req.ip);
+        invalidateCache('teachers');
+        res.json({
+            success: true,
+            message: approved === undefined ? 'Reply updated' : (approved ? 'Reply approved' : 'Reply hidden')
+        });
+    } catch (error) {
+        console.error('Error updating reply:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// DELETE /api/admin/replies/:id - remove a reply permanently
+router.delete('/api/admin/replies/:id', verifyAdmin, csrfValidate, async (req, res) => {
+    if (!state.reviewRepliesReady) return res.status(503).json({ error: 'Replies are not available yet' });
+    try {
+        const replyId = Number.parseInt(req.params.id, 10);
+        if (!Number.isInteger(replyId) || replyId < 1) return res.status(400).json({ error: 'Invalid reply ID' });
+        const [result] = await db.query('DELETE FROM review_replies WHERE id = ?', [replyId]);
+        if (result.affectedRows === 0) return res.status(404).json({ error: 'Reply not found' });
+        await createAuditLog(req.admin.id, 'DELETE_REPLY', `Deleted reply ID: ${replyId}`, req.ip);
+        invalidateCache('teachers');
+        res.json({ success: true, message: 'Reply deleted' });
+    } catch (error) {
+        console.error('Error deleting reply:', error);
         res.status(500).json({ error: 'Database error' });
     }
 });

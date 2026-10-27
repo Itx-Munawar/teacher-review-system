@@ -34,19 +34,19 @@ CREATE TABLE IF NOT EXISTS reviews (
     CONSTRAINT fk_reviews_teacher FOREIGN KEY (teacher_id) REFERENCES teachers (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Reader reports on published reviews. reporter_hash is a salted hash of the
--- reporter's address so one client cannot file the same report twice; the raw
--- address is never stored.
-CREATE TABLE IF NOT EXISTS review_reports (
+-- Replies under published reviews. Every reply starts pending (is_approved=0)
+-- and is shown only after an admin approves it.
+CREATE TABLE IF NOT EXISTS review_replies (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     review_id INT UNSIGNED NOT NULL,
-    reason VARCHAR(300) NOT NULL,
-    reporter_hash CHAR(64) NOT NULL,
-    status ENUM('open','resolved','dismissed') NOT NULL DEFAULT 'open',
+    reply TEXT NOT NULL,
+    user_name VARCHAR(100) NOT NULL DEFAULT 'Anonymous',
+    is_approved TINYINT(1) NOT NULL DEFAULT 0,
+    moderation_flag VARCHAR(20) DEFAULT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_review_report_once (review_id, reporter_hash),
-    KEY idx_review_reports_status (status)
+    KEY idx_review_replies_review (review_id, is_approved),
+    KEY idx_review_replies_pending (is_approved, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Admin users (password column stores a bcrypt hash)

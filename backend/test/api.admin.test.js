@@ -133,7 +133,7 @@ describe('admin API', { skip: SKIP }, () => {
 
         it('every admin route rejects anonymous callers', async () => {
             const anon = createClient(server.baseUrl);
-            for (const p of ['/api/admin/reviews', '/api/admin/questions', '/api/admin/stats', '/api/admin/reports', '/api/admin/audit-logs', '/api/admin/custom-courses', '/api/admin/search-gaps']) {
+            for (const p of ['/api/admin/reviews', '/api/admin/questions', '/api/admin/stats', '/api/admin/replies', '/api/admin/audit-logs', '/api/admin/custom-courses', '/api/admin/search-gaps']) {
                 const res = await anon.get(p);
                 assert.equal(res.status, 401, p);
             }
@@ -224,6 +224,66 @@ describe('admin API', { skip: SKIP }, () => {
             assert.equal(res.status, 200);
             assert.equal(typeof res.body.total_reviews, 'number');
             assert.equal(typeof res.body.pending_reviews, 'number');
+        });
+    });
+
+    describe('reply moderation', () => {
+        let reviewId;
+        let replyId;
+
+        before(async () => {
+            const r = await dbQuery(
+                "INSERT INTO reviews (teacher_id, comment, user_name, is_approved) VALUES (?, 'Strict but fair in every exam.', 'Ali', 1)",
+                [teacherId]
+            );
+            reviewId = r.insertId;
+            const res = await createClient(server.baseUrl).post(`/api/reviews/${reviewId}/replies`, { reply: 'Totally agree with this one.' });
+            assert.equal(res.status, 200, res.text);
+            replyId = res.body.reply_id;
+        });
+
+        it('lists pending replies with their review and teacher', async () => {
+            const res = await admin.get('/api/admin/replies?status=pending');
+            assert.equal(res.status, 200);
+            const row = res.body.replies.find((r) => r.id === replyId);
+            assert.ok(row);
+            assert.equal(row.review_comment, 'Strict but fair in every exam.');
+            assert.equal(row.teacher_name, 'Sana Iqbal');
+            assert.equal(res.body.pagination.total >= 1, true);
+            const stats = await admin.get('/api/admin/stats');
+            assert.equal(stats.body.pending_replies >= 1, true);
+            assert.equal(stats.body.open_reports, undefined);
+        });
+
+        it('approving a reply publishes it and is audited', async () => {
+            const res = await admin.put(`/api/admin/replies/${replyId}`, { is_approved: true });
+            assert.equal(res.status, 200, res.text);
+            const pub = await createClient(server.baseUrl).get(`/api/teachers/${teacherId}`);
+            const review = pub.body.reviews.find((r) => r.id === reviewId);
+            assert.equal(review.replies.length, 1);
+            const approved = await admin.get('/api/admin/replies?status=approved');
+            assert.ok(approved.body.replies.some((r) => r.id === replyId));
+            const logs = await dbQuery("SELECT COUNT(*) AS n FROM audit_logs WHERE action = 'APPROVE_REPLY'");
+            assert.equal(logs[0].n, 1);
+            assert.equal((await admin.put('/api/admin/replies/999999', { is_approved: true })).status, 404);
+            assert.equal((await admin.put(`/api/admin/replies/${replyId}`, {})).status, 400);
+        });
+
+        it('deletes a reply, and deleting a review removes its replies', async () => {
+            const extra = await createClient(server.baseUrl).post(`/api/reviews/${reviewId}/replies`, { reply: 'Another reply to clean up.' });
+            assert.equal(extra.status, 200);
+            assert.equal((await admin.del(`/api/admin/replies/${replyId}`)).status, 200);
+            assert.equal((await admin.del(`/api/admin/replies/${replyId}`)).status, 404);
+            assert.equal((await admin.del(`/api/admin/reviews/${reviewId}`)).status, 200);
+            const left = await dbQuery('SELECT COUNT(*) AS n FROM review_replies WHERE review_id = ?', [reviewId]);
+            assert.equal(left[0].n, 0);
+        });
+
+        it('reply routes need an admin and a CSRF token', async () => {
+            const anon = createClient(server.baseUrl);
+            assert.equal((await anon.get('/api/admin/replies')).status, 401);
+            const forged = await admin.put('/api/admin/replies/1', { is_approved: true }, { csrf: false });
+            assert.equal(forged.status, 403);
         });
     });
 

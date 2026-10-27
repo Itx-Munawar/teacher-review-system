@@ -30,13 +30,13 @@ const sendModerationDigest = async (force = false) => {
         const [pendingQuestions] = await db.query('SELECT COUNT(*) as count FROM questions WHERE is_approved = 0');
         const [pendingAnswers] = await db.query('SELECT COUNT(*) as count FROM question_answers WHERE is_approved = 0');
         const [pendingCourses] = await db.query("SELECT COUNT(*) as count FROM custom_courses WHERE status = 'pending'");
-        let openReports = 0;
+        let pendingReplies = 0;
         try {
-            const [rep] = await db.query("SELECT COUNT(*) as count FROM review_reports WHERE status = 'open'");
-            openReports = rep[0].count || 0;
+            const [rep] = await db.query('SELECT COUNT(*) as count FROM review_replies WHERE is_approved = 0');
+            pendingReplies = rep[0].count || 0;
         } catch (_) { /* table may not exist yet */ }
 
-        const total = pendingReviews[0].count + pendingQuestions[0].count + pendingAnswers[0].count + openReports;
+        const total = pendingReviews[0].count + pendingQuestions[0].count + pendingAnswers[0].count + pendingReplies;
         if (total === 0) {
             await db.query(
                 "INSERT INTO audit_logs (action, details, ip_address) VALUES ('DIGEST_SENT', ?, 'system')",
@@ -50,7 +50,7 @@ const sendModerationDigest = async (force = false) => {
             ['Questions awaiting approval', pendingQuestions[0].count],
             ['Answers awaiting approval', pendingAnswers[0].count],
             ['Course names awaiting review', pendingCourses[0].count],
-            ['Open reader reports', openReports]
+            ['Replies awaiting approval', pendingReplies]
         ].filter(([, n]) => n > 0);
 
         const html = `

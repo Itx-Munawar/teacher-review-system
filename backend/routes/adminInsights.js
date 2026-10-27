@@ -1,8 +1,7 @@
-// Admin read-outs: reader reports, stats, audit log, search gaps.
+// Admin read-outs: stats, audit log, search gaps.
 
 const express = require('express');
 const db = require('../db');
-const { body, validationResult } = require('express-validator');
 const { csrfValidate } = require('../csrf');
 const state = require('../state');
 const { clampInt } = require('../lib/validation');
@@ -10,81 +9,6 @@ const { verifyAdmin } = require('../lib/auth');
 const { createAuditLog } = require('../lib/audit');
 
 const router = express.Router();
-
-// ========== READER REPORTS (admin) ==========
-// The public report button used to write rows that no endpoint ever read, so
-// reports could only be counted. These two routes let a moderator see the
-// reason and close it out.
-
-router.get('/api/admin/reports', verifyAdmin, async (req, res) => {
-    const page = clampInt(req.query.page, 1, 1, 100000);
-    const limit = clampInt(req.query.limit, 50, 1, 100);
-    const offset = (page - 1) * limit;
-
-    if (!state.reviewReportsReady) {
-        return res.json({
-            reports: [],
-            pagination: { page, limit, total: 0, totalPages: 1 },
-            available: false
-        });
-    }
-
-    const status = ['open', 'resolved', 'dismissed'].includes(req.query.status) ? req.query.status : 'open';
-    try {
-        const [reports] = await db.query(`
-            SELECT rr.id, rr.review_id, rr.reason, rr.status, rr.created_at,
-                   r.comment, r.user_name, r.is_approved,
-                   t.id AS teacher_id, t.name AS teacher_name
-            FROM review_reports rr
-            JOIN reviews r ON r.id = rr.review_id
-            JOIN teachers t ON t.id = r.teacher_id
-            WHERE rr.status = ?
-            ORDER BY rr.created_at DESC
-            LIMIT ? OFFSET ?
-        `, [status, limit, offset]);
-
-        const [countResult] = await db.query(
-            'SELECT COUNT(*) as total FROM review_reports WHERE status = ?',
-            [status]
-        );
-        const total = countResult[0].total || 0;
-
-        res.json({
-            reports,
-            pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
-            available: true
-        });
-    } catch (error) {
-        console.error('Error fetching review reports:', error);
-        res.status(500).json({ error: 'Database error' });
-    }
-});
-
-// PUT /api/admin/reports/:id - close a report (or reopen it)
-router.put('/api/admin/reports/:id', verifyAdmin, csrfValidate, [
-    body('status').isIn(['open', 'resolved', 'dismissed']).withMessage('Invalid report status')
-], async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
-    if (!state.reviewReportsReady) {
-        return res.status(503).json({ error: 'Reporting is temporarily unavailable.' });
-    }
-
-    const reportId = Number.parseInt(req.params.id, 10);
-    if (!Number.isInteger(reportId) || reportId < 1) {
-        return res.status(400).json({ error: 'Invalid report ID' });
-    }
-
-    try {
-        const [result] = await db.query('UPDATE review_reports SET status = ? WHERE id = ?', [req.body.status, reportId]);
-        if (result.affectedRows === 0) return res.status(404).json({ error: 'Report not found' });
-        await createAuditLog(req.admin.id, 'REVIEW_REPORT', `Report ${reportId} marked ${req.body.status}`, req.ip);
-        res.json({ success: true, message: `Report ${req.body.status}` });
-    } catch (error) {
-        console.error('Error updating review report:', error);
-        res.status(500).json({ error: 'Database error' });
-    }
-});
 
 router.get('/api/admin/stats', verifyAdmin, async (req, res) => {
     try {
@@ -114,14 +38,14 @@ router.get('/api/admin/stats', verifyAdmin, async (req, res) => {
             last_sweep = null;
         }
 
-        // Open reader reports drive the badge on the Reports tab.
-        let openReports = 0;
-        if (state.reviewReportsReady) {
+        // Pending replies drive the badge on the Replies tab.
+        let pendingReplies = 0;
+        if (state.reviewRepliesReady) {
             try {
-                const [reportCount] = await db.query("SELECT COUNT(*) as count FROM review_reports WHERE status = 'open'");
-                openReports = reportCount[0].count || 0;
-            } catch (reportErr) {
-                openReports = 0;
+                const [replyCount] = await db.query('SELECT COUNT(*) as count FROM review_replies WHERE is_approved = 0');
+                pendingReplies = replyCount[0].count || 0;
+            } catch (replyErr) {
+                pendingReplies = 0;
             }
         }
 
@@ -130,7 +54,7 @@ router.get('/api/admin/stats', verifyAdmin, async (req, res) => {
             total_reviews: reviewCount[0].count,
             reviews_last_week: recentReviews[0].count,
             pending_reviews: pendingCount[0].count,
-            open_reports: openReports,
+            pending_replies: pendingReplies,
             last_sweep
         });
     } catch (error) {

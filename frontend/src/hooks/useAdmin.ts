@@ -26,12 +26,14 @@ import {
     reviewCustomCourse,
     getAdminTeacherDetail,
     cleanTeacherImages,
-    getAdminReports,
-    updateReportStatus
+    getAdminReplies,
+    updateReply,
+    deleteReply,
+    type ReplyStatusFilter
 } from '../services/api';
 import { debounce } from '../utils/debounce';
 import { mapTeacherDetail } from '../utils/teacherDetail';
-import type { Teacher, TeacherDetail, AdminReview, AdminQuestion, CustomCourse, AdminTeacherDetail, AdminReport, AdminStats, Toast } from '../types';
+import type { Teacher, TeacherDetail, AdminReview, AdminQuestion, CustomCourse, AdminTeacherDetail, AdminReply, AdminStats, Toast } from '../types';
 
 interface UseAdminOptions {
     location: Location;
@@ -145,40 +147,40 @@ export function useAdmin({
     // When true, the admin reviews list fetches only pending (unapproved) rows.
     const [reviewsPendingOnly, setReviewsPendingOnly] = useState(false);
 
-    // Reader reports (Reports tab)
-    const [adminReports, setAdminReports] = useState<AdminReport[]>([]);
-    const [adminReportsPage, setAdminReportsPage] = useState(1);
-    const [adminReportsTotalPages, setAdminReportsTotalPages] = useState(1);
-    const [adminLoadingMoreReports, setAdminLoadingMoreReports] = useState(false);
-    const [adminReportsStatus, setAdminReportsStatus] = useState<'open' | 'resolved' | 'dismissed'>('open');
+    // Review replies (Replies tab)
+    const [adminReplies, setAdminReplies] = useState<AdminReply[]>([]);
+    const [adminRepliesPage, setAdminRepliesPage] = useState(1);
+    const [adminRepliesTotalPages, setAdminRepliesTotalPages] = useState(1);
+    const [adminLoadingMoreReplies, setAdminLoadingMoreReplies] = useState(false);
+    const [adminRepliesStatus, setAdminRepliesStatus] = useState<ReplyStatusFilter>('pending');
 
     // Mirror the loaded-page counters into refs so loadAdminData can reload
     // every page the admin has open without re-creating the callback itself.
     const adminReviewsPageRef = useRef(adminReviewsPage);
     const adminQuestionsPageRef = useRef(adminQuestionsPage);
-    const adminReportsPageRef = useRef(adminReportsPage);
+    const adminRepliesPageRef = useRef(adminRepliesPage);
     // Read inside loadAdminData without making it a dependency: the status
     // switch already fetches page 1, and an identity change here would make
     // the login effect fire a second, redundant round of requests.
-    const adminReportsStatusRef = useRef(adminReportsStatus);
+    const adminRepliesStatusRef = useRef(adminRepliesStatus);
     useEffect(() => { adminReviewsPageRef.current = adminReviewsPage; }, [adminReviewsPage]);
     useEffect(() => { adminQuestionsPageRef.current = adminQuestionsPage; }, [adminQuestionsPage]);
-    useEffect(() => { adminReportsPageRef.current = adminReportsPage; }, [adminReportsPage]);
-    useEffect(() => { adminReportsStatusRef.current = adminReportsStatus; }, [adminReportsStatus]);
+    useEffect(() => { adminRepliesPageRef.current = adminRepliesPage; }, [adminRepliesPage]);
+    useEffect(() => { adminRepliesStatusRef.current = adminRepliesStatus; }, [adminRepliesStatus]);
 
     const loadAdminData = useCallback(async () => {
-        // Re-fetch every review/Q&A/report page the admin already has open, not
+        // Re-fetch every review/Q&A/reply page the admin already has open, not
         // just page 1: resetting to a single page after a save collapsed the
         // list and yanked the viewport to the top of the page.
         const reviewPages = Array.from({ length: Math.max(adminReviewsPageRef.current, 1) }, (_, i) => i + 1);
         const questionPages = Array.from({ length: Math.max(adminQuestionsPageRef.current, 1) }, (_, i) => i + 1);
-        const reportPages = Array.from({ length: Math.max(adminReportsPageRef.current, 1) }, (_, i) => i + 1);
+        const replyPages = Array.from({ length: Math.max(adminRepliesPageRef.current, 1) }, (_, i) => i + 1);
 
-        const [reviewsResult, questionsResult, coursesResult, reportsResult] = await Promise.allSettled([
+        const [reviewsResult, questionsResult, coursesResult, repliesResult] = await Promise.allSettled([
             Promise.all(reviewPages.map((p) => getAdminReviews(p, 50, reviewsPendingOnly))),
             Promise.all(questionPages.map((p) => getAdminQuestions(p, 50))),
             getAdminCustomCourses(),
-            Promise.all(reportPages.map((p) => getAdminReports(p, 50, adminReportsStatusRef.current)))
+            Promise.all(replyPages.map((p) => getAdminReplies(p, 50, adminRepliesStatusRef.current)))
         ]);
 
         let reviewsData: AdminReview[] = [];
@@ -220,25 +222,25 @@ export function useAdmin({
             console.error('Error loading custom courses:', coursesResult.reason);
         }
 
-        let reportsData: AdminReport[] = [];
-        let reportsTotalPages = 1;
-        if (reportsResult.status === 'fulfilled') {
-            for (const reportsRes of reportsResult.value) {
-                const d = reportsRes.data;
+        let repliesData: AdminReply[] = [];
+        let repliesTotalPages = 1;
+        if (repliesResult.status === 'fulfilled') {
+            for (const repliesRes of repliesResult.value) {
+                const d = repliesRes.data;
                 if (!d) continue;
-                reportsData = reportsData.concat(d.reports || []);
-                reportsTotalPages = d.pagination?.totalPages || reportsTotalPages;
+                repliesData = repliesData.concat(d.replies || []);
+                repliesTotalPages = d.pagination?.totalPages || repliesTotalPages;
             }
         } else {
-            console.error('Error loading review reports:', reportsResult.reason);
+            console.error('Error loading review replies:', repliesResult.reason);
         }
 
         setAdminReviewsTotalPages(totalPages);
         setAdminQuestionsTotalPages(questionsTotalPages);
-        setAdminReportsTotalPages(reportsTotalPages);
+        setAdminRepliesTotalPages(repliesTotalPages);
         setReviewsForModeration(reviewsData);
         setAdminQuestions(questionsData);
-        setAdminReports(reportsData);
+        setAdminReplies(repliesData);
         // No page-counter reset here: every already-loaded page was re-fetched
         // above, so the list keeps its length and the viewport stays put.
 
@@ -312,47 +314,62 @@ export function useAdmin({
         }
     }, [adminQuestionsPage, adminQuestionsTotalPages, adminLoadingMoreQuestions, showToast]);
 
-    const handleLoadMoreReports = useCallback(async () => {
-        const nextPage = adminReportsPage + 1;
-        if (nextPage > adminReportsTotalPages || adminLoadingMoreReports) return;
-        setAdminLoadingMoreReports(true);
+    const handleLoadMoreReplies = useCallback(async () => {
+        const nextPage = adminRepliesPage + 1;
+        if (nextPage > adminRepliesTotalPages || adminLoadingMoreReplies) return;
+        setAdminLoadingMoreReplies(true);
         try {
-            const reportsRes = await getAdminReports(nextPage, 50, adminReportsStatus);
-            const reportsData = reportsRes.data?.reports || [];
-            setAdminReports(prev => [...prev, ...reportsData]);
-            setAdminReportsPage(nextPage);
+            const repliesRes = await getAdminReplies(nextPage, 50, adminRepliesStatus);
+            const repliesData = repliesRes.data?.replies || [];
+            setAdminReplies(prev => [...prev, ...repliesData]);
+            setAdminRepliesPage(nextPage);
         } catch (error) {
-            console.error('Error loading more reports:', error);
-            showToast('Failed to load more reports', 'error');
+            console.error('Error loading more replies:', error);
+            showToast('Failed to load more replies', 'error');
         } finally {
-            setAdminLoadingMoreReports(false);
+            setAdminLoadingMoreReplies(false);
         }
-    }, [adminReportsPage, adminReportsTotalPages, adminLoadingMoreReports, adminReportsStatus, showToast]);
+    }, [adminRepliesPage, adminRepliesTotalPages, adminLoadingMoreReplies, adminRepliesStatus, showToast]);
 
-    const handleReportsStatusChange = useCallback(async (status: 'open' | 'resolved' | 'dismissed') => {
-        setAdminReportsStatus(status);
-        setAdminReportsPage(1);
+    const handleRepliesStatusChange = useCallback(async (status: ReplyStatusFilter) => {
+        setAdminRepliesStatus(status);
+        setAdminRepliesPage(1);
         try {
-            const res = await getAdminReports(1, 50, status);
-            setAdminReports(res.data?.reports || []);
-            setAdminReportsTotalPages(res.data?.pagination?.totalPages || 1);
+            const res = await getAdminReplies(1, 50, status);
+            setAdminReplies(res.data?.replies || []);
+            setAdminRepliesTotalPages(res.data?.pagination?.totalPages || 1);
         } catch (error) {
-            console.error('Error filtering reports:', error);
-            showToast('Failed to load reports', 'error');
+            console.error('Error filtering replies:', error);
+            showToast('Failed to load replies', 'error');
         }
     }, [showToast]);
 
-    const handleUpdateReportStatus = useCallback(async (id: number, status: 'open' | 'resolved' | 'dismissed') => {
+    const handleSetReplyApproved = useCallback(async (id: number, approved: boolean) => {
         setAdminMutationLoading(true);
         try {
-            await updateReportStatus(id, status);
-            showToast(`Report marked ${status}`, 'success');
+            await updateReply(id, { is_approved: approved });
+            showToast(approved ? 'Reply approved' : 'Reply hidden', 'success');
             // The row leaves the current filter, so refresh both the list and
-            // the open-report badge rather than patching local state.
+            // the pending-replies badge rather than patching local state.
             await loadAdminData();
         } catch (error) {
-            console.error('Error updating report:', error);
-            showToast('Failed to update report', 'error');
+            console.error('Error updating reply:', error);
+            showToast('Failed to update reply', 'error');
+        } finally {
+            setAdminMutationLoading(false);
+        }
+    }, [loadAdminData, showToast]);
+
+    const handleDeleteReply = useCallback(async (id: number) => {
+        if (!window.confirm('Delete this reply permanently?')) return;
+        setAdminMutationLoading(true);
+        try {
+            await deleteReply(id);
+            showToast('Reply deleted', 'success');
+            await loadAdminData();
+        } catch (error) {
+            console.error('Error deleting reply:', error);
+            showToast('Failed to delete reply', 'error');
         } finally {
             setAdminMutationLoading(false);
         }
@@ -774,27 +791,28 @@ export function useAdmin({
         setCustomCourses,
         reviewsPendingOnly,
         setReviewsPendingOnly,
-        adminReports,
-        setAdminReports,
-        adminReportsPage,
-        setAdminReportsPage,
-        adminReportsTotalPages,
-        setAdminReportsTotalPages,
-        adminLoadingMoreReports,
-        setAdminLoadingMoreReports,
-        adminReportsStatus,
-        setAdminReportsStatus,
+        adminReplies,
+        setAdminReplies,
+        adminRepliesPage,
+        setAdminRepliesPage,
+        adminRepliesTotalPages,
+        setAdminRepliesTotalPages,
+        adminLoadingMoreReplies,
+        setAdminLoadingMoreReplies,
+        adminRepliesStatus,
+        setAdminRepliesStatus,
         adminReviewsPageRef,
         adminQuestionsPageRef,
-        adminReportsPageRef,
-        adminReportsStatusRef,
+        adminRepliesPageRef,
+        adminRepliesStatusRef,
         loadAdminData,
         handleTogglePendingOnly,
         handleLoadMoreReviews,
         handleLoadMoreQuestions,
-        handleLoadMoreReports,
-        handleReportsStatusChange,
-        handleUpdateReportStatus,
+        handleLoadMoreReplies,
+        handleRepliesStatusChange,
+        handleSetReplyApproved,
+        handleDeleteReply,
         handleReviewCustomCourse,
         handleLoadTeacherDetail,
         checkAdminLogin,

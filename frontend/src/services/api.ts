@@ -153,9 +153,9 @@ export const submitReview = (data: {
     return api.post('/reviews', reviewData);
 };
 
-// Report a published review for moderator attention.
-export const reportReview = (reviewId: number, reason: string) => {
-    return api.post(`/reviews/${reviewId}/report`, { reason });
+// Reply to a published review. Replies are moderated before they appear.
+export const replyToReview = (reviewId: number, reply: string, userName?: string) => {
+    return api.post(`/reviews/${reviewId}/replies`, { reply, user_name: userName || undefined });
 };
 
 
@@ -261,14 +261,20 @@ export const deleteAnswer = (id: number) => {
     return api.delete(`/admin/answers/${id}`);
 };
 
-// ========== READER REPORTS (admin) ==========
+// ========== REVIEW REPLIES (admin) ==========
 
-export const getAdminReports = (page: number = 1, limit: number = 50, status: 'open' | 'resolved' | 'dismissed' = 'open') => {
-    return api.get(`/admin/reports?page=${page}&limit=${limit}&status=${status}`);
+export type ReplyStatusFilter = 'pending' | 'approved';
+
+export const getAdminReplies = (page: number = 1, limit: number = 50, status: ReplyStatusFilter = 'pending') => {
+    return api.get(`/admin/replies?page=${page}&limit=${limit}&status=${status}`);
 };
 
-export const updateReportStatus = (id: number, status: 'open' | 'resolved' | 'dismissed') => {
-    return api.put(`/admin/reports/${id}`, { status });
+export const updateReply = (id: number, data: { reply?: string; is_approved?: boolean }) => {
+    return api.put(`/admin/replies/${id}`, data);
+};
+
+export const deleteReply = (id: number) => {
+    return api.delete(`/admin/replies/${id}`);
 };
 
 export const getAdminStats = () => {

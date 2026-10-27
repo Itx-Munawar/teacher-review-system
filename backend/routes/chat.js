@@ -84,10 +84,11 @@ const SITE_HELP = `
 Facts about the website (use these for "how do I..." questions):
 - Search for a teacher by name or department in the search box; the list can be sorted (name / most reviews) and filtered by department. There are also department pages and course pages.
 - Each teacher page shows approved student reviews, the courses students mentioned, related teachers, and a Q&A section.
-- "Write a review" on a teacher page: anonymous by default (a display name is optional), at least 15 characters, and you can tag the course(s) you took (a missing course can be suggested). Every review is checked by a moderator before it appears.
+- "Write a review" on a teacher page: anonymous by default (a display name is optional), at least 5 characters, and you can tag the course(s) you took (a missing course can be suggested). Every review is checked by a moderator before it appears.
 - Q&A: students can ask a question about a teacher and others can answer; questions and answers are moderated too. There is also a site-wide Q&A page.
 - Compare: tap the "+" on teacher cards to compare up to 3 teachers side by side.
-- "Report this review" on a review sends it to the moderators.
+- "Reply" under any published review lets you respond to it (anonymous, a name is optional); replies appear after a moderator approves them.
+- To raise a problem with a review, email the contact address below.
 - No account is needed. Contact: umt.teacher.reviews@gmail.com (also the Contact page). Privacy, Terms and DMCA pages are linked in the footer.
 - Reviews are student opinions, not official university statements.`;
 

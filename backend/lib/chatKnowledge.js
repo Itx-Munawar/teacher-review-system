@@ -306,7 +306,7 @@ const ASPECT_REGEX = Object.fromEntries(Object.entries(ASPECTS).map(([k, stems])
 const detectAspects = (text) => Object.keys(ASPECT_REGEX).filter((k) => ASPECT_REGEX[k].test(String(text || '')));
 
 // "How do I write a review?" needs the site facts, not 400 reviews.
-const SITE_HELP_REGEX = /\b(website|site|app|install|account|log ?in|sign ?up|password|contact|email|privacy|terms|dmca|delete|remove|report|compare|search|sort|filter|anonymous|post|submit|moderat\w*|write|likh\w*|add|suggest)\b/i;
+const SITE_HELP_REGEX = /\b(website|site|app|install|account|log ?in|sign ?up|password|contact|email|privacy|terms|dmca|delete|remove|report|repl(?:y|ies)|compare|search|sort|filter|anonymous|post|submit|moderat\w*|write|likh\w*|add|suggest)\b/i;
 const RECOMMEND_REGEX = /\b(best|acha|achi|achay|ache|achey|worst|recommend\w*|top|kon|kaun|konsa|konsi|kis|which|who|easy|asan|aasan|tough|mushkil|lenient|strict)\b/i;
 const isSiteHelpQuestion = (text, aspects) => aspects.length === 0
     && SITE_HELP_REGEX.test(text)

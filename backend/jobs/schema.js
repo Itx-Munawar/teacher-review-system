@@ -117,25 +117,27 @@ const runSchemaBootstrap = async () => {
             console.error('⚠️ Could not relax reviews.rating:', ratingErr.message);
         }
 
-        // Reader reports on published reviews. No FK on review_id, matching the
-        // questions table, so the bootstrap works with either INT type.
+        // Replies under published reviews (moderated like Q&A answers). No FK
+        // on review_id, matching the questions table, so the bootstrap works
+        // with either INT type. The retired review_reports table is left alone.
         try {
             await db.query(`
-                CREATE TABLE IF NOT EXISTS review_reports (
+                CREATE TABLE IF NOT EXISTS review_replies (
                     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
                     review_id INT UNSIGNED NOT NULL,
-                    reason VARCHAR(300) NOT NULL,
-                    reporter_hash CHAR(64) NOT NULL,
-                    status ENUM('open','resolved','dismissed') NOT NULL DEFAULT 'open',
+                    reply TEXT NOT NULL,
+                    user_name VARCHAR(100) NOT NULL DEFAULT 'Anonymous',
+                    is_approved TINYINT(1) NOT NULL DEFAULT 0,
+                    moderation_flag VARCHAR(20) DEFAULT NULL,
                     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (id),
-                    UNIQUE KEY uq_review_report_once (review_id, reporter_hash),
-                    KEY idx_review_reports_status (status)
+                    KEY idx_review_replies_review (review_id, is_approved),
+                    KEY idx_review_replies_pending (is_approved, created_at)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             `);
-            state.reviewReportsReady = true;
-        } catch (reportsErr) {
-            console.error('⚠️ Could not ensure review_reports table:', reportsErr.message);
+            state.reviewRepliesReady = true;
+        } catch (repliesErr) {
+            console.error('⚠️ Could not ensure review_replies table:', repliesErr.message);
         }
 
         // Session revocation switch (see verifyAdmin). Existing admins start at
@@ -221,7 +223,7 @@ const runSchemaBootstrap = async () => {
 
         schemaBootstrapError = null;
         schemaBootstrapDone = true;
-        console.log('✅ Schema bootstrap complete (questions, question_answers, custom_courses, review_reports, cleanup)');
+        console.log('✅ Schema bootstrap complete (questions, question_answers, custom_courses, review_replies, cleanup)');
         // Keep the audit trail bounded (and the hashed IPs with it).
         pruneAuditLogs();
         pruneSearchGaps();
