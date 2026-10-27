@@ -71,7 +71,7 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
     onChangeReviewQuery,
     reviewQueryLoading = false,
 }) => {
-    const reviewSort = selectedTeacher.review_sort || 'newest';
+    const reviewSort = selectedTeacher.review_sort || 'helpful';
     const reviewCourse = selectedTeacher.review_course || null;
     // "Most helpful" keeps the server's order; otherwise newest first.
     const sortedReviews = useMemo(
@@ -305,8 +305,8 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                                     onChange={(e) => onChangeReviewQuery?.({ sort: e.target.value === 'helpful' ? 'helpful' : 'newest', course: reviewCourse })}
                                     aria-label="Sort reviews"
                                 >
-                                    <option value="newest">Newest</option>
                                     <option value="helpful">Most helpful</option>
+                                    <option value="newest">Newest</option>
                                 </select>
                             </label>
                         </div>

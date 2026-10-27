@@ -103,9 +103,17 @@ describe('TeacherDetailView extras', () => {
         expect(btn.textContent).toContain('2');
     });
 
-    it('sorts newest first by default but keeps server order for "Most helpful"', () => {
+    it('sorts newest first when "Newest" is chosen', () => {
         renderView(makeTeacher());
         expect(commentsInOrder()).toEqual(['Newest review.', 'Middle review.', 'Oldest but most helpful.']);
+    });
+
+    it('defaults to "Most helpful" and keeps the server order', () => {
+        renderView(makeTeacher({ review_sort: undefined }));
+        const select = screen.getByRole('combobox', { name: /sort reviews/i }) as HTMLSelectElement;
+        expect(select.value).toBe('helpful');
+        expect(select.options[0].value).toBe('helpful');
+        expect(commentsInOrder()).toEqual(['Oldest but most helpful.', 'Newest review.', 'Middle review.']);
     });
 
     it('does not re-sort the helpful order client-side', () => {

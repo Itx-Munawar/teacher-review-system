@@ -231,7 +231,8 @@ router.get('/api/teachers/:id', async (req, res) => {
         const reviewLimit = clampInt(req.query.review_limit, 50, 1, 100);
         const reviewOffset = (reviewPage - 1) * reviewLimit;
         // Optional ordering and course filter for the reviews list.
-        const reviewSort = req.query.review_sort === 'helpful' && state.reviewVotesReady ? 'helpful' : 'newest';
+        // Default is "most helpful" (ties fall back to newest); ?review_sort=newest opts out.
+        const reviewSort = req.query.review_sort !== 'newest' && state.reviewVotesReady ? 'helpful' : 'newest';
         const reviewCourse = typeof req.query.review_course === 'string' ? req.query.review_course.trim().slice(0, 200) : '';
 
         // Get teacher

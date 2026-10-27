@@ -27,7 +27,7 @@ export const mapTeacherDetail = (data: TeacherDetailResponse, fallback?: Teacher
         reviews: reviewsList,
         review_pagination: data.review_pagination,
         filtered_reviews: data.filtered_reviews ?? totalReviews,
-        review_sort: data.review_sort || 'newest',
+        review_sort: data.review_sort || 'helpful',
         review_course: data.review_course || null,
         course_counts: data.course_counts || fallback?.course_counts,
     };

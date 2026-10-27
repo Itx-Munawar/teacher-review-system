@@ -100,7 +100,8 @@ export const getTeacherDetail = (
     query?: { sort?: 'newest' | 'helpful'; course?: string | null }
 ) => {
     const params = new URLSearchParams({ review_page: String(reviewPage), review_limit: String(reviewLimit) });
-    if (query?.sort === 'helpful') params.set('review_sort', 'helpful');
+    // The server defaults to "most helpful"; only "newest" needs to be asked for.
+    if (query?.sort === 'newest') params.set('review_sort', 'newest');
     if (query?.course) params.set('review_course', query.course);
     return api.get(`/teachers/${id}?${params.toString()}`);
 };

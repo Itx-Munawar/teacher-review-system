@@ -104,13 +104,16 @@ describe('review extras, summaries, analytics and errors', { skip: SKIP }, () =>
             const voters = [createClient(server.baseUrl), createClient(server.baseUrl), createClient(server.baseUrl)];
             for (const v of voters) await v.post(`/api/reviews/${reviewIds[2]}/helpful`, {});
 
-            const newest = await createClient(server.baseUrl).get(`/api/teachers/${waqar}`);
+            const newest = await createClient(server.baseUrl).get(`/api/teachers/${waqar}?review_sort=newest`);
             assert.equal(newest.body.reviews[0].id, reviewIds[3]);
             assert.equal(newest.body.review_sort, 'newest');
 
-            const helpful = await createClient(server.baseUrl).get(`/api/teachers/${waqar}?review_sort=helpful`);
-            assert.equal(helpful.body.review_sort, 'helpful');
-            assert.deepEqual(helpful.body.reviews.slice(0, 2).map((r) => r.id), [reviewIds[2], reviewIds[0]]);
+            // Most helpful is the default.
+            for (const url of [`/api/teachers/${waqar}`, `/api/teachers/${waqar}?review_sort=helpful`]) {
+                const helpful = await createClient(server.baseUrl).get(url);
+                assert.equal(helpful.body.review_sort, 'helpful');
+                assert.deepEqual(helpful.body.reviews.slice(0, 2).map((r) => r.id), [reviewIds[2], reviewIds[0]]);
+            }
         });
     });
 
