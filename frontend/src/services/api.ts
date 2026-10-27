@@ -395,7 +395,7 @@ export const sendChatMessage = (data: {
     message: string;
     history: { role: 'user' | 'assistant'; text: string }[];
     teacherId?: number | null;
-}) => api.post<ChatReply>('/chat', data, { timeout: 45000 });
+}) => api.post<ChatReply>('/chat', data, { timeout: 60000 });
 
 /** 👍 (1) or 👎 (-1) for one answer. Sends that question and answer to the admins. */
 export const sendChatFeedback = (data: {

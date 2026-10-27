@@ -79,6 +79,17 @@ describe('ChatWidget', () => {
         expect(screen.queryByText('Busy, try again.')).toBeNull();
     });
 
+    it('quietly retries once when the assistant is busy', async () => {
+        mockedSend
+            .mockRejectedValueOnce({ response: { data: { error: 'The assistant is busy right now.', code: 'busy' } } })
+            .mockReturnValueOnce(ok('Answer after retry'));
+        render(<ChatWidget pageTeacher={null} onOpenTeacher={() => {}} />);
+        openAndAsk('hareem aslam?');
+        expect(await screen.findByText('Answer after retry', {}, { timeout: 7000 })).toBeInTheDocument();
+        expect(mockedSend).toHaveBeenCalledTimes(2);
+        expect(screen.queryByText('The assistant is busy right now.')).toBeNull();
+    }, 10000);
+
     it('offers a retry when the page reloaded mid-question', async () => {
         sessionStorage.setItem('trs-chat-v1', JSON.stringify([
             { id: 1, role: 'assistant', text: 'hi', local: true },

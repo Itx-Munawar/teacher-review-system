@@ -7,8 +7,9 @@
 const { logJson: log } = require('./log');
 
 const API_BASE = String(process.env.GEMINI_API_BASE || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/+$/, '');
-// Flash-Lite models have the largest free daily quota.
-const MODELS = String(process.env.GEMINI_MODELS || 'gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-2.5-flash-lite')
+// Flash-Lite models have the largest free daily quota; 2.5 Flash is a last
+// resort with its own (smaller) separate quota.
+const MODELS = String(process.env.GEMINI_MODELS || 'gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-2.5-flash-lite,gemini-2.5-flash')
     .split(',').map((m) => m.trim()).filter(Boolean);
 // Per-model wait. A healthy model answers in a few seconds; one that hangs
 // longer is overloaded, and the next model is a better bet than waiting.

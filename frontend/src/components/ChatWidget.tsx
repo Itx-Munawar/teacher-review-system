@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { sendChatMessage, sendChatFeedback, type ChatTeacherRef } from '../services/api';
+
+/** Pause before the automatic retry of a busy/failed answer. */
+export const CHAT_RETRY_DELAY_MS = 4000;
 import Icon from './Icon';
 import './ChatWidget.css';
 
@@ -184,7 +187,19 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ pageTeacher, onOpenTeacher, rai
         setSending(true);
         const conversation = conversationRef.current;
         try {
-            const res = await sendChatMessage({ message, history, teacherId: pageTeacher?.id ?? null });
+            const payload = { message, history, teacherId: pageTeacher?.id ?? null };
+            let res;
+            try {
+                res = await sendChatMessage(payload);
+            } catch (firstErr) {
+                // The free Gemini tier is bursty: one quiet retry after a short
+                // pause usually succeeds, so only show an error if that fails too.
+                const code = (firstErr as { response?: { data?: { code?: string } } }).response?.data?.code;
+                if (code !== 'busy' && code !== 'upstream') throw firstErr;
+                await new Promise((resolve) => setTimeout(resolve, CHAT_RETRY_DELAY_MS));
+                if (conversation !== conversationRef.current) return;
+                res = await sendChatMessage(payload);
+            }
             if (conversation !== conversationRef.current) return;
             setMessages((prev) => [...prev, { id: ++nextId, role: 'assistant', text: res.data.reply, teachers: res.data.teachers, question: message, replyToken: res.data.replyToken }]);
         } catch (err) {
