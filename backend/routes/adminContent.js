@@ -634,9 +634,17 @@ router.get('/api/admin/replies', verifyAdmin, async (req, res) => {
     }
 });
 
-// PUT /api/admin/replies/:id - approve/unapprove (or edit) a reply
+// PUT /api/admin/replies/:id - edit the text/name and/or approve or hide a reply
 router.put('/api/admin/replies/:id', verifyAdmin, csrfValidate, [
-    body('reply').optional().isString().isLength({ min: 1, max: 500 }).withMessage('Reply must be 1-500 characters'),
+    body('reply').optional()
+        .isString().withMessage('Reply must be text')
+        .bail()
+        .customSanitizer((value) => value.trim())
+        .isLength({ min: 1, max: 500 }).withMessage('Reply must be 1-500 characters'),
+    body('user_name').optional({ nullable: true })
+        .isString().withMessage('Name must be text')
+        .bail()
+        .isLength({ max: 100 }).withMessage('Name too long'),
     body('is_approved').optional().isBoolean().withMessage('is_approved must be a boolean')
 ], async (req, res) => {
     const errors = validationResult(req);
@@ -645,13 +653,18 @@ router.put('/api/admin/replies/:id', verifyAdmin, csrfValidate, [
     try {
         const replyId = Number.parseInt(req.params.id, 10);
         if (!Number.isInteger(replyId) || replyId < 1) return res.status(400).json({ error: 'Invalid reply ID' });
-        const { reply, is_approved } = req.body;
+        const { reply, user_name, is_approved } = req.body;
 
         const updates = [];
         const values = [];
         if (reply !== undefined) {
             updates.push('reply = ?');
             values.push(String(reply).trim().slice(0, 500));
+        }
+        if (user_name !== undefined) {
+            // A blank name falls back to Anonymous, matching new submissions.
+            updates.push('user_name = ?');
+            values.push(String(user_name || '').trim().slice(0, 100) || 'Anonymous');
         }
         if (is_approved !== undefined) {
             updates.push('is_approved = ?');

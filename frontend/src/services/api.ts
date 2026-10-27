@@ -269,7 +269,7 @@ export const getAdminReplies = (page: number = 1, limit: number = 50, status: Re
     return api.get(`/admin/replies?page=${page}&limit=${limit}&status=${status}`);
 };
 
-export const updateReply = (id: number, data: { reply?: string; is_approved?: boolean }) => {
+export const updateReply = (id: number, data: { reply?: string; user_name?: string; is_approved?: boolean }) => {
     return api.put(`/admin/replies/${id}`, data);
 };
 

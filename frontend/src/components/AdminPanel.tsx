@@ -71,6 +71,8 @@ export interface AdminPanelProps {
     repliesStatus: 'pending' | 'approved';
     onRepliesStatusChange: (status: 'pending' | 'approved') => void | Promise<void>;
     onSetReplyApproved: (id: number, approved: boolean) => void | Promise<void>;
+    /** Save an edited reply; resolves true when the server accepted it. */
+    onUpdateReply: (id: number, data: { reply: string; user_name: string; is_approved?: boolean }) => Promise<boolean>;
     onDeleteReply: (id: number) => void | Promise<void>;
     onLoadMoreReplies: () => void;
     adminRepliesPage: number;
@@ -135,6 +137,7 @@ const AdminPanel = memo(({
     repliesStatus,
     onRepliesStatusChange,
     onSetReplyApproved,
+    onUpdateReply,
     onDeleteReply,
     onLoadMoreReplies,
     adminRepliesPage,
@@ -253,6 +256,34 @@ const AdminPanel = memo(({
     const [editingReviewId, setEditingReviewId] = useState<number | null>(null);
     const [editReviewComment, setEditReviewComment] = useState('');
     const [editReviewUserName, setEditReviewUserName] = useState('');
+
+    // Edit state (replies)
+    const [editingReplyId, setEditingReplyId] = useState<number | null>(null);
+    const [editReplyText, setEditReplyText] = useState('');
+    const [editReplyName, setEditReplyName] = useState('');
+
+    const startEditReply = (reply: AdminReply) => {
+        setEditingReplyId(reply.id);
+        setEditReplyText(reply.reply);
+        setEditReplyName(reply.user_name === 'Anonymous' ? '' : (reply.user_name || ''));
+    };
+
+    const cancelEditReply = () => {
+        setEditingReplyId(null);
+        setEditReplyText('');
+        setEditReplyName('');
+    };
+
+    const saveReply = async (id: number, approve?: boolean) => {
+        const text = editReplyText.trim();
+        if (!text) return;
+        const ok = await onUpdateReply(id, {
+            reply: text,
+            user_name: editReplyName.trim(),
+            ...(approve ? { is_approved: true } : {})
+        });
+        if (ok) cancelEditReply();
+    };
 
     // Bulk moderation selection (reviews tab)
     const [selectedReviewIds, setSelectedReviewIds] = useState<number[]>([]);
@@ -1217,6 +1248,9 @@ const AdminPanel = memo(({
                             <div key={reply.id} className="admin-item" style={{ alignItems: 'flex-start' }}>
                                 <div className="review-info">
                                     <strong>{reply.teacher_name || 'Deleted teacher'} · review #{reply.review_id}</strong>
+                                    {!Number(reply.is_approved) && (
+                                        <span className="admin-pending-badge" style={{ marginLeft: '8px' }}>Pending</span>
+                                    )}
                                     {reply.moderation_flag && (
                                         <span className={`admin-flag-badge admin-flag-${reply.moderation_flag}`} style={{ marginLeft: '8px' }}>
                                             {reply.moderation_flag.charAt(0).toUpperCase() + reply.moderation_flag.slice(1)}
@@ -1227,13 +1261,63 @@ const AdminPanel = memo(({
                                             ? <>&quot;{reply.review_comment}&quot; <small>— {reply.review_user_name || 'Anonymous'}{Number(reply.review_is_approved) ? '' : ' (review pending)'}</small></>
                                             : <em>The original review was deleted.</em>}
                                     </p>
-                                    <p style={{ margin: '6px 0 4px' }}>
-                                        <Icon name="message-circle" size={13} /> {reply.reply}
-                                    </p>
-                                    <small style={{ color: '#64748b' }}>
-                                        <Icon name="user" size={12} /> {reply.user_name || 'Anonymous'} | <Icon name="calendar" size={12} /> {new Date(reply.created_at).toLocaleDateString()}
-                                    </small>
+                                    {editingReplyId === reply.id ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+                                            <textarea
+                                                value={editReplyText}
+                                                onChange={(e) => setEditReplyText(e.target.value)}
+                                                placeholder="Reply text"
+                                                aria-label="Edit reply text"
+                                                maxLength={500}
+                                                className="search-input"
+                                                style={{ margin: 0, minHeight: '60px', resize: 'vertical' }}
+                                                autoFocus
+                                            />
+                                            <input
+                                                type="text"
+                                                value={editReplyName}
+                                                onChange={(e) => setEditReplyName(e.target.value)}
+                                                placeholder="Name (blank = Anonymous)"
+                                                aria-label="Edit reply author name"
+                                                maxLength={100}
+                                                className="search-input"
+                                                style={{ margin: 0 }}
+                                            />
+                                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                                <button
+                                                    onClick={() => saveReply(reply.id)}
+                                                    className="btn-submit"
+                                                    style={{ padding: '4px 12px' }}
+                                                    disabled={adminMutationLoading || !editReplyText.trim()}
+                                                >
+                                                    Save
+                                                </button>
+                                                {!Number(reply.is_approved) && (
+                                                    <button
+                                                        onClick={() => saveReply(reply.id, true)}
+                                                        className="btn-submit"
+                                                        style={{ padding: '4px 12px', background: '#10b981', borderColor: '#10b981' }}
+                                                        disabled={adminMutationLoading || !editReplyText.trim()}
+                                                    >
+                                                        Save &amp; Approve
+                                                    </button>
+                                                )}
+                                                <button onClick={cancelEditReply} className="btn-cancel" style={{ padding: '4px 12px' }}>Cancel</button>
+                                                <small style={{ color: '#64748b', marginLeft: 'auto' }}>{editReplyText.length}/500</small>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <p style={{ margin: '6px 0 4px' }}>
+                                                <Icon name="message-circle" size={13} /> {reply.reply}
+                                            </p>
+                                            <small style={{ color: '#64748b' }}>
+                                                <Icon name="user" size={12} /> {reply.user_name || 'Anonymous'} | <Icon name="calendar" size={12} /> {new Date(reply.created_at).toLocaleDateString()}
+                                            </small>
+                                        </>
+                                    )}
                                 </div>
+                                {editingReplyId !== reply.id && (
                                 <div className="admin-item-actions">
                                     {Number(reply.is_approved) ? (
                                         <button onClick={() => onSetReplyApproved(reply.id, false)} className="admin-mini-btn" disabled={adminMutationLoading}>
@@ -1244,10 +1328,14 @@ const AdminPanel = memo(({
                                             Approve
                                         </button>
                                     )}
+                                    <button onClick={() => startEditReply(reply)} className="admin-mini-btn" disabled={adminMutationLoading} aria-label={`Edit reply ${reply.id}`}>
+                                        Edit
+                                    </button>
                                     <button onClick={() => onDeleteReply(reply.id)} className="admin-mini-btn admin-mini-reject" disabled={adminMutationLoading}>
                                         Delete
                                     </button>
                                 </div>
+                                )}
                             </div>
                         ))
                     )}

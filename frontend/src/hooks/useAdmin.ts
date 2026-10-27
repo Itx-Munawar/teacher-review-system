@@ -360,6 +360,23 @@ export function useAdmin({
         }
     }, [loadAdminData, showToast]);
 
+    const handleUpdateReply = useCallback(async (id: number, data: { reply: string; user_name: string; is_approved?: boolean }): Promise<boolean> => {
+        setAdminMutationLoading(true);
+        try {
+            await updateReply(id, data);
+            showToast(data.is_approved ? 'Reply saved and approved' : 'Reply updated', 'success');
+            await loadAdminData();
+            return true;
+        } catch (error) {
+            console.error('Error editing reply:', error);
+            const axiosErr = error as { response?: { data?: { error?: string } } };
+            showToast(axiosErr.response?.data?.error || 'Failed to update reply', 'error');
+            return false;
+        } finally {
+            setAdminMutationLoading(false);
+        }
+    }, [loadAdminData, showToast]);
+
     const handleDeleteReply = useCallback(async (id: number) => {
         if (!window.confirm('Delete this reply permanently?')) return;
         setAdminMutationLoading(true);
@@ -812,6 +829,7 @@ export function useAdmin({
         handleLoadMoreReplies,
         handleRepliesStatusChange,
         handleSetReplyApproved,
+        handleUpdateReply,
         handleDeleteReply,
         handleReviewCustomCourse,
         handleLoadTeacherDetail,

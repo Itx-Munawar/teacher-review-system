@@ -269,6 +269,30 @@ describe('admin API', { skip: SKIP }, () => {
             assert.equal((await admin.put(`/api/admin/replies/${replyId}`, {})).status, 400);
         });
 
+        it('edits the text and name of a reply, and the public page shows the edit', async () => {
+            const res = await admin.put(`/api/admin/replies/${replyId}`, { reply: '  Edited: totally agree.  ', user_name: '  Moderator  ' });
+            assert.equal(res.status, 200, res.text);
+            const [row] = await dbQuery('SELECT reply, user_name, is_approved FROM review_replies WHERE id = ?', [replyId]);
+            assert.equal(row.reply, 'Edited: totally agree.');
+            assert.equal(row.user_name, 'Moderator');
+            assert.equal(row.is_approved, 1, 'editing alone does not change approval');
+            const pub = await createClient(server.baseUrl).get(`/api/teachers/${teacherId}`);
+            const review = pub.body.reviews.find((r) => r.id === reviewId);
+            assert.equal(review.replies[0].reply, 'Edited: totally agree.');
+            assert.equal(review.replies[0].user_name, 'Moderator');
+
+            const blankName = await admin.put(`/api/admin/replies/${replyId}`, { user_name: '' });
+            assert.equal(blankName.status, 200);
+            const [row2] = await dbQuery('SELECT user_name FROM review_replies WHERE id = ?', [replyId]);
+            assert.equal(row2.user_name, 'Anonymous');
+
+            assert.equal((await admin.put(`/api/admin/replies/${replyId}`, { reply: '    ' })).status, 400);
+            assert.equal((await admin.put(`/api/admin/replies/${replyId}`, { reply: 'x'.repeat(501) })).status, 400);
+            assert.equal((await admin.put(`/api/admin/replies/${replyId}`, { reply: 42 })).status, 400);
+            const logs = await dbQuery("SELECT COUNT(*) AS n FROM audit_logs WHERE action = 'EDIT_REPLY'");
+            assert.equal(logs[0].n, 2);
+        });
+
         it('deletes a reply, and deleting a review removes its replies', async () => {
             const extra = await createClient(server.baseUrl).post(`/api/reviews/${reviewId}/replies`, { reply: 'Another reply to clean up.' });
             assert.equal(extra.status, 200);

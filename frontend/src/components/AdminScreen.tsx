@@ -82,6 +82,7 @@ const AdminScreen: React.FC<AdminScreenProps> = ({
         handleLoadMoreReplies,
         handleRepliesStatusChange,
         handleSetReplyApproved,
+        handleUpdateReply,
         handleDeleteReply,
         handleReviewCustomCourse,
         handleLoadTeacherDetail,
@@ -211,6 +212,7 @@ const AdminScreen: React.FC<AdminScreenProps> = ({
                     repliesStatus={adminRepliesStatus}
                     onRepliesStatusChange={handleRepliesStatusChange}
                     onSetReplyApproved={handleSetReplyApproved}
+                    onUpdateReply={handleUpdateReply}
                     onDeleteReply={handleDeleteReply}
                     onLoadMoreReplies={handleLoadMoreReplies}
                     adminRepliesPage={adminRepliesPage}
