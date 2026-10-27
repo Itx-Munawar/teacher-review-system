@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useMemo, memo, useCallback } from 'react';
 import Icon from './Icon';
 import AdminAssistantTab from './AdminAssistantTab';
+import AdminAnalyticsTab from './AdminAnalyticsTab';
+import AdminErrorsTab from './AdminErrorsTab';
 import { getTeachers, getAdminAuditLogs, getSearchGaps, getAdmin2faProvision, confirmAdmin2fa, disableAdmin2fa } from '../services/api';
 import { extractCourses } from '../utils/courses';
 import Avatar from './Avatar';
 import type { Teacher, AdminReview, AdminQuestion, CustomCourse, AdminTeacherDetail, AdminReply, AdminAuditLog, SearchGap } from '../types';
 
-type AdminTab = 'teachers' | 'reviews' | 'qa' | 'courses' | 'replies' | 'assistant' | 'audit' | 'security';
+type AdminTab = 'teachers' | 'reviews' | 'qa' | 'courses' | 'replies' | 'analytics' | 'errors' | 'assistant' | 'audit' | 'security';
 
 type TeacherSortKey = 'name' | 'department' | 'reviews' | 'newest';
 
@@ -74,6 +76,13 @@ export interface AdminPanelProps {
     /** Save an edited reply; resolves true when the server accepted it. */
     onUpdateReply: (id: number, data: { reply: string; user_name: string; is_approved?: boolean }) => Promise<boolean>;
     onDeleteReply: (id: number) => void | Promise<void>;
+    /** Approve / hide / delete several replies; resolves true on success. */
+    onBulkReplies?: (ids: number[], action: 'approve' | 'hide' | 'delete') => Promise<boolean>;
+    /** Unresolved errors (badge on the Errors tab). */
+    openErrorsCount?: number;
+    /** Refresh header counters after changes made inside a tab. */
+    onRefreshStats?: () => void | Promise<void>;
+    showToast?: (message: string, type?: 'success' | 'error' | 'info') => void;
     onLoadMoreReplies: () => void;
     adminRepliesPage: number;
     adminRepliesTotalPages: number;
@@ -139,12 +148,33 @@ const AdminPanel = memo(({
     onSetReplyApproved,
     onUpdateReply,
     onDeleteReply,
+    onBulkReplies,
+    openErrorsCount = 0,
+    onRefreshStats,
+    showToast,
     onLoadMoreReplies,
     adminRepliesPage,
     adminRepliesTotalPages,
     adminLoadingMoreReplies,
     totpEnabled: totpEnabledProp
 }: AdminPanelProps) => {
+    // Replies tab: checkbox selection for bulk actions.
+    const [selectedReplyIds, setSelectedReplyIds] = useState<number[]>([]);
+    useEffect(() => {
+        // Keep only ids that are still on screen (after a refresh or filter change).
+        setSelectedReplyIds((ids) => ids.filter((id) => replies.some((r) => r.id === id)));
+    }, [replies]);
+    const allRepliesSelected = replies.length > 0 && selectedReplyIds.length === replies.length;
+    const toggleReplySelected = (id: number) => {
+        setSelectedReplyIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+    };
+    const runBulkReplies = async (action: 'approve' | 'hide' | 'delete') => {
+        if (!onBulkReplies || selectedReplyIds.length === 0) return;
+        const ok = await onBulkReplies(selectedReplyIds.slice(0, 200), action);
+        if (ok) setSelectedReplyIds([]);
+    };
+    const toast = showToast || (() => undefined);
+
     // Broken-photo cleanup: preview first, then confirm
     const [photoCheck, setPhotoCheck] = useState<{ count: number; broken: number } | null>(null);
     const [photoBusy, setPhotoBusy] = useState(false);
@@ -672,6 +702,18 @@ const AdminPanel = memo(({
                     onClick={() => setActiveTab('replies')}
                 >
                     <Icon name="message-circle" size={15} /> Replies{pendingRepliesCount > 0 ? ` (${pendingRepliesCount})` : ''}
+                </button>
+                <button
+                    className={`admin-tab ${activeTab === 'analytics' ? 'admin-tab-active' : ''}`}
+                    onClick={() => setActiveTab('analytics')}
+                >
+                    <Icon name="bar-chart" size={15} /> Analytics
+                </button>
+                <button
+                    className={`admin-tab ${activeTab === 'errors' ? 'admin-tab-active' : ''}`}
+                    onClick={() => setActiveTab('errors')}
+                >
+                    <Icon name="alert-triangle" size={15} /> Errors{openErrorsCount > 0 ? ` (${openErrorsCount})` : ''}
                 </button>
                 <button
                     className={`admin-tab ${activeTab === 'assistant' ? 'admin-tab-active' : ''}`}
@@ -1240,12 +1282,53 @@ const AdminPanel = memo(({
                         </button>
                     ))}
                 </div>
+                {onBulkReplies && replies.length > 0 && (
+                    <div className="admin-bulk-bar" style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '10px', padding: '8px 10px', borderRadius: '10px', background: 'rgba(198, 161, 91, 0.08)', border: '1px solid rgba(198, 161, 91, 0.25)' }}>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', cursor: 'pointer' }}>
+                            <input
+                                type="checkbox"
+                                checked={allRepliesSelected}
+                                ref={(el) => { if (el) el.indeterminate = selectedReplyIds.length > 0 && !allRepliesSelected; }}
+                                onChange={() => setSelectedReplyIds(allRepliesSelected ? [] : replies.map((r) => r.id))}
+                                aria-label="Select all replies"
+                                style={{ flex: '0 0 auto', width: '16px', height: '16px', margin: 0 }}
+                            />
+                            {selectedReplyIds.length > 0 ? `${selectedReplyIds.length} selected` : 'Select all'}
+                        </label>
+                        {selectedReplyIds.length > 0 && (
+                            <>
+                                {repliesStatus === 'pending' ? (
+                                    <button className="admin-mini-btn admin-mini-approve" disabled={adminMutationLoading} onClick={() => runBulkReplies('approve')}>
+                                        Approve selected
+                                    </button>
+                                ) : (
+                                    <button className="admin-mini-btn" disabled={adminMutationLoading} onClick={() => runBulkReplies('hide')}>
+                                        Hide selected
+                                    </button>
+                                )}
+                                <button className="admin-mini-btn admin-mini-reject" disabled={adminMutationLoading} onClick={() => runBulkReplies('delete')}>
+                                    Delete selected
+                                </button>
+                                <button className="admin-mini-btn" onClick={() => setSelectedReplyIds([])}>Clear</button>
+                            </>
+                        )}
+                    </div>
+                )}
                 <div className="admin-list">
                     {replies.length === 0 ? (
                         <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>No {repliesStatus} replies.</p>
                     ) : (
                         replies.map((reply) => (
                             <div key={reply.id} className="admin-item" style={{ alignItems: 'flex-start' }}>
+                                {onBulkReplies && (
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedReplyIds.includes(reply.id)}
+                                        onChange={() => toggleReplySelected(reply.id)}
+                                        aria-label={`Select reply ${reply.id}`}
+                                        style={{ flex: '0 0 auto', width: '16px', height: '16px', margin: '3px 10px 0 0' }}
+                                    />
+                                )}
                                 <div className="review-info">
                                     <strong>{reply.teacher_name || 'Deleted teacher'} · review #{reply.review_id}</strong>
                                     {!Number(reply.is_approved) && (
@@ -1347,6 +1430,10 @@ const AdminPanel = memo(({
                 )}
             </div>
             )}
+
+            {activeTab === 'analytics' && <AdminAnalyticsTab />}
+
+            {activeTab === 'errors' && <AdminErrorsTab showToast={toast} onChanged={onRefreshStats} />}
 
             {activeTab === 'assistant' && <AdminAssistantTab />}
 

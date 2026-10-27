@@ -6,6 +6,7 @@ import {
     getRelatedTeachers,
     searchAllTeachers,
     getTeacherDetail,
+    trackEvent,
     submitReview,
     getChatStatus
 } from './services/api';
@@ -30,7 +31,7 @@ import CompareBar from './components/CompareBar';
 import { AboutModal, ContactModal } from './components/InfoModals';
 import { ToastHost } from './components/Toast';
 import { haptic } from './utils/haptics';
-import type { Teacher, TeacherDetail, Toast } from './types';
+import type { Teacher, TeacherDetail, Toast, ReviewQuery } from './types';
 import './App.css';
 
 // The compare screen is rarely opened, so it is split into its own chunk
@@ -467,7 +468,10 @@ const App: React.FC = () => {
         const nextPage = (selectedTeacher.review_pagination?.page || 1) + 1;
         setReviewsLoadingMore(true);
         try {
-            const response = await getTeacherDetail(selectedTeacher.id, nextPage);
+            const response = await getTeacherDetail(selectedTeacher.id, nextPage, 50, {
+                sort: selectedTeacher.review_sort,
+                course: selectedTeacher.review_course,
+            });
             setSelectedTeacher((prev) => {
                 if (!prev || prev.id !== selectedTeacher.id) return prev;
                 const merged = mapTeacherDetail(response.data, prev);
@@ -482,6 +486,42 @@ const App: React.FC = () => {
             setReviewsLoadingMore(false);
         }
     }, [selectedTeacher, reviewsLoadingMore, showToast]);
+
+    // Sort ("Newest" / "Most helpful") or filter by course: reload page 1.
+    const [reviewQueryLoading, setReviewQueryLoading] = useState(false);
+    const handleChangeReviewQuery = useCallback(async (query: ReviewQuery) => {
+        if (!selectedTeacher) return;
+        const teacherId = selectedTeacher.id;
+        setReviewQueryLoading(true);
+        try {
+            const response = await getTeacherDetail(teacherId, 1, 50, query);
+            setSelectedTeacher((prev) => (prev && prev.id === teacherId ? mapTeacherDetail(response.data, prev) : prev));
+        } catch (error) {
+            console.error('Error filtering reviews:', error);
+            showToast('Failed to load reviews', 'error');
+        } finally {
+            setReviewQueryLoading(false);
+        }
+    }, [selectedTeacher, showToast]);
+
+    // Count one anonymous profile view per teacher per browser every 12 hours.
+    useEffect(() => {
+        const id = selectedTeacher?.id;
+        if (!id) return;
+        try {
+            const key = 'trs-viewed-at';
+            const now = Date.now();
+            const seen: Record<string, number> = JSON.parse(localStorage.getItem(key) || '{}');
+            if (now - (seen[id] || 0) < 12 * 60 * 60 * 1000) return;
+            seen[id] = now;
+            // Keep the map small: drop entries older than the window.
+            const fresh = Object.fromEntries(Object.entries(seen).filter(([, t]) => now - t < 12 * 60 * 60 * 1000));
+            localStorage.setItem(key, JSON.stringify(fresh));
+            trackEvent({ type: 'teacher_view', teacher_id: id });
+        } catch {
+            // Storage blocked: skip counting.
+        }
+    }, [selectedTeacher?.id]);
 
     const restoreListScroll = useCallback(() => {
         if (window.innerWidth > 768) return;
@@ -799,6 +839,8 @@ const App: React.FC = () => {
                             showToast={showToast}
                             reviewsLoading={reviewsLoadingMore}
                             onLoadMoreReviews={handleLoadMoreTeacherReviews}
+                            onChangeReviewQuery={handleChangeReviewQuery}
+                            reviewQueryLoading={reviewQueryLoading}
                         />
                     ) : (
                         <WelcomePanel departments={departments} />

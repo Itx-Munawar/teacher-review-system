@@ -8,7 +8,6 @@ const { clampInt } = require('../lib/validation');
 const { verifyAdmin } = require('../lib/auth');
 const { createAuditLog } = require('../lib/audit');
 const { getAnalytics } = require('../lib/analytics');
-const { sendErrorAlerts } = require('../lib/errorTracker');
 
 const router = express.Router();
 
@@ -336,13 +335,6 @@ router.delete('/api/admin/errors/:id', verifyAdmin, csrfValidate, async (req, re
         console.error('Error deleting error log:', error);
         res.status(500).json({ error: 'Database error' });
     }
-});
-
-// POST /api/admin/errors/test-alert - send the pending-errors email now
-// (still limited to one per hour) so the operator can check delivery.
-router.post('/api/admin/errors/test-alert', verifyAdmin, csrfValidate, async (req, res) => {
-    const result = await sendErrorAlerts();
-    res.json(result);
 });
 
 module.exports = router;

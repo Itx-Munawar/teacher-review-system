@@ -4,6 +4,23 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import './index.css';
 import App from './App';
 import { registerServiceWorker } from './services/registerServiceWorker';
+import { installErrorReporter } from './utils/errorReporter';
+import { trackEvent } from './services/api';
+
+installErrorReporter();
+
+// One anonymous "visit" per browser per 30 minutes of activity (shared by
+// all tabs) for the admin Analytics tab. Admin pages are not counted.
+try {
+    const key = 'trs-visit-at';
+    const last = Number(localStorage.getItem(key) || 0);
+    if (!window.location.pathname.startsWith('/admin')) {
+        if (Date.now() - last > 30 * 60 * 1000) trackEvent({ type: 'visit' });
+        localStorage.setItem(key, String(Date.now()));
+    }
+} catch {
+    // Storage blocked (private mode): skip counting rather than double count.
+}
 
 // Secondary routes load on demand; the home/teacher view (App) stays in the main bundle.
 const ForgotPassword = lazy(() => import('./components/ForgotPassword'));

@@ -27,6 +27,11 @@ export type IconName =
     | 'help'
     | 'flag'
     | 'file-text'
+    | 'link'
+    | 'thumbs-up'
+    | 'sparkles'
+    | 'alert-triangle'
+    | 'bar-chart'
     ;
 
 const PATHS: Record<IconName, React.ReactNode> = {
@@ -178,6 +183,35 @@ const PATHS: Record<IconName, React.ReactNode> = {
         </>
     ),
 
+    link: (
+        <>
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+        </>
+    ),
+    'thumbs-up': (
+        <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
+    ),
+    sparkles: (
+        <>
+            <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
+            <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" />
+        </>
+    ),
+    'alert-triangle': (
+        <>
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+        </>
+    ),
+    'bar-chart': (
+        <>
+            <line x1="12" y1="20" x2="12" y2="10" />
+            <line x1="18" y1="20" x2="18" y2="4" />
+            <line x1="6" y1="20" x2="6" y2="16" />
+        </>
+    ),
 };
 
 interface IconProps {
