@@ -2,12 +2,13 @@
    - Caches the app shell (index.html + static assets) for offline use
    - Serves the shell from cache as a fallback so previously visited pages work offline
    - Never caches API responses (always network) to keep review data fresh
-   - Leaves cross-origin requests (teacher photo thumbnails on wsrv.nl, Google Fonts) to the
-     browser: this worker can't cache them (opaque responses), so intercepting them only
-     added a hop and a second code path in front of every photo.
+   - Leaves cross-origin requests (Google Fonts) to the browser: this worker can't cache
+     them (opaque responses), so intercepting them only added a hop.
+   - Teacher photos come from our own domain (/img/...) and never change for a given
+     filename, so a cached copy is served without touching the network.
 */
 
-const CACHE_NAME = 'umt-reviews-v3';
+const CACHE_NAME = 'umt-reviews-v4';
 const SHELL_CACHE = 'umt-reviews-shell-v3';
 
 const SHELL_URLS = [
@@ -67,7 +68,7 @@ self.addEventListener('fetch', (event) => {
         // Vite build output under /assets/ has a content hash in its name, so a cached copy is
         // never stale: serve it without touching the network (the old code fired a network
         // request for every cached asset anyway, wasting bandwidth on slow connections).
-        const isHashed = url.pathname.startsWith('/assets/');
+        const isHashed = url.pathname.startsWith('/assets/') || url.pathname.startsWith('/img/');
 
         event.respondWith(
             caches.match(request).then((cached) => {

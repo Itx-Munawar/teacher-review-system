@@ -2,7 +2,7 @@ import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 // react-dom/test-utils (Simulate) is gone in React 19; a real DOM event does the same job.
 import { fireEvent } from '@testing-library/dom';
-import Avatar from './Avatar';
+import Avatar, { PHOTO_STALL_MS } from './Avatar';
 import { isUsableImageUrl } from '../utils/imageThumb';
 
 // React 18 wants this flag set around act() in tests
@@ -29,7 +29,7 @@ afterEach(() => {
 const render = (ui: React.ReactElement) => act(() => { root.render(ui); });
 const img = () => container.querySelector('img');
 const srcOf = () => img()?.getAttribute('src') || '';
-const proxyParams = () => new URLSearchParams(srcOf().split('?')[1] || '');
+const FILE = '636753931581232459123.JPG';
 
 /** Every avatar configuration actually used across the app's screens. */
 const SCREENS = [
@@ -45,7 +45,7 @@ const SCREENS = [
 describe('Avatar — thumbnail loading across every screen', () => {
     SCREENS.forEach(({ screen, className, size, expected }) => {
         describe(screen, () => {
-            it('requests a WebP thumbnail at the right size', () => {
+            it('requests a thumbnail at the right size from our own domain', () => {
                 render(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className={className} size={size} />);
 
                 const el = img();
@@ -55,36 +55,32 @@ describe('Avatar — thumbnail loading across every screen', () => {
                 expect(el!.getAttribute('decoding')).toBe('async');
                 expect(el!.getAttribute('alt')).toBe('Dr Jane Doe');
 
-                expect(srcOf().startsWith('https://wsrv.nl/?')).toBe(true);
-                expect(proxyParams().get('url')).toBe(UMT_PHOTO);
-                expect(proxyParams().get('w')).toBe(String(expected));
-                expect(proxyParams().get('h')).toBe(String(expected));
-                expect(proxyParams().get('fit')).toBe('cover');
-                expect(proxyParams().get('output')).toBe('webp');
+                expect(srcOf()).toBe(`/img/t/${expected}/${FILE}`);
             });
 
             it('offers a 2x variant for high-DPI phones', () => {
                 render(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className={className} size={size} />);
                 const srcSet = img()!.getAttribute('srcset') || '';
-                expect(srcSet).toContain(`w=${expected}`);
-                expect(srcSet).toContain(`w=${expected * 2}`);
+                expect(srcSet).toContain(`/img/t/${expected}/${FILE} 1x`);
+                expect(srcSet).toContain(`/img/t/${expected * 2}/${FILE} 2x`);
                 expect(srcSet).toContain('2x');
             });
 
-            it('falls back to the original photo if the thumbnail fails', () => {
+            it('falls back to the original via our domain, then straight from UMT', () => {
                 render(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className={className} size={size} />);
-                expect(srcOf()).not.toBe(UMT_PHOTO);
+                act(() => { fireEvent.error(img()!); });
+                expect(srcOf()).toBe(`/img/o/${FILE}`);
+                expect(img()!.getAttribute('srcset')).toBeNull();
 
                 act(() => { fireEvent.error(img()!); });
-
                 expect(srcOf()).toBe(UMT_PHOTO);
-                expect(img()!.getAttribute('srcset')).toBeNull();
             });
 
             it('falls back to initials if both the thumbnail and the original fail', () => {
                 render(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className={className} size={size} />);
                 act(() => { fireEvent.error(img()!); }); // thumbnail failed
-                act(() => { fireEvent.error(img()!); }); // original failed
+                act(() => { fireEvent.error(img()!); }); // original via our domain failed
+                act(() => { fireEvent.error(img()!); }); // original from UMT failed
 
                 expect(img()).toBeNull();
                 // Initials come from the first two words (pre-existing behaviour)
@@ -122,9 +118,9 @@ describe('Avatar — perceived speed', () => {
 
     it('keeps list thumbnails small: a ~60px circle must not request more than 80px (1x) / 160px (2x)', () => {
         render(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className="teacher-card-image" />);
-        expect(proxyParams().get('w')).toBe('80');
-        expect(img()!.getAttribute('srcset')).toContain('w=160');
-        expect(img()!.getAttribute('srcset')).not.toContain('w=320');
+        expect(srcOf()).toBe(`/img/t/80/${FILE}`);
+        expect(img()!.getAttribute('srcset')).toContain('/img/t/160/');
+        expect(img()!.getAttribute('srcset')).not.toContain('/img/t/320/');
     });
 });
 
@@ -161,15 +157,62 @@ describe('Avatar — data the app really contains', () => {
     it('recovers the thumbnail when the avatar is reused for a different teacher', () => {
         render(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className="teacher-card-image" />);
         act(() => { fireEvent.error(img()!); });
-        expect(srcOf()).toBe(UMT_PHOTO);
+        expect(srcOf()).toBe(`/img/o/${FILE}`);
 
         // Same component instance, new teacher (e.g. autocomplete list reuse)
         render(<Avatar name="Dr John Roe" imageUrl={UMT_PHOTO.replace('636753931581232459123.JPG', '639015873261646639164.jpg')} className="teacher-card-image" />);
-        expect(srcOf().startsWith('https://wsrv.nl/?')).toBe(true);
+        expect(srcOf()).toBe('/img/t/80/639015873261646639164.jpg');
     });
 
     it('uses a sensible single initial for a one-word name', () => {
         render(<Avatar name="Anonymous" imageUrl={null} className="teacher-card-image" />);
         expect(container.textContent).toBe('A');
+    });
+});
+
+describe('Avatar — stalled photos', () => {
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('moves on when a source neither loads nor errors (blocked networks stall)', () => {
+        vi.useFakeTimers();
+        render(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className="teacher-card-image" priority />);
+        expect(srcOf()).toBe(`/img/t/80/${FILE}`);
+        act(() => { vi.advanceTimersByTime(PHOTO_STALL_MS + 10); });
+        expect(srcOf()).toBe(`/img/o/${FILE}`);
+        act(() => { vi.advanceTimersByTime(PHOTO_STALL_MS + 10); });
+        expect(srcOf()).toBe(UMT_PHOTO);
+        // The last source is never abandoned for being slow.
+        act(() => { vi.advanceTimersByTime(PHOTO_STALL_MS * 3); });
+        expect(srcOf()).toBe(UMT_PHOTO);
+    });
+
+    it('keeps a photo that has loaded', () => {
+        vi.useFakeTimers();
+        render(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className="teacher-card-image" priority />);
+        Object.defineProperty(img()!, 'complete', { value: true, configurable: true });
+        Object.defineProperty(img()!, 'naturalWidth', { value: 80, configurable: true });
+        act(() => { vi.advanceTimersByTime(PHOTO_STALL_MS * 2); });
+        expect(srcOf()).toBe(`/img/t/80/${FILE}`);
+    });
+
+    it('waits for an off-screen lazy photo to scroll into view before counting', () => {
+        vi.useFakeTimers();
+        let trigger: ((entries: { isIntersecting: boolean }[]) => void) | undefined;
+        const original = (globalThis as any).IntersectionObserver;
+        (globalThis as any).IntersectionObserver = class {
+            constructor(cb: (entries: { isIntersecting: boolean }[]) => void) { trigger = cb; }
+            observe() {}
+            disconnect() {}
+        };
+        try {
+            render(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className="teacher-card-image" />);
+            act(() => { vi.advanceTimersByTime(PHOTO_STALL_MS * 3); });
+            expect(srcOf()).toBe(`/img/t/80/${FILE}`); // never scrolled into view
+            act(() => { trigger!([{ isIntersecting: true }]); });
+            act(() => { vi.advanceTimersByTime(PHOTO_STALL_MS + 10); });
+            expect(srcOf()).toBe(`/img/o/${FILE}`);
+        } finally {
+            (globalThis as any).IntersectionObserver = original;
+        }
     });
 });

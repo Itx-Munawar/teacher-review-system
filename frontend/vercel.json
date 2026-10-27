@@ -1,5 +1,7 @@
 {
   "rewrites": [
+    { "source": "/img/t/:w(\\d{2,3})/:file([A-Za-z0-9_-]+\\.[A-Za-z]{3,4})", "destination": "https://wsrv.nl/?url=ssl:admin.umt.edu.pk/Media/UserProfile/:file&w=:w&h=:w&fit=cover&output=webp&q=72" },
+    { "source": "/img/o/:file([A-Za-z0-9_-]+\\.[A-Za-z]{3,4})", "destination": "https://admin.umt.edu.pk/Media/UserProfile/:file" },
     { "source": "/sitemap.xml", "destination": "https://teacher-review-system.onrender.com/sitemap.xml" },
     { "source": "/robots.txt", "destination": "https://teacher-review-system.onrender.com/robots.txt" },
     { "source": "/api/:path*", "destination": "https://teacher-review-system.onrender.com/api/:path*" },
@@ -20,6 +22,12 @@
     { "source": "/about", "destination": "/", "permanent": true }
   ],
   "headers": [
+    {
+      "source": "/img/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=604800, s-maxage=2592000, stale-while-revalidate=86400" }
+      ]
+    },
     {
       "source": "/(.*)",
       "headers": [

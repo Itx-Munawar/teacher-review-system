@@ -4,10 +4,26 @@
  * 36px–130px circles. Resizing them on the fly to a small WebP cuts each photo
  * to roughly 1.5 KB, which is by far the biggest win on slow mobile connections.
  *
- * Only hosts we know about are rewritten, so this never turns into an open
- * image proxy, and any failure falls back to the untouched original URL.
+ * UMT profile photos (all real data) are fetched through our own domain:
+ *   /img/t/<width>/<file>  → Vercel rewrite → wsrv.nl resize of the UMT photo
+ *   /img/o/<file>          → Vercel rewrite → the original UMT photo
+ * Some Pakistani networks block or stall wsrv.nl (and UMT's server is slow),
+ * while our own domain is always reachable when the site itself loads. The
+ * rewrites (frontend/vercel.json) only accept a UMT profile filename, so this
+ * is not an open proxy. Any failure falls back to the untouched original URL.
  */
 const THUMBNAIL_PROXY = 'https://wsrv.nl/';
+
+/** `https://admin.umt.edu.pk/Media/UserProfile/<file>` — the shape of every stored photo. */
+const UMT_PROFILE_PHOTO = /^https?:\/\/admin\.umt\.edu\.pk\/Media\/UserProfile\/([A-Za-z0-9_-]+\.(?:jpe?g|png|webp|gif|avif))$/i;
+
+const umtProfileFile = (url: string): string | null => {
+    const m = (url || '').trim().match(UMT_PROFILE_PHOTO);
+    return m ? m[1] : null;
+};
+
+/** Thumbnail widths are clamped to what the rewrite accepts (2–3 digits). */
+const clampWidth = (width: number) => Math.min(999, Math.max(10, Math.round(width)));
 
 /** Hosts whose images we are willing to route through the resize proxy. */
 const PROXY_HOSTS = new Set(['admin.umt.edu.pk', 'www.umt.edu.pk', 'umt.edu.pk']);
@@ -38,6 +54,8 @@ export function isUsableImageUrl(url?: string | null): boolean {
 export function thumbUrl(url: string, width: number): string {
     const trimmed = (url || '').trim();
     if (!isUsableImageUrl(trimmed)) return trimmed;
+    const file = umtProfileFile(trimmed);
+    if (file) return `/img/t/${clampWidth(width)}/${file}`;
     try {
         if (!PROXY_HOSTS.has(new URL(trimmed).hostname.toLowerCase())) return trimmed;
     } catch {
@@ -53,6 +71,16 @@ export function thumbUrl(url: string, width: number): string {
         q: '72',
     });
     return `${THUMBNAIL_PROXY}?${params}`;
+}
+
+/**
+ * The full-size photo through our own domain, or the URL unchanged when it is
+ * not a UMT profile photo.
+ */
+export function originalViaSite(url: string): string {
+    const trimmed = (url || '').trim();
+    const file = isUsableImageUrl(trimmed) ? umtProfileFile(trimmed) : null;
+    return file ? `/img/o/${file}` : trimmed;
 }
 
 /** 1x/2x source set so the circle stays sharp on high-DPI phones for ~2 KB. */
