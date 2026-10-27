@@ -15,9 +15,15 @@ const isBot = (userAgent) => !userAgent || BOT_UA.test(userAgent);
 
 const swallow = (label) => (err) => logJson('warn', label, { reason: String(err && err.message) });
 
+// Concurrent upserts of new rows can deadlock on MySQL 8 (gap locks); one
+// retry is enough and keeps a counter from being silently lost.
+const RETRYABLE = new Set(['ER_LOCK_DEADLOCK', 'ER_LOCK_WAIT_TIMEOUT']);
+const upsert = (sql, params) => db.query(sql, params)
+    .catch((err) => (err && RETRYABLE.has(err.code) ? db.query(sql, params) : Promise.reject(err)));
+
 const trackVisit = async () => {
     if (!state.analyticsReady) return;
-    await db.query(
+    await upsert(
         `INSERT INTO site_visits_daily (day, visits) VALUES (${PK_DAY}, 1)
          ON DUPLICATE KEY UPDATE visits = visits + 1`
     ).catch(swallow('analytics_visit_failed'));
@@ -27,7 +33,7 @@ const trackTeacherView = async (teacherId) => {
     if (!state.analyticsReady) return false;
     try {
         // INSERT ... SELECT so an unknown id simply inserts nothing.
-        const [result] = await db.query(
+        const [result] = await upsert(
             `INSERT INTO teacher_views_daily (day, teacher_id, views)
              SELECT ${PK_DAY}, id, 1 FROM teachers WHERE id = ?
              ON DUPLICATE KEY UPDATE views = views + 1`,
@@ -46,7 +52,7 @@ const trackSearch = async (query, resultCount) => {
     if (!state.analyticsReady) return;
     const term = normaliseTerm(query);
     if (term.length < 3) return;
-    await db.query(
+    await upsert(
         `INSERT INTO search_terms_daily (day, term, searches, results) VALUES (${PK_DAY}, ?, 1, ?)
          ON DUPLICATE KEY UPDATE searches = searches + 1, results = VALUES(results)`,
         [term, Math.max(0, Number(resultCount) || 0)]

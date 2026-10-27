@@ -25,9 +25,9 @@ describe('review extras, summaries, analytics and errors', { skip: SKIP }, () =>
         waqar = (await dbQuery("INSERT INTO teachers (name, department) VALUES ('Waqar Ashiq', 'School of Systems and Technology')")).insertId;
         sania = (await dbQuery("INSERT INTO teachers (name, department) VALUES ('Sania Qamar', 'School of Law')")).insertId;
         bilal = (await dbQuery("INSERT INTO teachers (name, department) VALUES ('Bilal Ahmed', 'School of Systems and Technology')")).insertId;
-        const hira = (await dbQuery("INSERT INTO teachers (name, department) VALUES ('Hira Translate', 'School of Law')")).insertId;
+        const hira = (await dbQuery("INSERT INTO teachers (name, department) VALUES ('Kinza Translate', 'School of Law')")).insertId;
         for (const n of [1, 2, 3]) {
-            await dbQuery("INSERT INTO reviews (teacher_id, comment, user_name, is_approved) VALUES (?, ?, 'Anonymous', 1)", [hira, `Hira review number ${n}, explains well.`]);
+            await dbQuery("INSERT INTO reviews (teacher_id, comment, user_name, is_approved) VALUES (?, ?, 'Anonymous', 1)", [hira, `Kinza review number ${n}, explains well.`]);
         }
         const rows = [
             ['Explains calculus clearly, grading fair.', 'SecretReviewer', ['Calculus I'], '2026-01-01 10:00:00'],
@@ -227,7 +227,7 @@ describe('review extras, summaries, analytics and errors', { skip: SKIP }, () =>
         });
 
         it('translates an English summary to Roman Urdu with a small second call', async () => {
-            const [{ id: hira }] = await dbQuery("SELECT id FROM teachers WHERE name = 'Hira Translate'");
+            const [{ id: hira }] = await dbQuery("SELECT id FROM teachers WHERE name = 'Kinza Translate'");
             fake.queue.push(
                 { status: 200, text: JSON.stringify({ overview: 'Most students say she explains concepts clearly.', pros: ['Clear lectures'], cons: [] }) },
                 { status: 200, text: JSON.stringify({ overview: 'Zyada tar students kehte hain ke concepts clear karti hain.', pros: ['Lectures clear hoti hain'], cons: [] }) }
@@ -237,11 +237,11 @@ describe('review extras, summaries, analytics and errors', { skip: SKIP }, () =>
             assert.equal(fake.calls.length, 2);
             const second = JSON.stringify(fake.calls[1].body.contents);
             assert.match(second, /Most students say/);
-            assert.doesNotMatch(second, /Hira review/, 'the translation call does not resend the reviews');
+            assert.doesNotMatch(second, /Kinza review/, 'the translation call does not resend the reviews');
         });
 
         it('keeps old Roman Urdu summaries without an AI call, rebuilds old English ones', async () => {
-            const [{ id: hira }] = await dbQuery("SELECT id FROM teachers WHERE name = 'Hira Translate'");
+            const [{ id: hira }] = await dbQuery("SELECT id FROM teachers WHERE name = 'Kinza Translate'");
             const legacy = 'a'.repeat(40);
             await dbQuery('UPDATE teacher_summaries SET signature = ? WHERE teacher_id = ?', [legacy, hira]);
             const kept = await createClient(server.baseUrl).get(`/api/teachers/${hira}/summary`);
@@ -287,6 +287,12 @@ describe('review extras, summaries, analytics and errors', { skip: SKIP }, () =>
             await c.get('/api/teachers/search?q=nobody%20here');
             await c.get('/api/teachers/search?q=ab');
 
+            // Search counters are written without delaying the response.
+            for (let i = 0; i < 30; i += 1) {
+                const [{ n }] = await dbQuery('SELECT COUNT(*) AS n FROM search_terms_daily');
+                if (Number(n) >= 2) break;
+                await new Promise((r) => setTimeout(r, 100));
+            }
             const [visits] = await dbQuery('SELECT SUM(visits) AS n FROM site_visits_daily');
             assert.equal(Number(visits.n), 2);
             const unknown = await dbQuery('SELECT * FROM teacher_views_daily WHERE teacher_id = 999999');
