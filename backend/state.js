@@ -11,8 +11,8 @@ module.exports = {
     reviewModerationColumnReady: false,
     // chat_usage_daily and chat_feedback tables exist.
     chatUsageReady: false,
-    // review_reports table exists.
-    reviewReportsReady: false,
+    // review_replies table exists.
+    reviewRepliesReady: false,
     // retroactive review filter sweep has run.
     reviewSweepDone: false,
     // retroactive Q&A filter sweep has run.

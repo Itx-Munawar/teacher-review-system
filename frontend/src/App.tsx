@@ -390,11 +390,11 @@ const App: React.FC = () => {
             return;
         }
         if (!reviewComment.trim()) {
-            setReviewError('Please write at least 15 characters so your review is useful.');
+            setReviewError('Please write at least 5 characters so your review is useful.');
             return;
         }
-        if (reviewComment.trim().length < 15) {
-            setReviewError('Please write at least 15 characters so the review is useful to other students.');
+        if (reviewComment.trim().length < 5) {
+            setReviewError('Please write at least 5 characters so the review is useful to other students.');
             return;
         }
         setSubmitting(true);

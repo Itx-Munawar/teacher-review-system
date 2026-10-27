@@ -4,9 +4,9 @@ import AdminAssistantTab from './AdminAssistantTab';
 import { getTeachers, getAdminAuditLogs, getSearchGaps, getAdmin2faProvision, confirmAdmin2fa, disableAdmin2fa } from '../services/api';
 import { extractCourses } from '../utils/courses';
 import Avatar from './Avatar';
-import type { Teacher, AdminReview, AdminQuestion, CustomCourse, AdminTeacherDetail, AdminReport, AdminAuditLog, SearchGap } from '../types';
+import type { Teacher, AdminReview, AdminQuestion, CustomCourse, AdminTeacherDetail, AdminReply, AdminAuditLog, SearchGap } from '../types';
 
-type AdminTab = 'teachers' | 'reviews' | 'qa' | 'courses' | 'reports' | 'assistant' | 'audit' | 'security';
+type AdminTab = 'teachers' | 'reviews' | 'qa' | 'courses' | 'replies' | 'assistant' | 'audit' | 'security';
 
 type TeacherSortKey = 'name' | 'department' | 'reviews' | 'newest';
 
@@ -64,17 +64,18 @@ export interface AdminPanelProps {
     onReviewCourse: (id: number, action: 'approve' | 'reject') => void;
     onLoadTeacherDetail: (id: number) => Promise<AdminTeacherDetail | null>;
     onCleanTeacherImages: (dryRun: boolean) => Promise<{ cleaned?: number; wouldClean?: number; broken?: number; blank?: number }>;
-    /** Reader reports for the Reports tab (already filtered by status). */
-    reports: AdminReport[];
-    /** Open reports badge shown in the header. */
-    openReportsCount: number;
-    reportsStatus: 'open' | 'resolved' | 'dismissed';
-    onReportsStatusChange: (status: 'open' | 'resolved' | 'dismissed') => void | Promise<void>;
-    onUpdateReportStatus: (id: number, status: 'open' | 'resolved' | 'dismissed') => void | Promise<void>;
-    onLoadMoreReports: () => void;
-    adminReportsPage: number;
-    adminReportsTotalPages: number;
-    adminLoadingMoreReports: boolean;
+    /** Replies for the Replies tab (already filtered by status). */
+    replies: AdminReply[];
+    /** Pending replies badge shown in the header. */
+    pendingRepliesCount: number;
+    repliesStatus: 'pending' | 'approved';
+    onRepliesStatusChange: (status: 'pending' | 'approved') => void | Promise<void>;
+    onSetReplyApproved: (id: number, approved: boolean) => void | Promise<void>;
+    onDeleteReply: (id: number) => void | Promise<void>;
+    onLoadMoreReplies: () => void;
+    adminRepliesPage: number;
+    adminRepliesTotalPages: number;
+    adminLoadingMoreReplies: boolean;
     /** Whether 2FA is currently enabled on this account (set from /api/admin/me). */
     totpEnabled: boolean;
 }
@@ -129,15 +130,16 @@ const AdminPanel = memo(({
     onReviewCourse,
     onLoadTeacherDetail,
     onCleanTeacherImages,
-    reports,
-    openReportsCount,
-    reportsStatus,
-    onReportsStatusChange,
-    onUpdateReportStatus,
-    onLoadMoreReports,
-    adminReportsPage,
-    adminReportsTotalPages,
-    adminLoadingMoreReports,
+    replies,
+    pendingRepliesCount,
+    repliesStatus,
+    onRepliesStatusChange,
+    onSetReplyApproved,
+    onDeleteReply,
+    onLoadMoreReplies,
+    adminRepliesPage,
+    adminRepliesTotalPages,
+    adminLoadingMoreReplies,
     totpEnabled: totpEnabledProp
 }: AdminPanelProps) => {
     // Broken-photo cleanup: preview first, then confirm
@@ -579,18 +581,18 @@ const AdminPanel = memo(({
                     </button>
                     <button
                         type="button"
-                        onClick={() => setActiveTab('reports')}
-                        title="Open reader reports"
+                        onClick={() => setActiveTab('replies')}
+                        title="Open replies waiting for approval"
                         style={{
-                            background: openReportsCount > 0
-                                ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.22), rgba(239, 68, 68, 0.1))'
+                            background: pendingRepliesCount > 0
+                                ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.35), rgba(245, 158, 11, 0.18))'
                                 : 'linear-gradient(135deg, rgba(125, 74, 95, 0.15), rgba(63, 99, 96, 0.15))',
-                            border: `1px solid ${openReportsCount > 0 ? 'rgba(239, 68, 68, 0.55)' : 'rgba(94, 58, 114, 0.25)'}`,
+                            border: `1px solid ${pendingRepliesCount > 0 ? 'rgba(245, 158, 11, 0.65)' : 'rgba(94, 58, 114, 0.25)'}`,
                             padding: '6px 14px',
                             borderRadius: '50px',
-                            fontWeight: openReportsCount > 0 ? 700 : 600,
+                            fontWeight: pendingRepliesCount > 0 ? 700 : 600,
                             fontSize: '0.85rem',
-                            color: openReportsCount > 0 ? '#b91c1c' : '#2a1838',
+                            color: pendingRepliesCount > 0 ? '#92400e' : '#2a1838',
                             fontFamily: 'inherit',
                             cursor: 'pointer',
                             display: 'inline-flex',
@@ -598,7 +600,7 @@ const AdminPanel = memo(({
                             gap: '4px'
                         }}
                     >
-                        <Icon name="flag" size={14} /> {openReportsCount} Report{openReportsCount === 1 ? '' : 's'}
+                        <Icon name="message-circle" size={14} /> {pendingRepliesCount} Repl{pendingRepliesCount === 1 ? 'y' : 'ies'} pending
                     </button>
                 </div>
                 <button onClick={onLogout} className="logout-btn">Logout</button>
@@ -635,10 +637,10 @@ const AdminPanel = memo(({
                     <Icon name="book-open" size={15} /> Courses{pendingCoursesCount > 0 ? ` (${pendingCoursesCount})` : ''}
                 </button>
                 <button
-                    className={`admin-tab ${activeTab === 'reports' ? 'admin-tab-active' : ''}`}
-                    onClick={() => setActiveTab('reports')}
+                    className={`admin-tab ${activeTab === 'replies' ? 'admin-tab-active' : ''}`}
+                    onClick={() => setActiveTab('replies')}
                 >
-                    <Icon name="flag" size={15} /> Reports{openReportsCount > 0 ? ` (${openReportsCount})` : ''}
+                    <Icon name="message-circle" size={15} /> Replies{pendingRepliesCount > 0 ? ` (${pendingRepliesCount})` : ''}
                 </button>
                 <button
                     className={`admin-tab ${activeTab === 'assistant' ? 'admin-tab-active' : ''}`}
@@ -905,11 +907,6 @@ const AdminPanel = memo(({
                                                                         {review.moderation_flag === 'bias' && (
                                                                             <span className="admin-flag-badge admin-flag-bias" title="Alleges favouritism or bias">Bias</span>
                                                                         )}
-                                                                        {Number(review.open_reports) > 0 && (
-                                                                            <span className="admin-flag-badge admin-flag-reported" title="Reported by readers">
-                                                                                {review.open_reports} report{Number(review.open_reports) === 1 ? '' : 's'}
-                                                                            </span>
-                                                                        )}
                                                                         {Number(review.is_approved) === 0 && (
                                                     <>
                                                         <span className="admin-pending-badge">Pending</span>
@@ -1020,11 +1017,6 @@ const AdminPanel = memo(({
                                         )}
                                         {review.moderation_flag === 'bias' && (
                                             <span className="admin-flag-badge admin-flag-bias" style={{ marginLeft: '8px' }} title="Alleges favouritism or bias">Bias</span>
-                                        )}
-                                        {Number(review.open_reports) > 0 && (
-                                            <span className="admin-flag-badge admin-flag-reported" style={{ marginLeft: '8px' }} title="Reported by readers">
-                                                {review.open_reports} report{Number(review.open_reports) === 1 ? '' : 's'}
-                                            </span>
                                         )}
                                         <p style={{ marginTop: '8px', marginBottom: '5px' }}>&quot;{review.comment}&quot;</p>
                                         <small>
@@ -1198,66 +1190,71 @@ const AdminPanel = memo(({
             </div>
             )}
 
-            {activeTab === 'reports' && (
+            {activeTab === 'replies' && (
             <div className="admin-section">
-                <h3>Reader Reports ({reports.length}{adminReportsTotalPages > adminReportsPage ? '+' : ''})</h3>
+                <h3>Review Replies ({replies.length}{adminRepliesTotalPages > adminRepliesPage ? '+' : ''})</h3>
                 <p style={{ color: '#64748b', fontSize: '0.85rem', margin: '0 0 12px' }}>
-                    Students can flag a published review. Read the review, then resolve the report or dismiss it when there is nothing to fix.
+                    Students can reply under a published review. A reply stays hidden until you approve it.
                 </p>
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
-                    {(['open', 'resolved', 'dismissed'] as const).map((status) => (
+                    {(['pending', 'approved'] as const).map((status) => (
                         <button
                             key={status}
-                            className={`admin-mini-btn${reportsStatus === status ? ' admin-mini-approve' : ''}`}
-                            onClick={() => onReportsStatusChange(status)}
+                            className={`admin-mini-btn${repliesStatus === status ? ' admin-mini-approve' : ''}`}
+                            onClick={() => onRepliesStatusChange(status)}
                             disabled={adminMutationLoading}
-                            aria-pressed={reportsStatus === status}
+                            aria-pressed={repliesStatus === status}
                         >
-                            {status.charAt(0).toUpperCase() + status.slice(1)}
+                            {status === 'pending' ? `Pending${pendingRepliesCount > 0 ? ` (${pendingRepliesCount})` : ''}` : 'Approved'}
                         </button>
                     ))}
                 </div>
                 <div className="admin-list">
-                    {reports.length === 0 ? (
-                        <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>No {reportsStatus} reports.</p>
+                    {replies.length === 0 ? (
+                        <p style={{ textAlign: 'center', padding: '20px', color: '#999' }}>No {repliesStatus} replies.</p>
                     ) : (
-                        reports.map((report) => (
-                            <div key={report.id} className="admin-item" style={{ alignItems: 'flex-start' }}>
+                        replies.map((reply) => (
+                            <div key={reply.id} className="admin-item" style={{ alignItems: 'flex-start' }}>
                                 <div className="review-info">
-                                    <strong>{report.teacher_name} · review #{report.review_id}</strong>
-                                    <small style={{ display: 'block', marginTop: '4px' }}>
-                                        Reported {new Date(report.created_at).toLocaleDateString()} by a reader
-                                    </small>
-                                    <p style={{ margin: '6px 0', fontStyle: 'italic' }}>&quot;{report.reason}&quot;</p>
-                                    <p style={{ margin: 0, color: '#475569' }}>{report.comment}</p>
+                                    <strong>{reply.teacher_name || 'Deleted teacher'} · review #{reply.review_id}</strong>
+                                    {reply.moderation_flag && (
+                                        <span className={`admin-flag-badge admin-flag-${reply.moderation_flag}`} style={{ marginLeft: '8px' }}>
+                                            {reply.moderation_flag.charAt(0).toUpperCase() + reply.moderation_flag.slice(1)}
+                                        </span>
+                                    )}
+                                    <p className="admin-reply-parent">
+                                        {reply.review_comment !== null
+                                            ? <>&quot;{reply.review_comment}&quot; <small>— {reply.review_user_name || 'Anonymous'}{Number(reply.review_is_approved) ? '' : ' (review pending)'}</small></>
+                                            : <em>The original review was deleted.</em>}
+                                    </p>
+                                    <p style={{ margin: '6px 0 4px' }}>
+                                        <Icon name="message-circle" size={13} /> {reply.reply}
+                                    </p>
                                     <small style={{ color: '#64748b' }}>
-                                        {report.user_name || 'Anonymous'} · {Number(report.is_approved) ? 'Approved' : 'Pending'}
+                                        <Icon name="user" size={12} /> {reply.user_name || 'Anonymous'} | <Icon name="calendar" size={12} /> {new Date(reply.created_at).toLocaleDateString()}
                                     </small>
                                 </div>
                                 <div className="admin-item-actions">
-                                    {report.status !== 'resolved' && (
-                                        <button onClick={() => onUpdateReportStatus(report.id, 'resolved')} className="admin-mini-btn admin-mini-approve" disabled={adminMutationLoading}>
-                                            Resolve
+                                    {Number(reply.is_approved) ? (
+                                        <button onClick={() => onSetReplyApproved(reply.id, false)} className="admin-mini-btn" disabled={adminMutationLoading}>
+                                            Hide
+                                        </button>
+                                    ) : (
+                                        <button onClick={() => onSetReplyApproved(reply.id, true)} className="admin-mini-btn admin-mini-approve" disabled={adminMutationLoading}>
+                                            Approve
                                         </button>
                                     )}
-                                    {report.status !== 'dismissed' && (
-                                        <button onClick={() => onUpdateReportStatus(report.id, 'dismissed')} className="admin-mini-btn admin-mini-reject" disabled={adminMutationLoading}>
-                                            Dismiss
-                                        </button>
-                                    )}
-                                    {report.status !== 'open' && (
-                                        <button onClick={() => onUpdateReportStatus(report.id, 'open')} className="admin-mini-btn" disabled={adminMutationLoading}>
-                                            Reopen
-                                        </button>
-                                    )}
+                                    <button onClick={() => onDeleteReply(reply.id)} className="admin-mini-btn admin-mini-reject" disabled={adminMutationLoading}>
+                                        Delete
+                                    </button>
                                 </div>
                             </div>
                         ))
                     )}
                 </div>
-                {adminReportsPage < adminReportsTotalPages && (
-                    <button onClick={onLoadMoreReports} className="add-teacher-btn" disabled={adminLoadingMoreReports} style={{ marginTop: '12px' }}>
-                        {adminLoadingMoreReports ? 'Loading…' : 'Load more reports'}
+                {adminRepliesPage < adminRepliesTotalPages && (
+                    <button onClick={onLoadMoreReplies} className="add-teacher-btn" disabled={adminLoadingMoreReplies} style={{ marginTop: '12px' }}>
+                        {adminLoadingMoreReplies ? 'Loading…' : 'Load more replies'}
                     </button>
                 )}
             </div>

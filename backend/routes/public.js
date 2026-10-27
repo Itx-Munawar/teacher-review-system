@@ -1,7 +1,6 @@
-// Public endpoints: teachers, search, Q&A, reviews and reports.
+// Public endpoints: teachers, search, Q&A, reviews and review replies.
 
 const express = require('express');
-const crypto = require('crypto');
 const db = require('../db');
 // Public forms use the same double-submit CSRF check as the admin panel. It
 // runs before the rate limiters, so a forged cross-site request is refused
@@ -10,16 +9,18 @@ const { csrfValidate } = require('../csrf');
 const { body, validationResult } = require('express-validator');
 const { detectFlaggedText, moderationFlagFor } = require('../contentFilter');
 const state = require('../state');
-const { JWT_SECRET } = require('../config');
 const { clampInt } = require('../lib/validation');
 const { parseCookies } = require('../lib/cookies');
-const { reviewLimiter, searchLimiter, questionLimiter, reportLimiter } = require('../lib/limiters');
-const { createAuditLog } = require('../lib/audit');
+const { reviewLimiter, searchLimiter, questionLimiter, replyLimiter } = require('../lib/limiters');
 const { recordSearchGap } = require('../lib/searchGaps');
 const { getCached, setCache, invalidateCache } = require('../lib/cache');
 const { normalizeReviewText } = require('../lib/content');
 
 const router = express.Router();
+
+const REVIEW_MIN_CHARS = 5;
+const REPLY_MIN_CHARS = 2;
+const REPLY_MAX_CHARS = 500;
 
 // ========== PUBLIC API ENDPOINTS ==========
 
@@ -229,6 +230,25 @@ router.get('/api/teachers/:id', async (req, res) => {
             [teacherId]
         );
         const totalReviews = countData[0].total || 0;
+
+        // Approved replies under each review on this page, oldest first, so a
+        // thread reads top to bottom. Only public columns are selected.
+        reviews.forEach((r) => { r.replies = []; });
+        if (state.reviewRepliesReady && reviews.length > 0) {
+            const ids = reviews.map((r) => r.id);
+            const [replies] = await db.query(
+                `SELECT id, review_id, reply, user_name, created_at
+                 FROM review_replies
+                 WHERE review_id IN (${ids.map(() => '?').join(',')}) AND is_approved = 1
+                 ORDER BY created_at ASC, id ASC`,
+                ids
+            );
+            const byReview = new Map(reviews.map((r) => [r.id, r]));
+            replies.forEach((reply) => {
+                const parent = byReview.get(reply.review_id);
+                if (parent) parent.replies.push(reply);
+            });
+        }
 
 
         res.json({
@@ -483,12 +503,12 @@ router.post('/api/questions/:id/answers', csrfValidate, questionLimiter, [
 // POST /api/reviews - submit a new review
 router.post('/api/reviews', csrfValidate, reviewLimiter, [
     body('teacher_id').isInt({ min: 1 }).withMessage('Invalid teacher ID'),
-    // 15 characters is the point where a review says something. Three-character
-    // entries ("ok", "bad") were 23% of the corpus and carry no information.
+    // Short reviews ("Very good", "Best sir") are allowed; a moderator reads
+    // every review anyway. Bare "ok"/"bad" (under REVIEW_MIN_CHARS) are not.
     body('comment')
         .customSanitizer((value) => String(value || '').trim())
-        .isLength({ min: 15, max: 1000 })
-        .withMessage('Review must be between 15 and 1000 characters'),
+        .isLength({ min: REVIEW_MIN_CHARS, max: 1000 })
+        .withMessage(`Review must be between ${REVIEW_MIN_CHARS} and 1000 characters`),
     body('user_name').optional().isLength({ max: 100 }).withMessage('Name too long')
 ], async (req, res) => {
     const errors = validationResult(req);
@@ -500,9 +520,10 @@ router.post('/api/reviews', csrfValidate, reviewLimiter, [
         const { teacher_id, comment, user_name, courses } = req.body;
         const sanitizedComment = String(comment).trim().slice(0, 1000);
         const normalizedComment = normalizeReviewText(sanitizedComment);
-        if (normalizedComment.length < 15) {
+        // Punctuation alone ("!!!!!") passes the length check but says nothing.
+        if (normalizedComment.replace(/\s/g, '').length < 2) {
             return res.status(400).json({
-                error: 'Review must be between 15 and 1000 characters',
+                error: `Review must be between ${REVIEW_MIN_CHARS} and 1000 characters`,
                 code: 'VALIDATION_ERROR'
             });
         }
@@ -568,51 +589,57 @@ router.post('/api/reviews', csrfValidate, reviewLimiter, [
     }
 });
 
-// POST /api/reviews/:id/report - flag a published review for an admin
-router.post('/api/reviews/:id/report', csrfValidate, reportLimiter, [
-    body('reason')
-        .customSanitizer((value) => String(value || '').trim())
-        .isLength({ min: 3, max: 300 })
-        .withMessage('Please give a short reason (3-300 characters)')
+// POST /api/reviews/:id/replies - reply to a published review. Like reviews and
+// Q&A answers, every reply waits for a moderator before it is shown.
+router.post('/api/reviews/:id/replies', csrfValidate, replyLimiter, [
+    body('reply')
+        .customSanitizer((value) => (typeof value === 'string' ? value.trim() : ''))
+        .isLength({ min: REPLY_MIN_CHARS, max: REPLY_MAX_CHARS })
+        .withMessage(`Reply must be between ${REPLY_MIN_CHARS} and ${REPLY_MAX_CHARS} characters`),
+    body('user_name').optional({ nullable: true }).isString().isLength({ max: 100 }).withMessage('Name too long')
 ], async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
         return res.status(400).json({ error: errors.array()[0].msg, code: 'VALIDATION_ERROR' });
     }
-
-    if (!state.reviewReportsReady) {
-        return res.status(503).json({ error: 'Reporting is temporarily unavailable. Please try again shortly.' });
+    if (!state.reviewRepliesReady) {
+        return res.status(503).json({ error: 'Replies are temporarily unavailable. Please try again shortly.' });
     }
-
     try {
-        const reviewId = parseInt(req.params.id, 10);
+        const reviewId = Number.parseInt(req.params.id, 10);
         if (!Number.isInteger(reviewId) || reviewId < 1) {
             return res.status(400).json({ error: 'Invalid review ID' });
         }
-
         const [reviews] = await db.query('SELECT id FROM reviews WHERE id = ? AND is_approved = 1', [reviewId]);
-        if (reviews.length === 0) {
-            return res.status(404).json({ error: 'Review not found' });
+        if (reviews.length === 0) return res.status(404).json({ error: 'Review not found' });
+
+        const reply = req.body.reply.replace(/[ \t]+/g, ' ').slice(0, REPLY_MAX_CHARS);
+        const normalized = normalizeReviewText(reply);
+        if (normalized.replace(/\s/g, '').length < 2) {
+            return res.status(400).json({ error: `Reply must be between ${REPLY_MIN_CHARS} and ${REPLY_MAX_CHARS} characters`, code: 'VALIDATION_ERROR' });
+        }
+        const rawName = typeof req.body.user_name === 'string' ? req.body.user_name.trim().slice(0, 100) : '';
+        const userName = rawName || 'Anonymous';
+
+        // The same text twice under one review is a double-tap or spam.
+        const [existing] = await db.query('SELECT reply FROM review_replies WHERE review_id = ? ORDER BY id DESC LIMIT 100', [reviewId]);
+        if (existing.some((row) => normalizeReviewText(row.reply) === normalized)) {
+            return res.status(409).json({ error: 'This reply has already been submitted.', code: 'DUPLICATE_REPLY' });
         }
 
-        // Store a salted hash instead of the reporter's IP: enough to collapse
-        // repeat reports from one client, nothing to identify them by.
-        const reporterHash = crypto
-            .createHash('sha256')
-            .update(`${req.ip || 'unknown'}|${JWT_SECRET}`)
-            .digest('hex');
-
-        await db.query(
-            `INSERT INTO review_reports (review_id, reason, reporter_hash)
-             VALUES (?, ?, ?)
-             ON DUPLICATE KEY UPDATE id = id`,
-            [reviewId, String(req.body.reason).trim().slice(0, 300), reporterHash]
+        const flag = moderationFlagFor(reply) || (detectFlaggedText(userName).flagged ? 'profanity' : null);
+        const [result] = await db.query(
+            'INSERT INTO review_replies (review_id, reply, user_name, is_approved, moderation_flag) VALUES (?, ?, ?, 0, ?)',
+            [reviewId, reply, userName, flag]
         );
-
-        await createAuditLog(null, 'REPORT_REVIEW', `Reported review ID: ${reviewId}`, req.ip);
-        res.json({ success: true, message: 'Report received. An admin will take a look.' });
+        res.json({
+            success: true,
+            reply_id: result.insertId,
+            pending: true,
+            message: 'Reply submitted - it will appear once a moderator approves it.'
+        });
     } catch (error) {
-        console.error('Error reporting review:', error);
+        console.error('Error saving reply:', error);
         res.status(500).json({ error: 'Database error' });
     }
 });

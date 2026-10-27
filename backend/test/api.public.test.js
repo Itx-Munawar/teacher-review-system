@@ -147,7 +147,7 @@ describe('public API', { skip: SKIP }, () => {
             ['/api/reviews', { teacher_id: teacherB, comment: 'Forged review from another site.' }],
             ['/api/questions', { question: 'Is this a forged question from elsewhere?' }],
             ['/api/questions/1/answers', { answer: 'Forged answer text' }],
-            ['/api/reviews/1/report', { reason: 'spam' }],
+            ['/api/reviews/1/replies', { reply: 'Forged reply text' }],
             ['/api/custom-courses', { name: 'Forged Course' }],
         ];
 
@@ -206,6 +206,17 @@ describe('public API', { skip: SKIP }, () => {
             const res = await createClient(server.baseUrl).post('/api/reviews', { teacher_id: teacherB, comment: 'bad' });
             assert.equal(res.status, 400);
             assert.equal(res.body.code, 'VALIDATION_ERROR');
+            assert.match(res.body.error, /between 5 and 1000/);
+        });
+
+        it('accepts a five-character review but not five punctuation marks', async () => {
+            const client = createClient(server.baseUrl);
+            const ok = await client.post('/api/reviews', { teacher_id: teacherA, comment: 'Great' });
+            assert.equal(ok.status, 200, ok.text);
+            const four = await client.post('/api/reviews', { teacher_id: teacherA, comment: 'Good' });
+            assert.equal(four.status, 400);
+            const noise = await client.post('/api/reviews', { teacher_id: teacherA, comment: '!!!!!' });
+            assert.equal(noise.status, 400);
         });
 
         it('404s for an unknown teacher', async () => {
@@ -237,18 +248,64 @@ describe('public API', { skip: SKIP }, () => {
         });
     });
 
-    describe('reports', () => {
-        it('accepts a report on an approved review, once per reporter', async () => {
-            const client = createClient(server.baseUrl);
-            const first = await client.post(`/api/reviews/${approvedReviewId}/report`, { reason: 'Contains personal info' });
-            assert.equal(first.status, 200);
-            await client.post(`/api/reviews/${approvedReviewId}/report`, { reason: 'Reporting again' });
-            const rows = await dbQuery('SELECT COUNT(*) AS n FROM review_reports WHERE review_id = ?', [approvedReviewId]);
-            assert.equal(rows[0].n, 1);
+    describe('review replies', () => {
+        let pendingReviewId;
+        before(async () => {
+            const r = await dbQuery(
+                "INSERT INTO reviews (teacher_id, comment, is_approved) VALUES (?, 'Pending review used for reply tests.', 0)",
+                [teacherA]
+            );
+            pendingReviewId = r.insertId;
         });
 
-        it('404s when reporting a pending or missing review', async () => {
-            const res = await createClient(server.baseUrl).post('/api/reviews/999999/report', { reason: 'Spam content' });
+        it('accepts a reply as pending and hides it until approved', async () => {
+            const client = createClient(server.baseUrl);
+            const res = await client.post(`/api/reviews/${approvedReviewId}/replies`, { reply: '  Agreed, her notes are great.  ', user_name: 'Hamza' });
+            assert.equal(res.status, 200, res.text);
+            assert.equal(res.body.pending, true);
+            const [row] = await dbQuery('SELECT reply, user_name, is_approved FROM review_replies WHERE id = ?', [res.body.reply_id]);
+            assert.equal(row.reply, 'Agreed, her notes are great.');
+            assert.equal(row.user_name, 'Hamza');
+            assert.equal(row.is_approved, 0);
+
+            let detail = await client.get(`/api/teachers/${teacherA}`);
+            let review = detail.body.reviews.find((r) => r.id === approvedReviewId);
+            assert.deepEqual(review.replies, []);
+
+            await dbQuery('UPDATE review_replies SET is_approved = 1 WHERE id = ?', [res.body.reply_id]);
+            detail = await client.get(`/api/teachers/${teacherA}`);
+            review = detail.body.reviews.find((r) => r.id === approvedReviewId);
+            assert.equal(review.replies.length, 1);
+            assert.equal(review.replies[0].reply, 'Agreed, her notes are great.');
+            assert.equal(review.replies[0].user_name, 'Hamza');
+            assert.equal(review.replies[0].is_approved, undefined, 'moderation columns stay private');
+            assert.equal(review.replies[0].moderation_flag, undefined);
+        });
+
+        it('defaults the name to Anonymous and blocks duplicate text', async () => {
+            const client = createClient(server.baseUrl);
+            const first = await client.post(`/api/reviews/${approvedReviewId}/replies`, { reply: 'Same here!' });
+            assert.equal(first.status, 200);
+            const [row] = await dbQuery('SELECT user_name FROM review_replies WHERE id = ?', [first.body.reply_id]);
+            assert.equal(row.user_name, 'Anonymous');
+            const again = await client.post(`/api/reviews/${approvedReviewId}/replies`, { reply: 'same here' });
+            assert.equal(again.status, 409);
+            assert.equal(again.body.code, 'DUPLICATE_REPLY');
+        });
+
+        it('validates length and refuses pending or missing reviews', async () => {
+            const client = createClient(server.baseUrl);
+            assert.equal((await client.post(`/api/reviews/${approvedReviewId}/replies`, { reply: 'k' })).status, 400);
+            assert.equal((await client.post(`/api/reviews/${approvedReviewId}/replies`, { reply: '?!' })).status, 400);
+            assert.equal((await client.post(`/api/reviews/${approvedReviewId}/replies`, { reply: 'x'.repeat(501) })).status, 400);
+            assert.equal((await client.post(`/api/reviews/${approvedReviewId}/replies`, { reply: { a: 1 } })).status, 400);
+            assert.equal((await client.post(`/api/reviews/${pendingReviewId}/replies`, { reply: 'Replying to a pending one' })).status, 404);
+            assert.equal((await client.post('/api/reviews/999999/replies', { reply: 'Replying to nothing' })).status, 404);
+            assert.equal((await client.post('/api/reviews/abc/replies', { reply: 'Bad id here' })).status, 400);
+        });
+
+        it('the old report endpoint is gone', async () => {
+            const res = await createClient(server.baseUrl).post(`/api/reviews/${approvedReviewId}/report`, { reason: 'spam spam' });
             assert.equal(res.status, 404);
         });
     });

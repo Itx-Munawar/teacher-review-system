@@ -302,15 +302,15 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                             onChange={(e) => setReviewComment(e.target.value)}
                             placeholder="Be specific: the course, the workload, how explanations landed."
                             required
-                            minLength={15}
+                            minLength={5}
                             maxLength={1000}
                             aria-required="true"
                             aria-describedby="review-comment-help"
                         />
                         <div className="review-form-meta" id="review-comment-help">
                             <span className="review-char-count">
-                                {reviewComment.trim().length < 15
-                                    ? `${15 - reviewComment.trim().length} more character${15 - reviewComment.trim().length === 1 ? '' : 's'} needed`
+                                {reviewComment.trim().length < 5
+                                    ? `${5 - reviewComment.trim().length} more character${5 - reviewComment.trim().length === 1 ? '' : 's'} needed`
                                     : `${reviewComment.length}/1000`}
                             </span>
                         </div>

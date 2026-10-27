@@ -71,17 +71,18 @@ const AdminScreen: React.FC<AdminScreenProps> = ({
         adminLoadingMoreQuestions,
         customCourses,
         reviewsPendingOnly,
-        adminReports,
-        adminReportsPage,
-        adminReportsTotalPages,
-        adminLoadingMoreReports,
-        adminReportsStatus,
+        adminReplies,
+        adminRepliesPage,
+        adminRepliesTotalPages,
+        adminLoadingMoreReplies,
+        adminRepliesStatus,
         handleTogglePendingOnly,
         handleLoadMoreReviews,
         handleLoadMoreQuestions,
-        handleLoadMoreReports,
-        handleReportsStatusChange,
-        handleUpdateReportStatus,
+        handleLoadMoreReplies,
+        handleRepliesStatusChange,
+        handleSetReplyApproved,
+        handleDeleteReply,
         handleReviewCustomCourse,
         handleLoadTeacherDetail,
         handleAdminLogin,
@@ -205,15 +206,16 @@ const AdminScreen: React.FC<AdminScreenProps> = ({
                     onCleanTeacherImages={handleCleanTeacherImages}
                     onApproveReview={handleApproveReview}
                     onRejectReview={handleRejectReview}
-                    reports={adminReports}
-                    openReportsCount={adminStats?.open_reports ?? 0}
-                    reportsStatus={adminReportsStatus}
-                    onReportsStatusChange={handleReportsStatusChange}
-                    onUpdateReportStatus={handleUpdateReportStatus}
-                    onLoadMoreReports={handleLoadMoreReports}
-                    adminReportsPage={adminReportsPage}
-                    adminReportsTotalPages={adminReportsTotalPages}
-                    adminLoadingMoreReports={adminLoadingMoreReports}
+                    replies={adminReplies}
+                    pendingRepliesCount={adminStats?.pending_replies ?? 0}
+                    repliesStatus={adminRepliesStatus}
+                    onRepliesStatusChange={handleRepliesStatusChange}
+                    onSetReplyApproved={handleSetReplyApproved}
+                    onDeleteReply={handleDeleteReply}
+                    onLoadMoreReplies={handleLoadMoreReplies}
+                    adminRepliesPage={adminRepliesPage}
+                    adminRepliesTotalPages={adminRepliesTotalPages}
+                    adminLoadingMoreReplies={adminLoadingMoreReplies}
                     totpEnabled={adminTotpEnabled}
                 />
                 </Suspense>

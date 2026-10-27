@@ -3,9 +3,9 @@ import Icon from './Icon';
 import Avatar from './Avatar';
 import LazySection from './LazySection';
 import QASection from './QASection';
-import { reportReview } from '../services/api';
+import { replyToReview } from '../services/api';
 import { extractCourses } from '../utils/courses';
-import type { TeacherDetail, Teacher, Review } from '../types';
+import type { TeacherDetail, Teacher, Review, ReviewReply } from '../types';
 
 interface TeacherDetailViewProps {
     selectedTeacher: TeacherDetail;
@@ -21,6 +21,9 @@ interface TeacherDetailViewProps {
     /** Load the next page of reviews for long profiles. */
     onLoadMoreReviews?: () => void | Promise<void>;
 }
+
+const REPLY_MIN = 2;
+const REPLY_MAX = 500;
 
 const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
     selectedTeacher,
@@ -56,29 +59,34 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
         ? new Date(sortedReviews[0].created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
         : '—';
 
-    // Reader reports: one inline form at a time, and a local record of what
-    // this session already reported so the button does not invite doubles.
-    const [reportOpenId, setReportOpenId] = useState<number | null>(null);
-    const [reportReason, setReportReason] = useState('');
-    const [reportSending, setReportSending] = useState(false);
-    const [reportedIds, setReportedIds] = useState<number[]>([]);
+    // Replies: one inline form at a time, and a local record of what this
+    // session already sent so the reader sees it is waiting for approval.
+    const [replyOpenId, setReplyOpenId] = useState<number | null>(null);
+    const [replyText, setReplyText] = useState('');
+    const [replyName, setReplyName] = useState('');
+    const [replySending, setReplySending] = useState(false);
+    const [repliedIds, setRepliedIds] = useState<number[]>([]);
 
-    const submitReport = async (e: React.FormEvent, reviewId: number) => {
+    const closeReplyForm = () => {
+        setReplyOpenId(null);
+        setReplyText('');
+    };
+
+    const submitReply = async (e: React.FormEvent, reviewId: number) => {
         e.preventDefault();
-        const reason = reportReason.trim();
-        if (reason.length < 3 || reportSending) return;
-        setReportSending(true);
+        const text = replyText.trim();
+        if (text.length < REPLY_MIN || replySending) return;
+        setReplySending(true);
         try {
-            await reportReview(reviewId, reason);
-            setReportedIds((ids) => [...ids, reviewId]);
-            setReportOpenId(null);
-            setReportReason('');
-            showToast('Report sent. Thank you - a moderator will take a look.', 'success');
+            await replyToReview(reviewId, text, replyName.trim() || undefined);
+            setRepliedIds((ids) => [...ids, reviewId]);
+            closeReplyForm();
+            showToast('Reply sent. It will appear once a moderator approves it.', 'success');
         } catch (err) {
             const axiosErr = err as { response?: { data?: { error?: string } } };
-            showToast(axiosErr.response?.data?.error || 'Could not send the report. Please try again.', 'error');
+            showToast(axiosErr.response?.data?.error || 'Could not send the reply. Please try again.', 'error');
         } finally {
-            setReportSending(false);
+            setReplySending(false);
         }
     };
 
@@ -185,48 +193,76 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                                         </div>
                                     )}
                                     <p className="review-comment">{review.comment}</p>
+                                    {(review.replies || []).length > 0 && (
+                                        <ul className="review-replies" aria-label={`Replies to ${review.user_name || 'Anonymous'}`}>
+                                            {(review.replies || []).map((reply: ReviewReply) => (
+                                                <li key={reply.id} className="review-reply">
+                                                    <div className="review-reply-meta">
+                                                        <Icon name="message-circle" size={12} />
+                                                        <span className="review-reply-author">{reply.user_name || 'Anonymous'}</span>
+                                                        <span>{new Date(reply.created_at).toLocaleDateString()}</span>
+                                                    </div>
+                                                    <p className="review-reply-text">{reply.reply}</p>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
                                     <div className="review-footer">
-                                        {reportedIds.includes(review.id) ? (
-                                            <span className="review-reported">
-                                                <Icon name="check" size={12} /> Reported — thank you
+                                        {repliedIds.includes(review.id) && replyOpenId !== review.id ? (
+                                            <span className="review-replied">
+                                                <Icon name="check" size={12} /> Reply sent — it will appear after approval
                                             </span>
-                                        ) : reportOpenId === review.id ? (
+                                        ) : replyOpenId === review.id ? (
                                             <form
-                                                className="review-report-form"
-                                                onSubmit={(e) => submitReport(e, review.id)}
+                                                className="review-reply-form"
+                                                onSubmit={(e) => submitReply(e, review.id)}
                                             >
-                                                <input
-                                                    type="text"
-                                                    value={reportReason}
-                                                    onChange={(e) => setReportReason(e.target.value)}
-                                                    placeholder="Why are you reporting this review?"
-                                                    maxLength={300}
-                                                    aria-label="Reason for reporting this review"
+                                                <textarea
+                                                    value={replyText}
+                                                    onChange={(e) => setReplyText(e.target.value)}
+                                                    placeholder="Write a reply to this review…"
+                                                    maxLength={REPLY_MAX}
+                                                    rows={2}
+                                                    aria-label={`Reply to the review by ${review.user_name || 'Anonymous'}`}
                                                     autoFocus
                                                 />
-                                                <button
-                                                    type="submit"
-                                                    className="review-report-send"
-                                                    disabled={reportSending || reportReason.trim().length < 3}
-                                                >
-                                                    {reportSending ? 'Sending…' : 'Send'}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className="review-report-cancel"
-                                                    onClick={() => { setReportOpenId(null); setReportReason(''); }}
-                                                >
-                                                    Cancel
-                                                </button>
+                                                <div className="review-reply-row">
+                                                    <input
+                                                        type="text"
+                                                        value={replyName}
+                                                        onChange={(e) => setReplyName(e.target.value)}
+                                                        placeholder="Name (optional)"
+                                                        maxLength={100}
+                                                        aria-label="Your name (optional)"
+                                                    />
+                                                    <button
+                                                        type="submit"
+                                                        className="review-reply-send"
+                                                        disabled={replySending || replyText.trim().length < REPLY_MIN}
+                                                    >
+                                                        {replySending ? 'Sending…' : 'Send reply'}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="review-reply-cancel"
+                                                        onClick={closeReplyForm}
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                    <span className="review-reply-hint">
+                                                        {replyText.length}/{REPLY_MAX} · moderated
+                                                    </span>
+                                                </div>
                                             </form>
                                         ) : (
                                             <button
                                                 type="button"
-                                                className="review-report-trigger"
-                                                onClick={() => { setReportOpenId(review.id); setReportReason(''); }}
-                                                aria-label={`Report this review by ${review.user_name || 'Anonymous'}`}
+                                                className="review-reply-trigger"
+                                                onClick={() => { setReplyOpenId(review.id); setReplyText(''); }}
+                                                aria-label={`Reply to the review by ${review.user_name || 'Anonymous'}`}
                                             >
-                                                <Icon name="flag" size={12} /> Report
+                                                <Icon name="message-circle" size={12} /> Reply
+                                                {(review.replies || []).length > 0 ? ` (${(review.replies || []).length})` : ''}
                                             </button>
                                         )}
                                     </div>

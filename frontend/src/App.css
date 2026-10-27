@@ -633,13 +633,80 @@ body {
     gap: 4px;
 }
 
-/* Reader reporting: kept quiet until needed so it never competes with the review. */
+/* Review replies: the trigger stays quiet so it never competes with the review. */
 .review-footer {
     display: flex;
-    justify-content: flex-end;
+    justify-content: flex-start;
 }
 
-.review-report-trigger {
+.review-reply-form {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.review-reply-form textarea {
+    flex: 1 1 auto;
+    width: 100%;
+    resize: vertical;
+    min-height: 64px;
+    font-family: inherit;
+    line-height: 1.45;
+    box-sizing: border-box;
+}
+
+.review-reply-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.review-reply-hint {
+    margin-left: auto;
+    font-size: 0.72rem;
+    color: #8a7a66;
+}
+
+.review-replies {
+    list-style: none;
+    margin: 10px 0 0;
+    padding: 0 0 0 14px;
+    border-left: 2px solid rgba(198, 161, 91, 0.35);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.review-reply {
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: rgba(198, 161, 91, 0.08);
+}
+
+.review-reply-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.74rem;
+    color: #8a7a66;
+    margin-bottom: 2px;
+}
+
+.review-reply-author {
+    font-weight: 600;
+    color: #4a3b2a;
+}
+
+.review-reply-text {
+    margin: 0;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: #3b2f22;
+    overflow-wrap: anywhere;
+    white-space: pre-line;
+}
+
+.review-reply-trigger {
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -650,14 +717,15 @@ body {
     transition: color 0.15s ease, background 0.15s ease;
 }
 
-.review-report-form {
+.review-reply-form {
     display: flex;
     gap: 6px;
     width: 100%;
     flex-wrap: wrap;
 }
 
-.review-report-form input {
+.review-reply-form input,
+.review-reply-form textarea {
     flex: 1 1 220px;
     min-width: 0;
     padding: 6px 10px;
@@ -666,12 +734,13 @@ body {
     font-size: 0.82rem;
 }
 
-.review-report-form input:focus {
+.review-reply-form input:focus,
+.review-reply-form textarea:focus {
     outline: none;
 }
 
-.review-report-send,
-.review-report-cancel {
+.review-reply-send,
+.review-reply-cancel {
     padding: 6px 12px;
     border-radius: 8px;
     font-size: 0.78rem;
@@ -680,16 +749,16 @@ body {
     border: 1px solid transparent;
 }
 
-.review-report-send {
+.review-reply-send {
     color: #fff;
 }
 
-.review-report-send:disabled {
+.review-reply-send:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }
 
-.review-reported {
+.review-replied {
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -1268,9 +1337,18 @@ body {
     background: #ffedd5;
 }
 
-.admin-flag-reported {
+.admin-flag-profanity {
     color: #7a5320;
     background: #ece2d0;
+}
+
+.admin-reply-parent {
+    margin: 6px 0 0;
+    padding: 6px 10px;
+    border-left: 3px solid #e2e8f0;
+    color: #475569;
+    font-size: 0.85rem;
+    font-style: italic;
 }
 
 .admin-detail-review-courses {
@@ -5150,32 +5228,34 @@ body {
     margin-top: 2px;
 }
 
-.review-report-trigger {
+.review-reply-trigger {
     font-size: 0.71rem;
 }
 
-.review-report-trigger:hover,
-.review-report-trigger:focus-visible {
-    background: rgba(168, 50, 42, 0.07);
+.review-reply-trigger:hover,
+.review-reply-trigger:focus-visible {
+    background: rgba(198, 161, 91, 0.1);
 }
 
-.review-report-form input {
+.review-reply-form input,
+.review-reply-form textarea {
     border-color: var(--hairline);
     background: #fffdf8;
     color: var(--ink-soft);
 }
 
-.review-report-form input:focus {
+.review-reply-form input:focus,
+.review-reply-form textarea:focus {
     border-color: var(--gold);
     box-shadow: 0 0 0 3px rgba(198, 161, 91, 0.18);
 }
 
-.review-report-send {
+.review-reply-send {
     background: #2c1c3a;
     border-radius: 8px;
 }
 
-.review-report-cancel {
+.review-reply-cancel {
     background: #f4ede0;
     border-color: var(--hairline);
     color: #6b5b46;
@@ -8643,14 +8723,14 @@ body {
     }
 }
 
-.review-report-trigger {
+.review-reply-trigger {
     min-height: 44px;
     padding: 8px 0;
     color: var(--muted);
 }
 
-.review-report-trigger:hover,
-.review-report-trigger:focus-visible {
+.review-reply-trigger:hover,
+.review-reply-trigger:focus-visible {
     color: var(--gold-deep);
 }
 
@@ -9173,4 +9253,17 @@ body {
 .review-load-more:disabled {
     opacity: 0.6;
     cursor: default;
+}
+
+/* Reply form: the shared input rule gives fields flex-basis 220px, which in
+   the column layout would become a 220px-tall textarea. Size it by rows. */
+.review-footer .review-reply-form textarea {
+    flex: 0 0 auto;
+    height: auto;
+    min-height: 64px;
+    max-height: 240px;
+}
+
+.review-footer .review-reply-row input {
+    flex: 1 1 160px;
 }

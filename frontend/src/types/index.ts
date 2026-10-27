@@ -16,8 +16,17 @@ export interface Review {
     created_at: string;
     /** Triage marker written by the content filter; only admins see it. */
     moderation_flag?: 'sensitive' | 'bias' | 'profanity' | null;
-    /** Open reader reports (admin payloads only). */
-    open_reports?: number;
+    /** Approved replies (public teacher-detail payloads). */
+    replies?: ReviewReply[];
+}
+
+/** A moderator-approved reply shown under a review. */
+export interface ReviewReply {
+    id: number;
+    review_id: number;
+    reply: string;
+    user_name: string;
+    created_at: string;
 }
 
 export interface TeacherDetail extends Teacher {
@@ -44,8 +53,6 @@ export interface AdminReview {
     created_at: string;
     /** Triage marker written by the content filter. */
     moderation_flag?: 'sensitive' | 'bias' | 'profanity' | null;
-    /** Number of unresolved reader reports. */
-    open_reports?: number;
 }
 
 export interface AdminQuestion {
@@ -84,18 +91,22 @@ export interface CustomCourse {
     reviewed_at: string | null;
 }
 
-/** A reader-submitted report against a published review. */
-export interface AdminReport {
+/** A reply as the admin Replies tab sees it, with its parent review. */
+export interface AdminReply {
     id: number;
     review_id: number;
-    reason: string;
-    status: 'open' | 'resolved' | 'dismissed';
-    created_at: string;
-    comment: string;
+    reply: string;
     user_name: string;
+    /** MySQL returns 0/1. */
     is_approved: boolean | number;
-    teacher_id: number;
-    teacher_name: string;
+    moderation_flag?: 'sensitive' | 'bias' | 'profanity' | null;
+    created_at: string;
+    /** Null if the parent review no longer exists. */
+    review_comment: string | null;
+    review_user_name: string | null;
+    review_is_approved: boolean | number | null;
+    teacher_id: number | null;
+    teacher_name: string | null;
 }
 
 export interface AdminStats {
@@ -103,7 +114,7 @@ export interface AdminStats {
     total_reviews: number;
     reviews_last_week: number;
     pending_reviews?: number;
-    open_reports?: number;
+    pending_replies?: number;
     last_sweep?: { scanned: number; queued: number; already_queued?: number; at: string } | null;
 }
 
