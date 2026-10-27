@@ -10,8 +10,27 @@ const API_BASE = String(process.env.GEMINI_API_BASE || 'https://generativelangua
 // Flash-Lite models have the largest free daily quota.
 const MODELS = String(process.env.GEMINI_MODELS || 'gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-2.5-flash-lite')
     .split(',').map((m) => m.trim()).filter(Boolean);
-const TIMEOUT_MS = Math.max(3000, parseInt(process.env.GEMINI_TIMEOUT_MS, 10) || 25000);
+// Per-model wait. A healthy model answers in a few seconds; one that hangs
+// longer is overloaded, and the next model is a better bet than waiting.
+const TIMEOUT_MS = Math.max(3000, parseInt(process.env.GEMINI_TIMEOUT_MS, 10) || 15000);
+// Total time one request may spend across all models, so a visitor never
+// waits minutes for "busy".
+const TOTAL_BUDGET_MS = Math.max(TIMEOUT_MS, parseInt(process.env.GEMINI_TOTAL_BUDGET_MS, 10) || 40000);
 const COOLDOWN_MS = 60 * 1000;
+// A model that timed out is skipped for longer than a rate-limited one:
+// retrying it straight away would make the next visitor wait again.
+const TIMEOUT_COOLDOWN_MS = 3 * 60 * 1000;
+
+// When every model fails the reason is stored in the admin Errors tab (lazy
+// require: errorTracker pulls in the database layer).
+const reportFailure = (attempts) => {
+    try {
+        require('./errorTracker').recordError({
+            source: 'backend',
+            message: `Gemini unavailable: ${attempts.join('; ')}`.slice(0, 500)
+        }).catch(() => {});
+    } catch (_) { /* never let reporting break the request */ }
+};
 
 const cooldownUntil = new Map();
 
@@ -28,9 +47,9 @@ class GeminiError extends Error {
 
 const isConfigured = () => Boolean(process.env.GEMINI_API_KEY);
 
-const callModel = async (model, payload) => {
+const callModel = async (model, payload, timeoutMs = TIMEOUT_MS) => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
         const res = await fetch(`${API_BASE}/models/${encodeURIComponent(model)}:generateContent`, {
             method: 'POST',
@@ -70,14 +89,23 @@ const generate = async ({ system, contents, maxOutputTokens = 2048, temperature 
         : [...MODELS].sort((a, b) => (cooldownUntil.get(a) || 0) - (cooldownUntil.get(b) || 0)).slice(0, 1);
 
     let lastError = null;
+    const attempts = [];
+    const requestStarted = Date.now();
     for (const model of order) {
+        const remaining = TOTAL_BUDGET_MS - (Date.now() - requestStarted);
+        if (remaining < 3000) {
+            attempts.push(`${model} skipped (time budget used)`);
+            break;
+        }
         const started = Date.now();
         let result;
         try {
-            result = await callModel(model, payload);
+            result = await callModel(model, payload, Math.min(TIMEOUT_MS, remaining));
         } catch (err) {
             const timedOut = err && err.name === 'AbortError';
-            log('warn', 'gemini_request_failed', { model, reason: timedOut ? 'timeout' : String(err && err.message) });
+            log('warn', 'gemini_request_failed', { model, reason: timedOut ? 'timeout' : String(err && err.message), ms: Date.now() - started });
+            cooldownUntil.set(model, Date.now() + (timedOut ? TIMEOUT_COOLDOWN_MS : COOLDOWN_MS));
+            attempts.push(`${model} ${timedOut ? `timeout after ${Math.round((Date.now() - started) / 1000)}s` : 'unreachable'}`);
             lastError = new GeminiError(timedOut ? 'Gemini timed out' : 'Gemini unreachable', { kind: 'busy' });
             continue;
         }
@@ -98,11 +126,13 @@ const generate = async ({ system, contents, maxOutputTokens = 2048, temperature 
             if (text) return { text, model, truncated: finish === 'MAX_TOKENS' };
             const blocked = (data && data.promptFeedback && data.promptFeedback.blockReason) || finish === 'SAFETY' || finish === 'PROHIBITED_CONTENT';
             if (blocked) throw new GeminiError('Response blocked by safety filter', { status, kind: 'blocked' });
+            attempts.push(`${model} empty (${finish || 'no candidate'})`);
             lastError = new GeminiError(`Empty response (${finish || 'no candidate'})`, { status });
             continue;
         }
         const apiMessage = data && data.error && data.error.message ? String(data.error.message).slice(0, 200) : '';
         log('warn', 'gemini_error', { model, status, message: apiMessage });
+        attempts.push(`${model} HTTP ${status}${apiMessage ? ` ${apiMessage.slice(0, 80)}` : ''}`);
         if (status === 429 || status === 503 || status === 500 || status === 504) {
             cooldownUntil.set(model, Date.now() + COOLDOWN_MS);
             lastError = new GeminiError('Gemini is busy', { status, kind: 'busy' });
@@ -115,8 +145,10 @@ const generate = async ({ system, contents, maxOutputTokens = 2048, temperature 
             continue;
         }
         // 400/401/403: bad key, bad request - the next model will fail the same way.
+        reportFailure(attempts);
         throw new GeminiError(apiMessage || `Gemini error ${status}`, { status, kind: status === 400 ? 'error' : 'config' });
     }
+    reportFailure(attempts.length ? attempts : ['no model available']);
     throw lastError || new GeminiError('No Gemini model available', { kind: 'busy' });
 };
 

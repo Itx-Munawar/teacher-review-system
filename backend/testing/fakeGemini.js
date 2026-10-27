@@ -14,13 +14,17 @@ const startFakeGemini = async () => {
             const model = decodeURIComponent((req.url.match(/models\/([^:]+):generateContent/) || [])[1] || '');
             calls.push({ url: req.url, model, key: req.headers['x-goog-api-key'], body });
             const next = queue.shift() || { status: 200, text: `Students say good things. (model ${model})` };
-            res.writeHead(next.status, { 'Content-Type': 'application/json' });
-            if (next.status !== 200) return res.end(JSON.stringify({ error: { code: next.status, message: 'Resource has been exhausted' } }));
-            if (next.blocked) return res.end(JSON.stringify({ promptFeedback: { blockReason: 'SAFETY' } }));
-            res.end(JSON.stringify({
-                candidates: [{ content: { role: 'model', parts: [{ text: next.text }] }, finishReason: 'STOP' }],
-                usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 20 }
-            }));
+            const respond = () => {
+                res.writeHead(next.status, { 'Content-Type': 'application/json' });
+                if (next.status !== 200) return res.end(JSON.stringify({ error: { code: next.status, message: 'Resource has been exhausted' } }));
+                if (next.blocked) return res.end(JSON.stringify({ promptFeedback: { blockReason: 'SAFETY' } }));
+                res.end(JSON.stringify({
+                    candidates: [{ content: { role: 'model', parts: [{ text: next.text }] }, finishReason: 'STOP' }],
+                    usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 20 }
+                }));
+            };
+            // `delay` (ms) simulates a slow / hanging model.
+            if (next.delay) setTimeout(respond, next.delay); else respond();
         });
     });
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));

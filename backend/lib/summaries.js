@@ -30,7 +30,8 @@ const takeBudget = () => {
 
 const SYSTEM_PROMPT = `You summarise anonymous student reviews of one university teacher for "UMT Teacher Reviews" (University of Management and Technology, Lahore).
 
-Write in Roman Urdu (Urdu in English letters), the way Pakistani students text: simple, natural, short sentences. English words for things like grading, quizzes, assignments, attendance, concepts are fine.
+LANGUAGE (most important): write ONLY in Roman Urdu (Urdu written in English letters), the way Pakistani students text: simple, natural, short sentences. This applies even when every review is written in English - translate the meaning into Roman Urdu. Never write whole sentences in English. English words for things like grading, quizzes, assignments, attendance, concepts are fine inside Roman Urdu sentences.
+Example of the right style: "Zyada tar students kehte hain ke concepts clear karte hain aur grading fair hai." Wrong: "Most students say he explains concepts clearly." 
 
 Rules:
 - Use ONLY what the reviews say. Never invent facts, numbers or courses.
@@ -44,9 +45,12 @@ Return ONLY a JSON object, no markdown:
 {"overview": "1-2 sentences overall picture", "pros": ["2-4 short points students like"], "cons": ["0-3 short points students find difficult"]}
 Each point is at most 15 words. Use an empty array if there is nothing real to say.`;
 
+// Bump when the prompt changes so cached summaries are rebuilt (lazily, on
+// the next visit, within the daily cap).
+const PROMPT_VERSION = 'v2';
 const signatureFor = (reviews) => crypto
     .createHash('sha1')
-    .update(reviews.map((r) => `${r.id}:${String(r.comment || '').length}`).join(','))
+    .update(`${PROMPT_VERSION}|${reviews.map((r) => `${r.id}:${String(r.comment || '').length}`).join(',')}`)
     .digest('hex');
 
 const clean = (text, max) => String(text || '').replace(/\s+/g, ' ').trim().slice(0, max);
