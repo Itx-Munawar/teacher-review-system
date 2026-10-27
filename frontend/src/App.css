@@ -9267,3 +9267,267 @@ body {
 .review-footer .review-reply-row input {
     flex: 1 1 160px;
 }
+
+/* ==========================================================================
+   Teacher page: share buttons, AI summary, course filter, sort, helpful votes
+   (kept at the end so earlier shared input/button rules cannot override it)
+   ========================================================================== */
+.teacher-detail .profile-share {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.teacher-detail .share-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 13px;
+    border: 1px solid var(--line, #E6DCC9);
+    border-radius: 999px;
+    background: var(--paper-soft, #FFFDF8);
+    color: var(--ink-soft, #3A3045);
+    font: 600 0.8rem/1.2 var(--font-sans, inherit);
+    text-decoration: none;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.teacher-detail .share-btn:hover,
+.teacher-detail .share-btn:focus-visible {
+    border-color: var(--gold, #C6A15B);
+    background: rgba(198, 161, 91, 0.1);
+}
+
+.teacher-detail .share-btn-whatsapp {
+    border-color: #b9e4c6;
+    background: #effaf2;
+    color: #11643a;
+}
+
+.teacher-detail .share-btn-whatsapp:hover,
+.teacher-detail .share-btn-whatsapp:focus-visible {
+    border-color: #25d366;
+    background: #dff5e6;
+    color: #0b4f2d;
+}
+
+/* AI summary card */
+.teacher-detail .ai-summary {
+    margin: 14px 0 18px;
+    padding: 16px 18px;
+    border: 1px solid var(--gold-soft, #E8CF9A);
+    border-radius: 16px;
+    background: linear-gradient(135deg, #fffaf0 0%, #fdf6e8 100%);
+    color: var(--ink-soft, #3A3045);
+}
+
+.teacher-detail .ai-summary-head {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--gold-deep, #825C24);
+    font-weight: 700;
+    font-size: 0.82rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.teacher-detail .ai-summary-badge {
+    margin-left: auto;
+    padding: 2px 9px;
+    border-radius: 999px;
+    background: rgba(198, 161, 91, 0.16);
+    font-size: 0.7rem;
+    letter-spacing: 0;
+    text-transform: none;
+    font-weight: 600;
+}
+
+.teacher-detail .ai-summary-overview {
+    margin: 10px 0 0;
+    font-size: 0.95rem;
+    line-height: 1.55;
+    color: var(--ink, #1E1428);
+}
+
+.teacher-detail .ai-summary-lists {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 6px 22px;
+    margin-top: 12px;
+}
+
+.teacher-detail .ai-summary-label {
+    margin: 0 0 4px;
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+.teacher-detail .ai-summary-label-pro { color: var(--success, #065F46); }
+.teacher-detail .ai-summary-label-con { color: var(--warning, #92400E); }
+
+.teacher-detail .ai-summary-lists ul {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 0.88rem;
+    line-height: 1.5;
+}
+
+.teacher-detail .ai-summary-note {
+    margin: 12px 0 0;
+    font-size: 0.72rem;
+    color: var(--muted, #6B6175);
+}
+
+.teacher-detail .ai-summary-skeleton {
+    height: 12px;
+    margin-top: 12px;
+    border-radius: 6px;
+    background: linear-gradient(90deg, #f3ead8 0%, #fbf5ea 50%, #f3ead8 100%);
+    background-size: 200% 100%;
+    animation: ai-summary-shimmer 1.2s ease-in-out infinite;
+}
+
+.teacher-detail .ai-summary-skeleton-short { width: 60%; }
+
+@keyframes ai-summary-shimmer {
+    from { background-position: 200% 0; }
+    to { background-position: -200% 0; }
+}
+
+/* Course chips + sort */
+.teacher-detail .review-toolbar {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px 16px;
+    flex-wrap: wrap;
+    margin: 4px 0 14px;
+}
+
+.teacher-detail .review-course-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    flex: 1 1 260px;
+    min-width: 0;
+}
+
+.teacher-detail .course-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 11px;
+    border: 1px solid var(--line, #E6DCC9);
+    border-radius: 999px;
+    background: var(--paper-soft, #FFFDF8);
+    color: var(--ink-soft, #3A3045);
+    font: 500 0.78rem/1.2 var(--font-sans, inherit);
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.teacher-detail .course-chip:hover { border-color: var(--gold, #C6A15B); }
+
+.teacher-detail .course-chip.active {
+    border-color: var(--gold-deep, #825C24);
+    background: var(--gold-deep, #825C24);
+    color: #fffdf8;
+}
+
+.teacher-detail .course-chip-count {
+    padding: 0 6px;
+    border-radius: 999px;
+    background: rgba(198, 161, 91, 0.18);
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+.teacher-detail .course-chip.active .course-chip-count { background: rgba(255, 253, 248, 0.22); }
+
+.teacher-detail .review-sort {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+    font-size: 0.78rem;
+    color: var(--muted, #6B6175);
+}
+
+.teacher-detail .review-sort select {
+    flex: 0 0 auto;
+    width: auto;
+    height: auto;
+    min-height: 0;
+    padding: 5px 26px 5px 10px;
+    border: 1px solid var(--line, #E6DCC9);
+    border-radius: 10px;
+    background-color: var(--paper-soft, #FFFDF8);
+    color: var(--ink-soft, #3A3045);
+    font: 600 0.8rem/1.2 var(--font-sans, inherit);
+    cursor: pointer;
+}
+
+.teacher-detail .review-list { transition: opacity 0.15s ease; }
+.teacher-detail .review-list-loading { opacity: 0.45; pointer-events: none; }
+
+/* Helpful vote */
+.teacher-detail .review-footer { gap: 6px 8px; flex-wrap: wrap; align-items: center; }
+
+.teacher-detail .review-helpful {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 9px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: none;
+    color: var(--muted, #6B6175);
+    font: 600 0.71rem/1.2 var(--font-sans, inherit);
+    cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.teacher-detail .review-helpful:hover,
+.teacher-detail .review-helpful:focus-visible {
+    background: rgba(198, 161, 91, 0.1);
+    color: var(--gold-deep, #825C24);
+}
+
+.teacher-detail .review-helpful.voted {
+    border-color: var(--gold-soft, #E8CF9A);
+    background: rgba(198, 161, 91, 0.14);
+    color: var(--gold-deep, #825C24);
+}
+
+.teacher-detail .review-helpful:disabled { opacity: 0.7; cursor: default; }
+
+.teacher-detail .review-helpful-count {
+    min-width: 16px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: rgba(198, 161, 91, 0.2);
+    text-align: center;
+}
+
+@media (max-width: 768px) {
+    .teacher-detail .profile-share { flex-wrap: nowrap; }
+    .teacher-detail .profile-share .share-btn {
+        flex: 1 1 0;
+        width: auto;
+        min-width: 0;
+        min-height: 0;
+        justify-content: center;
+        padding: 8px 10px;
+        font-size: 0.8rem;
+        box-shadow: none;
+    }
+}
+
+@media (max-width: 600px) {
+    .teacher-detail .review-sort { margin-left: 0; }
+    .teacher-detail .course-chip { font-size: 0.74rem; }
+}

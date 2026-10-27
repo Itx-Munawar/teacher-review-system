@@ -93,8 +93,33 @@ export const searchAllTeachers = (query: string, limit?: number, signal?: AbortS
     return api.get(`/teachers/search?${params.toString()}`, { signal });
 };
 
-export const getTeacherDetail = (id: number, reviewPage: number = 1, reviewLimit: number = 50) => {
-    return api.get(`/teachers/${id}?review_page=${reviewPage}&review_limit=${reviewLimit}`);
+export const getTeacherDetail = (
+    id: number,
+    reviewPage: number = 1,
+    reviewLimit: number = 50,
+    query?: { sort?: 'newest' | 'helpful'; course?: string | null }
+) => {
+    const params = new URLSearchParams({ review_page: String(reviewPage), review_limit: String(reviewLimit) });
+    if (query?.sort === 'helpful') params.set('review_sort', 'helpful');
+    if (query?.course) params.set('review_course', query.course);
+    return api.get(`/teachers/${id}?${params.toString()}`);
+};
+
+/** AI summary (Roman Urdu) of a teacher's approved reviews. */
+export const getTeacherSummary = (id: number) => {
+    return api.get(`/teachers/${id}/summary`);
+};
+
+/** Mark / unmark a review as helpful (one vote per browser). */
+export const voteHelpful = (reviewId: number, helpful: boolean) => {
+    return helpful
+        ? api.post(`/reviews/${reviewId}/helpful`, {})
+        : api.delete(`/reviews/${reviewId}/helpful`);
+};
+
+/** Anonymous usage counters; failures are irrelevant to the visitor. */
+export const trackEvent = (event: { type: 'visit' } | { type: 'teacher_view'; teacher_id: number }) => {
+    return api.post('/track', event).catch(() => undefined);
 };
 
 // ========== Q&A APIs ==========
@@ -154,6 +179,32 @@ export const submitReview = (data: {
 };
 
 // Reply to a published review. Replies are moderated before they appear.
+// ========== ANALYTICS & ERRORS (admin) ==========
+
+export const getAdminAnalytics = (days: 7 | 30 | 90) => {
+    return api.get(`/admin/analytics?days=${days}`);
+};
+
+export const getAdminErrors = (status: 'open' | 'resolved' = 'open', page: number = 1) => {
+    return api.get(`/admin/errors?status=${status}&page=${page}`);
+};
+
+export const setAdminErrorResolved = (id: number, resolved: boolean) => {
+    return api.put(`/admin/errors/${id}`, { resolved });
+};
+
+export const deleteAdminError = (id: number) => {
+    return api.delete(`/admin/errors/${id}`);
+};
+
+export const resolveAllAdminErrors = () => {
+    return api.post('/admin/errors/resolve-all', {});
+};
+
+export const bulkModerateReplies = (ids: number[], action: 'approve' | 'hide' | 'delete') => {
+    return api.post('/admin/replies/bulk', { ids, action });
+};
+
 export const replyToReview = (reviewId: number, reply: string, userName?: string) => {
     return api.post(`/reviews/${reviewId}/replies`, { reply, user_name: userName || undefined });
 };

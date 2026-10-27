@@ -6,6 +6,10 @@ const cors = require('cors');
 const helmet = require('helmet');
 const { csrfSetCookie } = require('./csrf');
 const { logJson } = require('./lib/log');
+const { installProcessHooks, requestContext } = require('./lib/errorTracker');
+
+// Capture handled 500s (console.error in route catch blocks) and crashes.
+installProcessHooks();
 
 const app = express();
 
@@ -56,6 +60,7 @@ app.use((req, res, next) => {
 
 // Public payloads are tiny (a review is <=1000 chars). The old 10mb limit
 // turned every request into a cheap memory-exhaustion vector.
+app.use(requestContext);
 app.use(express.json({ limit: '100kb' }));
 
 // CSRF: set cookie on every response so the frontend can read it

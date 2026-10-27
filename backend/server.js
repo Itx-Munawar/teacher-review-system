@@ -11,6 +11,8 @@ const { pruneSearchGaps } = require('./lib/searchGaps');
 const { pruneChatData } = require('./lib/chatUsage');
 const { sendModerationDigest } = require('./jobs/digest');
 const { ensureTables } = require('./jobs/schema');
+const { pruneErrorLogs, sendErrorAlerts } = require('./lib/errorTracker');
+const { pruneAnalytics } = require('./lib/analytics');
 
 // Start server
 const server = app.listen(PORT, () => {
@@ -26,6 +28,10 @@ ensureTables();
 setInterval(pruneAuditLogs, 24 * 60 * 60 * 1000).unref();
 setInterval(pruneSearchGaps, 24 * 60 * 60 * 1000).unref();
 setInterval(pruneChatData, 24 * 60 * 60 * 1000).unref();
+setInterval(pruneErrorLogs, 24 * 60 * 60 * 1000).unref();
+setInterval(pruneAnalytics, 24 * 60 * 60 * 1000).unref();
+// Errors recorded while an alert was throttled are picked up here.
+setInterval(() => sendErrorAlerts().catch(() => {}), 60 * 60 * 1000).unref();
 // Hourly check; the marker row makes it a at-most-once-per-day digest.
 setInterval(() => sendModerationDigest(), 60 * 60 * 1000).unref();
 // Give the schema bootstrap a moment on cold start, then try once today.

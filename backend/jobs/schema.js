@@ -140,6 +140,107 @@ const runSchemaBootstrap = async () => {
             console.error('⚠️ Could not ensure review_replies table:', repliesErr.message);
         }
 
+        // Helpful votes: counter column on reviews plus one row per vote.
+        try {
+            const [helpfulCol] = await db.query("SHOW COLUMNS FROM reviews LIKE 'helpful_count'");
+            if (helpfulCol.length === 0) {
+                await db.query('ALTER TABLE reviews ADD COLUMN helpful_count INT UNSIGNED NOT NULL DEFAULT 0 AFTER moderation_flag');
+                console.log('✅ Added helpful_count column to reviews table');
+            }
+        } catch (helpfulErr) {
+            console.error('⚠️ Could not ensure reviews.helpful_count:', helpfulErr.message);
+        }
+
+        // Tables for votes, AI summaries, error tracking and analytics. Each
+        // feature checks its own flag, so one failure only disables that one.
+        const featureTables = [
+            ['review_votes', 'reviewVotesReady', `
+                CREATE TABLE IF NOT EXISTS review_votes (
+                    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                    review_id INT UNSIGNED NOT NULL,
+                    voter_hash CHAR(64) NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (id),
+                    UNIQUE KEY uq_review_vote_once (review_id, voter_hash),
+                    KEY idx_review_votes_created (created_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `],
+            ['teacher_summaries', 'teacherSummariesReady', `
+                CREATE TABLE IF NOT EXISTS teacher_summaries (
+                    teacher_id INT UNSIGNED NOT NULL,
+                    summary TEXT NOT NULL,
+                    signature CHAR(40) NOT NULL,
+                    review_count INT UNSIGNED NOT NULL DEFAULT 0,
+                    model VARCHAR(64) DEFAULT NULL,
+                    generated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (teacher_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `],
+            ['error_logs', 'errorLogsReady', `
+                CREATE TABLE IF NOT EXISTS error_logs (
+                    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                    fingerprint CHAR(40) NOT NULL,
+                    source VARCHAR(16) NOT NULL,
+                    message VARCHAR(500) NOT NULL,
+                    stack TEXT,
+                    path VARCHAR(300) DEFAULT NULL,
+                    method VARCHAR(10) DEFAULT NULL,
+                    user_agent VARCHAR(300) DEFAULT NULL,
+                    occurrences INT UNSIGNED NOT NULL DEFAULT 1,
+                    first_seen TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    last_seen TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    alerted_at DATETIME DEFAULT NULL,
+                    resolved TINYINT(1) NOT NULL DEFAULT 0,
+                    PRIMARY KEY (id),
+                    UNIQUE KEY uq_error_fingerprint (fingerprint),
+                    KEY idx_error_logs_open (resolved, last_seen)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `],
+            ['site_visits_daily', 'analyticsReady', `
+                CREATE TABLE IF NOT EXISTS site_visits_daily (
+                    day DATE NOT NULL,
+                    visits INT UNSIGNED NOT NULL DEFAULT 0,
+                    PRIMARY KEY (day)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `],
+            ['teacher_views_daily', 'analyticsReady', `
+                CREATE TABLE IF NOT EXISTS teacher_views_daily (
+                    day DATE NOT NULL,
+                    teacher_id INT UNSIGNED NOT NULL,
+                    views INT UNSIGNED NOT NULL DEFAULT 0,
+                    PRIMARY KEY (day, teacher_id),
+                    KEY idx_teacher_views_teacher (teacher_id)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `],
+            ['search_terms_daily', 'analyticsReady', `
+                CREATE TABLE IF NOT EXISTS search_terms_daily (
+                    day DATE NOT NULL,
+                    term VARCHAR(100) NOT NULL,
+                    searches INT UNSIGNED NOT NULL DEFAULT 0,
+                    results INT UNSIGNED NOT NULL DEFAULT 0,
+                    PRIMARY KEY (day, term)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `],
+        ];
+        const failedFlags = new Set();
+        for (const [table, flag, ddl] of featureTables) {
+            try {
+                await db.query(ddl);
+            } catch (tableErr) {
+                failedFlags.add(flag);
+                console.error(`⚠️ Could not ensure ${table} table:`, tableErr.message);
+            }
+        }
+        for (const flag of new Set(featureTables.map(([, f]) => f))) {
+            if (!failedFlags.has(flag)) state[flag] = true;
+        }
+        if (failedFlags.has('reviewVotesReady') === false) {
+            try {
+                const [col] = await db.query("SHOW COLUMNS FROM reviews LIKE 'helpful_count'");
+                if (col.length === 0) state.reviewVotesReady = false;
+            } catch (_) { state.reviewVotesReady = false; }
+        }
+
         // Session revocation switch (see verifyAdmin). Existing admins start at
         // 0, which matches tokens issued before this column existed, so nobody
         // is logged out by the migration itself.
@@ -223,11 +324,13 @@ const runSchemaBootstrap = async () => {
 
         schemaBootstrapError = null;
         schemaBootstrapDone = true;
-        console.log('✅ Schema bootstrap complete (questions, question_answers, custom_courses, review_replies, cleanup)');
+        console.log('✅ Schema bootstrap complete (questions, question_answers, custom_courses, review_replies, votes, summaries, errors, analytics, cleanup)');
         // Keep the audit trail bounded (and the hashed IPs with it).
         pruneAuditLogs();
         pruneSearchGaps();
         pruneChatData();
+        require('../lib/errorTracker').pruneErrorLogs();
+        require('../lib/analytics').pruneAnalytics();
         // Schema is up: retroactively filter any pre-existing reviews.
         runReviewFilterSweep();
         runQaFilterSweep();

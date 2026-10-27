@@ -6,6 +6,10 @@ export interface TeacherDetailResponse {
     reviews?: Review[];
     total_reviews?: number;
     review_pagination?: TeacherDetail['review_pagination'];
+    filtered_reviews?: number;
+    review_sort?: TeacherDetail['review_sort'];
+    review_course?: string | null;
+    course_counts?: TeacherDetail['course_counts'];
 }
 
 /** Map a teacher-detail API response to the TeacherDetail the UI renders. */
@@ -22,5 +26,9 @@ export const mapTeacherDetail = (data: TeacherDetailResponse, fallback?: Teacher
         image_url: teacherInfo.image_url || undefined,
         reviews: reviewsList,
         review_pagination: data.review_pagination,
+        filtered_reviews: data.filtered_reviews ?? totalReviews,
+        review_sort: data.review_sort || 'newest',
+        review_course: data.review_course || null,
+        course_counts: data.course_counts || fallback?.course_counts,
     };
 };

@@ -84,6 +84,9 @@ const AdminScreen: React.FC<AdminScreenProps> = ({
         handleSetReplyApproved,
         handleUpdateReply,
         handleDeleteReply,
+        handleBulkReplies,
+        refreshAdminStats,
+        showToast,
         handleReviewCustomCourse,
         handleLoadTeacherDetail,
         handleAdminLogin,
@@ -214,6 +217,10 @@ const AdminScreen: React.FC<AdminScreenProps> = ({
                     onSetReplyApproved={handleSetReplyApproved}
                     onUpdateReply={handleUpdateReply}
                     onDeleteReply={handleDeleteReply}
+                    onBulkReplies={handleBulkReplies}
+                    openErrorsCount={adminStats?.open_errors ?? 0}
+                    onRefreshStats={refreshAdminStats}
+                    showToast={showToast}
                     onLoadMoreReplies={handleLoadMoreReplies}
                     adminRepliesPage={adminRepliesPage}
                     adminRepliesTotalPages={adminRepliesTotalPages}

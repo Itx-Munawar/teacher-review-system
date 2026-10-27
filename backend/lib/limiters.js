@@ -57,6 +57,31 @@ const resetUseLimiter = rateLimit({
     message: { error: 'Too many reset attempts. Try again later.' }
 });
 
+// Helpful votes are cheap and toggleable; generous but bounded per IP.
+const voteLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 120,
+    message: { error: 'Too many votes. Please try again later.' }
+});
+
+// Analytics beacons: a busy browsing session sends a few dozen at most.
+const trackLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 200,
+    standardHeaders: false,
+    legacyHeaders: false,
+    message: { error: 'Too many events' }
+});
+
+// Browser error reports: a broken page can loop, so cap it.
+const clientErrorLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    standardHeaders: false,
+    legacyHeaders: false,
+    message: { error: 'Too many error reports' }
+});
+
 module.exports = {
     reviewLimiter,
     loginLimiter,
@@ -64,6 +89,9 @@ module.exports = {
     resetLimiter,
     questionLimiter,
     replyLimiter,
+    voteLimiter,
+    trackLimiter,
+    clientErrorLimiter,
     setupLimiter,
     resetUseLimiter
 };

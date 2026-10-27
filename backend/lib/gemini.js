@@ -54,12 +54,12 @@ const callModel = async (model, payload) => {
  * @param {{ system: string, contents: Array<{role:'user'|'model', parts:[{text:string}]}>, maxOutputTokens?: number }} req
  * @returns {Promise<{ text: string, model: string }>}
  */
-const generate = async ({ system, contents, maxOutputTokens = 2048, temperature = 0.4 }) => {
+const generate = async ({ system, contents, maxOutputTokens = 2048, temperature = 0.4, responseMimeType }) => {
     if (!isConfigured()) throw new GeminiError('Gemini API key is not configured', { kind: 'config' });
     const payload = {
         systemInstruction: { parts: [{ text: system }] },
         contents,
-        generationConfig: { temperature, maxOutputTokens }
+        generationConfig: { temperature, maxOutputTokens, ...(responseMimeType ? { responseMimeType } : {}) }
     };
 
     const now = Date.now();

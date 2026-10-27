@@ -29,6 +29,7 @@ import {
     getAdminReplies,
     updateReply,
     deleteReply,
+    bulkModerateReplies,
     type ReplyStatusFilter
 } from '../services/api';
 import { debounce } from '../utils/debounce';
@@ -391,6 +392,36 @@ export function useAdmin({
             setAdminMutationLoading(false);
         }
     }, [loadAdminData, showToast]);
+
+    // Approve / hide / delete many replies at once (checkboxes in the Replies tab).
+    const handleBulkReplies = useCallback(async (ids: number[], action: 'approve' | 'hide' | 'delete'): Promise<boolean> => {
+        if (ids.length === 0) return false;
+        if (action === 'delete' && !window.confirm(`Delete ${ids.length} repl${ids.length === 1 ? 'y' : 'ies'} permanently?`)) return false;
+        setAdminMutationLoading(true);
+        try {
+            const res = await bulkModerateReplies(ids, action);
+            showToast(res.data?.message || 'Replies updated', 'success');
+            await loadAdminData();
+            return true;
+        } catch (error) {
+            console.error('Error in bulk reply action:', error);
+            const axiosErr = error as { response?: { data?: { error?: string } } };
+            showToast(axiosErr.response?.data?.error || 'Failed to update replies', 'error');
+            return false;
+        } finally {
+            setAdminMutationLoading(false);
+        }
+    }, [loadAdminData, showToast]);
+
+    // Refresh only the header counters (e.g. after resolving errors).
+    const refreshAdminStats = useCallback(async () => {
+        try {
+            const statsRes = await getAdminStats();
+            setAdminStats(statsRes.data);
+        } catch (err) {
+            console.error('Error loading admin stats:', err);
+        }
+    }, []);
 
     const handleReviewCustomCourse = useCallback(async (id: number, action: 'approve' | 'reject') => {
         try {
@@ -831,6 +862,9 @@ export function useAdmin({
         handleSetReplyApproved,
         handleUpdateReply,
         handleDeleteReply,
+        handleBulkReplies,
+        refreshAdminStats,
+        showToast,
         handleReviewCustomCourse,
         handleLoadTeacherDetail,
         checkAdminLogin,

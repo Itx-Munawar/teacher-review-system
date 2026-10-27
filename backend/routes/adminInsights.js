@@ -7,6 +7,7 @@ const state = require('../state');
 const { clampInt } = require('../lib/validation');
 const { verifyAdmin } = require('../lib/auth');
 const { createAuditLog } = require('../lib/audit');
+const { getAnalytics } = require('../lib/analytics');
 
 const router = express.Router();
 
@@ -49,12 +50,24 @@ router.get('/api/admin/stats', verifyAdmin, async (req, res) => {
             }
         }
 
+        // Unresolved errors drive the badge on the Errors tab.
+        let openErrors = 0;
+        if (state.errorLogsReady) {
+            try {
+                const [errCount] = await db.query('SELECT COUNT(*) as count FROM error_logs WHERE resolved = 0');
+                openErrors = errCount[0].count || 0;
+            } catch (errCountErr) {
+                openErrors = 0;
+            }
+        }
+
         res.json({
             total_teachers: teacherCount[0].count,
             total_reviews: reviewCount[0].count,
             reviews_last_week: recentReviews[0].count,
             pending_reviews: pendingCount[0].count,
             pending_replies: pendingReplies,
+            open_errors: openErrors,
             last_sweep
         });
     } catch (error) {
@@ -239,6 +252,87 @@ router.delete('/api/admin/chat/feedback/:id', verifyAdmin, csrfValidate, async (
         res.json({ success: true });
     } catch (error) {
         console.error('Delete chat feedback error:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// ========== ANALYTICS ==========
+// GET /api/admin/analytics?days=7|30|90
+router.get('/api/admin/analytics', verifyAdmin, async (req, res) => {
+    const days = [7, 30, 90].includes(Number(req.query.days)) ? Number(req.query.days) : 30;
+    if (!state.analyticsReady) return res.json({ available: false, days });
+    try {
+        res.json({ available: true, ...(await getAnalytics(days)) });
+    } catch (error) {
+        console.error('Error building analytics:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// ========== ERRORS ==========
+// GET /api/admin/errors?status=open|resolved&page=&limit=
+router.get('/api/admin/errors', verifyAdmin, async (req, res) => {
+    if (!state.errorLogsReady) return res.json({ errors: [], pagination: { page: 1, limit: 25, total: 0, totalPages: 1 } });
+    try {
+        const page = clampInt(req.query.page, 1, 1, 100000);
+        const limit = clampInt(req.query.limit, 25, 1, 100);
+        const resolved = req.query.status === 'resolved' ? 1 : 0;
+        const [errors] = await db.query(
+            `SELECT id, source, message, stack, path, method, user_agent, occurrences, first_seen, last_seen, alerted_at, resolved
+             FROM error_logs WHERE resolved = ? ORDER BY last_seen DESC, id DESC LIMIT ? OFFSET ?`,
+            [resolved, limit, (page - 1) * limit]
+        );
+        const [[{ total }]] = await db.query('SELECT COUNT(*) AS total FROM error_logs WHERE resolved = ?', [resolved]);
+        res.json({ errors, pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) } });
+    } catch (error) {
+        console.error('Error listing error logs:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// PUT /api/admin/errors/:id { resolved: boolean }
+router.put('/api/admin/errors/:id', verifyAdmin, csrfValidate, async (req, res) => {
+    if (!state.errorLogsReady) return res.status(503).json({ error: 'Error tracking is not available yet' });
+    const id = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid ID' });
+    if (typeof req.body.resolved !== 'boolean') return res.status(400).json({ error: 'resolved must be a boolean' });
+    try {
+        const [result] = await db.query(
+            'UPDATE error_logs SET resolved = ?, alerted_at = IF(? = 1, alerted_at, NULL) WHERE id = ?',
+            [req.body.resolved ? 1 : 0, req.body.resolved ? 1 : 0, id]
+        );
+        if (result.affectedRows === 0) return res.status(404).json({ error: 'Error not found' });
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error updating error log:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// POST /api/admin/errors/resolve-all - mark every open error resolved
+router.post('/api/admin/errors/resolve-all', verifyAdmin, csrfValidate, async (req, res) => {
+    if (!state.errorLogsReady) return res.status(503).json({ error: 'Error tracking is not available yet' });
+    try {
+        const [result] = await db.query('UPDATE error_logs SET resolved = 1 WHERE resolved = 0');
+        await createAuditLog(req.admin.id, 'RESOLVE_ALL_ERRORS', `${result.affectedRows} errors`, req.ip);
+        res.json({ success: true, resolved: result.affectedRows });
+    } catch (error) {
+        console.error('Error resolving errors:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// DELETE /api/admin/errors/:id
+router.delete('/api/admin/errors/:id', verifyAdmin, csrfValidate, async (req, res) => {
+    if (!state.errorLogsReady) return res.status(503).json({ error: 'Error tracking is not available yet' });
+    const id = Number.parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid ID' });
+    try {
+        const [result] = await db.query('DELETE FROM error_logs WHERE id = ?', [id]);
+        if (result.affectedRows === 0) return res.status(404).json({ error: 'Error not found' });
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error deleting error log:', error);
         res.status(500).json({ error: 'Database error' });
     }
 });

@@ -64,6 +64,15 @@ router.delete('/api/admin/teachers/:id', verifyAdmin, csrfValidate, async (req, 
                 [teacherId]
             );
         }
+        if (state.reviewVotesReady) {
+            await connection.query(
+                'DELETE rv FROM review_votes rv JOIN reviews r ON r.id = rv.review_id WHERE r.teacher_id = ?',
+                [teacherId]
+            );
+        }
+        if (state.teacherSummariesReady) {
+            await connection.query('DELETE FROM teacher_summaries WHERE teacher_id = ?', [teacherId]);
+        }
         await connection.query('DELETE FROM reviews WHERE teacher_id = ?', [teacherId]);
         await connection.query(
             `DELETE qa FROM question_answers qa
@@ -306,6 +315,9 @@ router.delete('/api/admin/reviews/:id', verifyAdmin, csrfValidate, async (req, r
         }
         if (state.reviewRepliesReady) {
             await db.query('DELETE FROM review_replies WHERE review_id = ?', [reviewId]);
+        }
+        if (state.reviewVotesReady) {
+            await db.query('DELETE FROM review_votes WHERE review_id = ?', [reviewId]);
         }
         const [result] = await db.query('DELETE FROM reviews WHERE id = ?', [reviewId]);
         if (result.affectedRows === 0) return res.status(404).json({ error: 'Review not found' });
@@ -685,6 +697,32 @@ router.put('/api/admin/replies/:id', verifyAdmin, csrfValidate, [
         });
     } catch (error) {
         console.error('Error updating reply:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// POST /api/admin/replies/bulk - approve, hide or delete many replies at once
+router.post('/api/admin/replies/bulk', verifyAdmin, csrfValidate, [
+    body('ids').isArray({ min: 1, max: 200 }).withMessage('ids must be a non-empty array (max 200)'),
+    body('ids.*').isInt({ min: 1 }).withMessage('ids must be positive integers'),
+    body('action').isIn(['approve', 'hide', 'delete']).withMessage("action must be 'approve', 'hide' or 'delete'")
+], async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
+    if (!state.reviewRepliesReady) return res.status(503).json({ error: 'Replies are not available yet' });
+    try {
+        const ids = [...new Set(req.body.ids.map((id) => Number.parseInt(id, 10)))];
+        const placeholders = ids.map(() => '?').join(',');
+        const { action } = req.body;
+        const [result] = action === 'delete'
+            ? await db.query(`DELETE FROM review_replies WHERE id IN (${placeholders})`, ids)
+            : await db.query(`UPDATE review_replies SET is_approved = ? WHERE id IN (${placeholders})`, [action === 'approve' ? 1 : 0, ...ids]);
+        const auditAction = { approve: 'BULK_APPROVE_REPLIES', hide: 'BULK_HIDE_REPLIES', delete: 'BULK_DELETE_REPLIES' }[action];
+        await createAuditLog(req.admin.id, auditAction, `Replies: ${ids.join(', ')}`.slice(0, 1000), req.ip);
+        invalidateCache('teachers');
+        res.json({ success: true, affected: result.affectedRows, message: `${result.affectedRows} repl${result.affectedRows === 1 ? 'y' : 'ies'} ${action === 'delete' ? 'deleted' : action === 'approve' ? 'approved' : 'hidden'}` });
+    } catch (error) {
+        console.error('Error in bulk reply action:', error);
         res.status(500).json({ error: 'Database error' });
     }
 });
