@@ -15,6 +15,8 @@ module.exports = {
     reviewRepliesReady: false,
     // review_votes table and reviews.helpful_count exist.
     reviewVotesReady: false,
+    // chat_answer_cache table exists.
+    chatCacheReady: false,
     // teacher_summaries table exists.
     teacherSummariesReady: false,
     // error_logs table exists.

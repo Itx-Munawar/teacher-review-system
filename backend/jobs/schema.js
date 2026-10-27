@@ -176,6 +176,15 @@ const runSchemaBootstrap = async () => {
                     PRIMARY KEY (teacher_id)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             `],
+            ['chat_answer_cache', 'chatCacheReady', `
+                CREATE TABLE IF NOT EXISTS chat_answer_cache (
+                    cache_key CHAR(64) NOT NULL,
+                    payload TEXT NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (cache_key),
+                    KEY idx_chat_answer_cache_created (created_at)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `],
             ['error_logs', 'errorLogsReady', `
                 CREATE TABLE IF NOT EXISTS error_logs (
                     id INT UNSIGNED NOT NULL AUTO_INCREMENT,

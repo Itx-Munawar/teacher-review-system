@@ -42,7 +42,7 @@ const AiSummary: React.FC<AiSummaryProps> = ({ teacherId, reviewCount }) => {
             <section className="ai-summary ai-summary-loading" aria-busy="true" aria-label="AI summary loading">
                 <div className="ai-summary-head">
                     <Icon name="sparkles" size={16} />
-                    <span>AI khulasa</span>
+                    <span>AI summary</span>
                 </div>
                 <div className="ai-summary-skeleton" />
                 <div className="ai-summary-skeleton ai-summary-skeleton-short" />
@@ -56,7 +56,7 @@ const AiSummary: React.FC<AiSummaryProps> = ({ teacherId, reviewCount }) => {
         <section className="ai-summary" aria-label="AI summary of student reviews">
             <div className="ai-summary-head">
                 <Icon name="sparkles" size={16} />
-                <span>AI khulasa</span>
+                <span>AI summary</span>
                 <span className="ai-summary-badge">{summary.review_count} reviews se</span>
             </div>
             {summary.overview && <p className="ai-summary-overview">{summary.overview}</p>}
@@ -81,7 +81,7 @@ const AiSummary: React.FC<AiSummaryProps> = ({ teacherId, reviewCount }) => {
                 </div>
             )}
             <p className="ai-summary-note">
-                Yeh khulasa AI ne students ke reviews se banaya hai, is mein ghalti ho sakti hai. Poori baat ke liye neeche reviews parhein.
+                Yeh summary AI ne students ke reviews se banai hai, is mein ghalti ho sakti hai. Poori baat ke liye neeche reviews parhein.
             </p>
         </section>
     );

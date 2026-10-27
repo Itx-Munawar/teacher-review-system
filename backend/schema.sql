@@ -180,6 +180,16 @@ CREATE TABLE IF NOT EXISTS chat_usage_daily (
     PRIMARY KEY (day, metric, mkey)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Saved chat answers (first question of a conversation), keyed by the
+-- question, page teacher and data version, so repeat questions cost no AI quota.
+CREATE TABLE IF NOT EXISTS chat_answer_cache (
+    cache_key CHAR(64) NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (cache_key),
+    KEY idx_chat_answer_cache_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS chat_feedback (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     token_hash CHAR(64) NOT NULL,

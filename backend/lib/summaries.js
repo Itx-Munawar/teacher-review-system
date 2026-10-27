@@ -1,9 +1,9 @@
 // AI summary of a teacher's approved reviews, in Roman Urdu.
 //
-// A summary is generated once and cached in teacher_summaries. Its signature
-// (approved review ids + text lengths) changes whenever a review is approved,
-// edited or removed, and only then is Gemini asked again - so normal page
-// views cost no quota at all.
+// A summary is generated once and saved in teacher_summaries. It is shown
+// as-is until a NEW review is approved (the signature is the newest approved
+// review id), so page views and review edits cost no AI quota at all.
+// Failures back off per teacher so a busy Gemini is not asked on every visit.
 
 const crypto = require('crypto');
 const db = require('../db');
@@ -11,13 +11,17 @@ const state = require('../state');
 const gemini = require('./gemini');
 const { parseCourseList } = require('../contentFilter');
 const { logJson } = require('./log');
+const { romanUrduShare } = require('./chatKnowledge');
 
 const MIN_REVIEWS = 3;
 const MAX_REVIEWS_IN_PROMPT = 150;
 const MAX_CHARS_IN_PROMPT = 40000;
 const DAILY_LIMIT = () => Math.max(0, parseInt(process.env.SUMMARY_PER_DAY, 10) || 150);
 
+// After a failed attempt, wait before asking Gemini again for that teacher.
+const RETRY_AFTER_FAILURE_MS = () => Math.max(0, parseInt(process.env.SUMMARY_RETRY_AFTER_MS, 10) || 15 * 60 * 1000);
 const inFlight = new Map(); // teacherId -> Promise
+const lastFailure = new Map(); // teacherId -> ms timestamp
 let budget = { day: '', used: 0 };
 
 const takeBudget = () => {
@@ -45,13 +49,16 @@ Return ONLY a JSON object, no markdown:
 {"overview": "1-2 sentences overall picture", "pros": ["2-4 short points students like"], "cons": ["0-3 short points students find difficult"]}
 Each point is at most 15 words. Use an empty array if there is nothing real to say.`;
 
-// Bump when the prompt changes so cached summaries are rebuilt (lazily, on
-// the next visit, within the daily cap).
-const PROMPT_VERSION = 'v2';
-const signatureFor = (reviews) => crypto
-    .createHash('sha1')
-    .update(`${PROMPT_VERSION}|${reviews.map((r) => `${r.id}:${String(r.comment || '').length}`).join(',')}`)
-    .digest('hex');
+// The newest approved review id: changes only when a new review is approved
+// (or the newest one is removed). Edits to older reviews do not regenerate.
+const signatureFor = (reviews) => `n:${reviews.reduce((m, r) => Math.max(m, Number(r.id) || 0), 0)}`;
+// Signatures written before this scheme (sha1 of every review id + length).
+const LEGACY_SIGNATURE = /^[0-9a-f]{40}$/;
+
+/** True when the summary text reads as Roman Urdu rather than English. */
+const isRomanUrdu = (parsed) => romanUrduShare([parsed.overview, ...parsed.pros, ...parsed.cons].join(' ')) >= 0.08;
+
+const TRANSLATE_PROMPT = `Rewrite this JSON so every string is in Roman Urdu (Urdu written in English letters, the way Pakistani students text). Keep the meaning and the same keys. English words like grading, quizzes, assignments, attendance are fine inside Roman Urdu sentences. Return ONLY the JSON.`;
 
 const clean = (text, max) => String(text || '').replace(/\s+/g, ' ').trim().slice(0, max);
 
@@ -127,7 +134,19 @@ const getTeacherSummary = async (teacherId) => {
     const cached = await readCached(teacherId);
     if (cached && cached.signature === signature) return respond(cached);
 
+    // One-time move from the old signature: a Roman Urdu summary of the same
+    // reviews is kept (no AI call); only English ones are rebuilt.
+    if (cached && LEGACY_SIGNATURE.test(cached.signature) && cached.review_count === reviews.length && isRomanUrdu(cached.parsed)) {
+        await db.query('UPDATE teacher_summaries SET signature = ? WHERE teacher_id = ?', [signature, teacherId]);
+        return respond(cached);
+    }
+
     if (inFlight.has(teacherId)) return inFlight.get(teacherId);
+
+    const failedAt = lastFailure.get(teacherId);
+    if (failedAt && Date.now() - failedAt < RETRY_AFTER_FAILURE_MS()) {
+        return cached ? respond(cached, { stale: true }) : { available: false, reason: 'busy' };
+    }
 
     const job = (async () => {
         if (!takeBudget()) {
@@ -141,10 +160,25 @@ const getTeacherSummary = async (teacherId) => {
                 temperature: 0.3,
                 responseMimeType: 'application/json'
             });
-            const parsed = parseSummary(text);
+            let parsed = parseSummary(text);
             if (!parsed) {
                 logJson('warn', 'summary_unparseable', { teacher_id: teacherId, model });
+                lastFailure.set(teacherId, Date.now());
                 return cached ? respond(cached, { stale: true }) : { available: false, reason: 'busy' };
+            }
+            if (!isRomanUrdu(parsed)) {
+                // Cheap fix: translate the short JSON instead of re-sending every review.
+                try {
+                    const fixed = await gemini.generate({
+                        system: TRANSLATE_PROMPT,
+                        contents: [{ role: 'user', parts: [{ text: JSON.stringify(parsed) }] }],
+                        maxOutputTokens: 600,
+                        temperature: 0.2,
+                        responseMimeType: 'application/json'
+                    });
+                    const translated = parseSummary(fixed.text);
+                    if (translated && isRomanUrdu(translated)) parsed = translated;
+                } catch (_) { /* keep the English one rather than nothing */ }
             }
             await db.query(
                 `INSERT INTO teacher_summaries (teacher_id, summary, signature, review_count, model, generated_at)
@@ -153,10 +187,12 @@ const getTeacherSummary = async (teacherId) => {
                     review_count = VALUES(review_count), model = VALUES(model), generated_at = CURRENT_TIMESTAMP`,
                 [teacherId, JSON.stringify(parsed), signature, reviews.length, model]
             );
+            lastFailure.delete(teacherId);
             logJson('info', 'summary_generated', { teacher_id: teacherId, reviews: reviews.length, model });
             return { available: true, ...parsed, review_count: reviews.length, generated_at: new Date().toISOString() };
         } catch (err) {
             logJson('warn', 'summary_failed', { teacher_id: teacherId, kind: err && err.kind, reason: String(err && err.message).slice(0, 200) });
+            lastFailure.set(teacherId, Date.now());
             return cached ? respond(cached, { stale: true }) : { available: false, reason: 'busy' };
         }
     })();
@@ -178,5 +214,6 @@ module.exports = {
     deleteTeacherSummary,
     parseSummary,
     MIN_REVIEWS,
-    _resetBudget: () => { budget = { day: '', used: 0 }; },
+    isRomanUrdu,
+    _resetBudget: () => { budget = { day: '', used: 0 }; lastFailure.clear(); },
 };

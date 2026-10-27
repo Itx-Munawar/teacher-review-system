@@ -24,7 +24,14 @@ const CONTEXT_CHARS = Math.max(5000, parseInt(process.env.CHAT_CONTEXT_CHARS, 10
 // Budget for general questions (a digest of every teacher), much smaller than
 // CONTEXT_CHARS so a "best teacher?" question costs ~4k tokens, not ~20k.
 const GENERAL_CONTEXT_CHARS = Math.max(3000, parseInt(process.env.CHAT_GENERAL_CONTEXT_CHARS, 10) || DEFAULT_GENERAL_CONTEXT_CHARS);
-const MAX_HISTORY = 8;
+// Earlier turns sent with a follow-up: enough for context, fewer tokens.
+const MAX_HISTORY = 6;
+const MAX_HISTORY_CHARS = 800;
+// Answers are short; a lower cap keeps a runaway answer from burning tokens.
+const MAX_ANSWER_TOKENS = 1024;
+// Saved answers are reused for this long (the key also changes as soon as a
+// review or answer is added, so they never hide new data).
+const CACHE_DAYS = () => Math.max(1, parseInt(process.env.CHAT_CACHE_DAYS, 10) || 7);
 
 // The free Gemini tier allows a few hundred requests a day per model, shared
 // by every visitor, so one person must not be able to use it all up.
@@ -77,8 +84,44 @@ const withReplyToken = (payload, question) => ({
     replyToken: chatUsage.signReply({ question, answer: payload.reply, teacherIds: (payload.teachers || []).map((t) => t.id) })
 });
 
-// Same first question about the same teacher -> same answer for a while.
-const answerCache = new LRUCache({ max: 300, ttl: 10 * 60 * 1000 });
+// Same first question about the same teacher -> same answer. Memory first,
+// then the database (survives restarts of the free Render instance).
+const answerCache = new LRUCache({ max: 300, ttl: 6 * 60 * 60 * 1000 });
+
+/** "Umer Usman kaise hain??" and "umer usman kaise hain" are the same question. */
+const normalizeQuestion = (text) => String(text || '')
+    .toLowerCase()
+    .replace(/[?!.,;:'"`،؟۔()]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const readSavedAnswer = async (key) => {
+    if (!state.chatCacheReady) return null;
+    try {
+        const [rows] = await db.query(
+            'SELECT payload FROM chat_answer_cache WHERE cache_key = ? AND created_at > DATE_SUB(NOW(), INTERVAL ? DAY)',
+            [key, CACHE_DAYS()]
+        );
+        return rows.length ? JSON.parse(rows[0].payload) : null;
+    } catch (_) {
+        return null;
+    }
+};
+
+const saveAnswer = async (key, payload) => {
+    if (!state.chatCacheReady) return;
+    try {
+        await db.query(
+            `INSERT INTO chat_answer_cache (cache_key, payload) VALUES (?, ?)
+             ON DUPLICATE KEY UPDATE payload = VALUES(payload), created_at = CURRENT_TIMESTAMP`,
+            [key, JSON.stringify(payload)]
+        );
+        // Occasional tidy-up instead of a separate job.
+        if (Math.random() < 0.05) {
+            await db.query('DELETE FROM chat_answer_cache WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)', [CACHE_DAYS()]);
+        }
+    } catch (_) { /* the cache is an optimisation only */ }
+};
 
 const SITE_HELP = `
 Facts about the website (use these for "how do I..." questions):
@@ -146,7 +189,7 @@ router.post('/api/chat', (req, res, next) => {
     const history = (Array.isArray(req.body.history) ? req.body.history : [])
         .filter((h) => h && (h.role === 'user' || h.role === 'assistant') && typeof h.text === 'string' && h.text.trim())
         .slice(-MAX_HISTORY)
-        .map((h) => ({ role: h.role, text: h.text.trim().slice(0, 1500) }));
+        .map((h) => ({ role: h.role, text: h.text.trim().slice(0, MAX_HISTORY_CHARS) }));
 
     let selectionForUsage = null;
     let languageForUsage = null;
@@ -156,12 +199,16 @@ router.post('/api/chat', (req, res, next) => {
         const selection = selectContext(knowledge, { message, history, pageTeacherId: pageTeacher ? pageTeacherId : null, maxChars: CONTEXT_CHARS, generalChars: GENERAL_CONTEXT_CHARS });
 
         const cacheKey = history.length === 0
-            ? crypto.createHash('sha256').update(`${pageTeacher ? pageTeacher.id : 0}|${message.toLowerCase().replace(/\s+/g, ' ')}`).digest('hex')
+            ? crypto.createHash('sha256').update(`${knowledge.version || ''}|${pageTeacher ? pageTeacher.id : 0}|${normalizeQuestion(message)}`).digest('hex')
             : null;
         const language = detectReplyLanguage(message);
         selectionForUsage = selection;
         languageForUsage = language;
-        const hit = cacheKey ? answerCache.get(cacheKey) : null;
+        let hit = cacheKey ? answerCache.get(cacheKey) : null;
+        if (!hit && cacheKey) {
+            hit = await readSavedAnswer(cacheKey);
+            if (hit) answerCache.set(cacheKey, hit);
+        }
         if (hit) {
             logJson('info', 'chat', { cached: true, focus: selection.focusedTeachers.map((t) => t.id), ms: Date.now() - started });
             chatUsage.recordUsage(usageEntries('cached', selection, language));
@@ -174,7 +221,7 @@ router.post('/api/chat', (req, res, next) => {
         while (turns.length && turns[0].role !== 'user') turns.shift();
         turns.push({ role: 'user', parts: [{ text: message }] });
 
-        const { text, model } = await gemini.generate({ system, contents: turns });
+        const { text, model } = await gemini.generate({ system, contents: turns, maxOutputTokens: MAX_ANSWER_TOKENS });
 
         // Teacher pages worth linking: the ones the question was about, plus
         // any other teacher whose full name the answer mentions.
@@ -190,7 +237,10 @@ router.post('/api/chat', (req, res, next) => {
             reply: text,
             teachers: [...linked.values()].slice(0, 6).map((t) => ({ id: t.id, name: t.name, department: t.department }))
         };
-        if (cacheKey) answerCache.set(cacheKey, payload);
+        if (cacheKey) {
+            answerCache.set(cacheKey, payload);
+            saveAnswer(cacheKey, payload);
+        }
         logJson('info', 'chat', {
             model,
             focus: selection.focusedTeachers.map((t) => t.id),

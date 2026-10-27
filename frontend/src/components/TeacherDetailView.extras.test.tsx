@@ -163,6 +163,6 @@ describe('TeacherDetailView extras', () => {
     it('does not ask for a summary with fewer than 3 reviews and hides it when unavailable', async () => {
         renderView(makeTeacher({ total_reviews: 2, review_count: 2, reviews: makeTeacher().reviews.slice(0, 2) }));
         expect(mockedSummary).not.toHaveBeenCalled();
-        expect(screen.queryByText(/AI khulasa/)).toBeNull();
+        expect(screen.queryByText(/AI summary/)).toBeNull();
     });
 });

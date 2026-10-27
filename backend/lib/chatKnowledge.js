@@ -157,6 +157,14 @@ const buildKnowledge = (teacherRows, reviewRows, qaRows) => {
         courseIndex,
         deptIndex,
         totalReviews: reviewRows.length,
+        // Changes whenever an approved review or answer is added or removed;
+        // part of the chat answer cache key so new reviews are never hidden.
+        version: [
+            reviewRows.length,
+            reviewRows.reduce((m, r) => Math.max(m, Number(r.id) || 0), 0),
+            qaRows.length,
+            qaRows.reduce((m, r) => Math.max(m, Number(r.answer_id) || 0), 0)
+        ].join('.'),
         reviewedTeachers: teachers.filter((t) => t.reviews.length > 0).length
     };
 };
@@ -170,12 +178,12 @@ const loadKnowledge = async ({ force = false } = {}) => {
             const db = require('../db');
             const [teacherRows] = await db.query('SELECT id, name, department FROM teachers');
             const [reviewRows] = await db.query(
-                `SELECT teacher_id, comment, courses, created_at
+                `SELECT id, teacher_id, comment, courses, created_at
                  FROM reviews WHERE is_approved = 1
                  ORDER BY created_at DESC, id DESC`
             );
             const [qaRows] = await db.query(
-                `SELECT q.id AS question_id, q.teacher_id, q.question, a.answer
+                `SELECT q.id AS question_id, q.teacher_id, q.question, a.id AS answer_id, a.answer
                  FROM questions q
                  JOIN question_answers a ON a.question_id = q.id AND a.is_approved = 1
                  WHERE q.is_approved = 1
@@ -472,6 +480,13 @@ tou phir bohat bht boht zyada ziada thora thori dete dety deti lagate lagaty lga
  * The reviews are mostly Roman Urdu, so without an explicit instruction the
  * model tends to drift into the language of the data rather than the user's.
  */
+/** Share (0..1) of words in `text` that are Roman Urdu marker words. */
+const romanUrduShare = (text) => {
+    const words = String(text || '').toLowerCase().match(/[a-z]+/g) || [];
+    if (words.length === 0) return 0;
+    return words.filter((w) => ROMAN_URDU_MARKERS.has(w)).length / words.length;
+};
+
 const detectReplyLanguage = (message) => {
     const text = String(message || '');
     if (/[\u0600-\u06FF]/.test(text)) return 'urdu';
@@ -481,6 +496,7 @@ const detectReplyLanguage = (message) => {
 
 module.exports = {
     detectReplyLanguage,
+    romanUrduShare,
     loadKnowledge,
     invalidateKnowledge,
     buildKnowledge,

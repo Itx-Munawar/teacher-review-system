@@ -131,7 +131,13 @@ describe('chat API', { skip: SKIP }, () => {
         assert.equal(second.body.reply, first.body.reply);
         assert.deepEqual(second.body.teachers, first.body.teachers);
         assert.notEqual(second.body.replyToken, first.body.replyToken, 'each answer is signed for its own question');
+        // Punctuation does not make it a different question either.
+        const third = await createClient(server.baseUrl).post('/api/chat', { message: 'How do I write a review' });
+        assert.equal(third.body.reply, first.body.reply);
         assert.equal(fake.calls.length, 1);
+        assert.equal(fake.calls[0].body.generationConfig.maxOutputTokens, 1024, 'answers have a token cap');
+        const saved = await dbQuery('SELECT COUNT(*) AS n FROM chat_answer_cache');
+        assert.equal(saved[0].n >= 1, true, 'answer saved in the database too');
     });
 
     it('validates input', async () => {

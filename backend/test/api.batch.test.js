@@ -25,6 +25,10 @@ describe('review extras, summaries, analytics and errors', { skip: SKIP }, () =>
         waqar = (await dbQuery("INSERT INTO teachers (name, department) VALUES ('Waqar Ashiq', 'School of Systems and Technology')")).insertId;
         sania = (await dbQuery("INSERT INTO teachers (name, department) VALUES ('Sania Qamar', 'School of Law')")).insertId;
         bilal = (await dbQuery("INSERT INTO teachers (name, department) VALUES ('Bilal Ahmed', 'School of Systems and Technology')")).insertId;
+        const hira = (await dbQuery("INSERT INTO teachers (name, department) VALUES ('Hira Translate', 'School of Law')")).insertId;
+        for (const n of [1, 2, 3]) {
+            await dbQuery("INSERT INTO reviews (teacher_id, comment, user_name, is_approved) VALUES (?, ?, 'Anonymous', 1)", [hira, `Hira review number ${n}, explains well.`]);
+        }
         const rows = [
             ['Explains calculus clearly, grading fair.', 'SecretReviewer', ['Calculus I'], '2026-01-01 10:00:00'],
             ['Strict attendance but good lectures.', null, ['Calculus I', 'Linear Algebra'], '2026-01-02 10:00:00'],
@@ -45,7 +49,8 @@ describe('review extras, summaries, analytics and errors', { skip: SKIP }, () =>
         server = await startServer({
             GEMINI_API_KEY: 'test-gemini-key',
             GEMINI_API_BASE: fake.url,
-            GEMINI_MODELS: 'model-a'
+            GEMINI_MODELS: 'model-a',
+            SUMMARY_RETRY_AFTER_MS: '1500'
         });
         admin = await createAdminAndLogin(server.baseUrl);
     });
@@ -182,6 +187,14 @@ describe('review extras, summaries, analytics and errors', { skip: SKIP }, () =>
             assert.equal(fake.calls.length, 1, 'cached: no second model call');
         });
 
+        it('keeps the saved summary when an existing review is edited', async () => {
+            await dbQuery("UPDATE reviews SET comment = CONCAT(comment, ' Edited later with more words.') WHERE teacher_id = ? AND is_approved = 1 ORDER BY id LIMIT 1", [waqar]);
+            const res = await createClient(server.baseUrl).get(`/api/teachers/${waqar}/summary`);
+            assert.equal(res.body.overview, 'Zyada tar students khush hain.');
+            assert.equal(res.body.stale, undefined);
+            assert.equal(fake.calls.length, 0, 'edits do not spend AI quota');
+        });
+
         it('regenerates after a new review is approved, and falls back to the old one on failure', async () => {
             const r = await dbQuery("INSERT INTO reviews (teacher_id, comment, is_approved) VALUES (?, 'Very helpful in office hours.', 0)", [waqar]);
             // Pending review: signature unchanged, still cached.
@@ -198,12 +211,50 @@ describe('review extras, summaries, analytics and errors', { skip: SKIP }, () =>
             assert.equal(stale.body.overview, 'Zyada tar students khush hain.');
             assert.equal(stale.headers.get('cache-control'), 'no-store');
 
+            // Right after a failure the saved summary is served without asking again.
             fake.calls.length = 0;
+            const again = await createClient(server.baseUrl).get(`/api/teachers/${waqar}/summary`);
+            assert.equal(again.body.stale, true);
+            assert.equal(fake.calls.length, 0, 'failure back-off: no immediate retry');
+
+            await new Promise((r) => setTimeout(r, 1600));
             fake.queue.push({ status: 200, text: SUMMARY_JSON('Naya khulasa.') });
             const fresh = await createClient(server.baseUrl).get(`/api/teachers/${waqar}/summary`);
             assert.equal(fresh.body.overview, 'Naya khulasa.');
             assert.equal(fresh.body.review_count, 5);
             assert.equal(fresh.body.stale, undefined);
+            assert.equal(fake.calls.length, 1);
+        });
+
+        it('translates an English summary to Roman Urdu with a small second call', async () => {
+            const [{ id: hira }] = await dbQuery("SELECT id FROM teachers WHERE name = 'Hira Translate'");
+            fake.queue.push(
+                { status: 200, text: JSON.stringify({ overview: 'Most students say she explains concepts clearly.', pros: ['Clear lectures'], cons: [] }) },
+                { status: 200, text: JSON.stringify({ overview: 'Zyada tar students kehte hain ke concepts clear karti hain.', pros: ['Lectures clear hoti hain'], cons: [] }) }
+            );
+            const res = await createClient(server.baseUrl).get(`/api/teachers/${hira}/summary`);
+            assert.equal(res.body.overview, 'Zyada tar students kehte hain ke concepts clear karti hain.');
+            assert.equal(fake.calls.length, 2);
+            const second = JSON.stringify(fake.calls[1].body.contents);
+            assert.match(second, /Most students say/);
+            assert.doesNotMatch(second, /Hira review/, 'the translation call does not resend the reviews');
+        });
+
+        it('keeps old Roman Urdu summaries without an AI call, rebuilds old English ones', async () => {
+            const [{ id: hira }] = await dbQuery("SELECT id FROM teachers WHERE name = 'Hira Translate'");
+            const legacy = 'a'.repeat(40);
+            await dbQuery('UPDATE teacher_summaries SET signature = ? WHERE teacher_id = ?', [legacy, hira]);
+            const kept = await createClient(server.baseUrl).get(`/api/teachers/${hira}/summary`);
+            assert.equal(kept.body.overview, 'Zyada tar students kehte hain ke concepts clear karti hain.');
+            assert.equal(fake.calls.length, 0);
+            const [row] = await dbQuery('SELECT signature FROM teacher_summaries WHERE teacher_id = ?', [hira]);
+            assert.match(row.signature, /^n:\d+$/);
+
+            await dbQuery('UPDATE teacher_summaries SET signature = ?, summary = ? WHERE teacher_id = ?',
+                [legacy, JSON.stringify({ overview: 'Students appreciate the teacher a lot.', pros: ['Kind'], cons: [] }), hira]);
+            fake.queue.push({ status: 200, text: SUMMARY_JSON('Students bohat khush hain.') });
+            const rebuilt = await createClient(server.baseUrl).get(`/api/teachers/${hira}/summary`);
+            assert.equal(rebuilt.body.overview, 'Students bohat khush hain.');
             assert.equal(fake.calls.length, 1);
         });
 
