@@ -13,7 +13,7 @@ const startFakeGemini = async () => {
             const body = raw ? JSON.parse(raw) : null;
             const model = decodeURIComponent((req.url.match(/models\/([^:]+):generateContent/) || [])[1] || '');
             calls.push({ url: req.url, model, key: req.headers['x-goog-api-key'], body });
-            const next = queue.shift() || { status: 200, text: `Students say good things. (model ${model})` };
+            const next = queue.shift() || { status: 200, text: `Students say good things, sab kehte hain acha parhate hain. (model ${model})` };
             const respond = () => {
                 res.writeHead(next.status, { 'Content-Type': 'application/json' });
                 if (next.status !== 200) return res.end(JSON.stringify({ error: { code: next.status, message: 'Resource has been exhausted' } }));

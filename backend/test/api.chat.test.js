@@ -67,7 +67,7 @@ describe('chat API', { skip: SKIP }, () => {
         assert.doesNotMatch(sys, /PENDING-TEXT/);
         assert.doesNotMatch(sys, /SecretReviewerName/);
         assert.doesNotMatch(sys, /Attendance is strict/, 'other teachers are not needed for a specific question');
-        assert.deepEqual(call.body.contents, [{ role: 'user', parts: [{ text: 'sir waqar ki grading kesi hai?' }] }]);
+        assert.deepEqual(call.body.contents, [{ role: 'user', parts: [{ text: 'sir waqar ki grading kesi hai?\n\n(Reply in Roman Urdu, i.e. Urdu written in English letters.)' }] }]);
     });
 
     it('a general question gets a digest of every reviewed teacher', async () => {
@@ -109,7 +109,7 @@ describe('chat API', { skip: SKIP }, () => {
         const call = fake.calls[0];
         // Leading assistant greeting dropped: Gemini needs a user turn first.
         assert.deepEqual(call.body.contents.map((c) => c.role), ['user', 'model', 'user']);
-        assert.equal(call.body.contents[2].parts[0].text, 'aur unki attendance?');
+        assert.equal(call.body.contents[2].parts[0].text, 'aur unki attendance?\n\n(Reply in Roman Urdu, i.e. Urdu written in English letters.)');
         assert.match(systemText(call), /Attendance is strict/);
         assert.equal(res.body.teachers[0].id, sania);
     });
@@ -138,6 +138,30 @@ describe('chat API', { skip: SKIP }, () => {
         assert.equal(fake.calls[0].body.generationConfig.maxOutputTokens, 1024, 'answers have a token cap');
         const saved = await dbQuery('SELECT COUNT(*) AS n FROM chat_answer_cache');
         assert.equal(saved[0].n >= 1, true, 'answer saved in the database too');
+    });
+
+    it('answers a Roman Urdu question in Roman Urdu, fixing an English answer cheaply', async () => {
+        fake.queue.push(
+            { status: 200, text: 'Based on the student reviews, attendance is strict.' },
+            { status: 200, text: 'Students ke mutabiq attendance strict hai.' }
+        );
+        const res = await createClient(server.baseUrl).post('/api/chat', { message: 'sania qamar ki attendance policy kesi hai?' });
+        assert.equal(res.status, 200, res.text);
+        assert.equal(res.body.reply, 'Students ke mutabiq attendance strict hai.');
+        assert.equal(fake.calls.length, 2);
+        const asked = fake.calls[0].body.contents.at(-1).parts[0].text;
+        assert.match(asked, /Reply in Roman Urdu/, 'the question carries a language reminder');
+        const fix = JSON.stringify(fake.calls[1].body.contents);
+        assert.match(fix, /attendance is strict/);
+        assert.doesNotMatch(fix, /lectures are organised/, 'the fix does not resend reviews');
+
+        // An English question gets no reminder and no fix.
+        fake.calls.length = 0;
+        fake.queue.push({ status: 200, text: 'Students say attendance is strict.' });
+        const en = await createClient(server.baseUrl).post('/api/chat', { message: 'What is the attendance policy of Sania Qamar?' });
+        assert.equal(en.body.reply, 'Students say attendance is strict.');
+        assert.equal(fake.calls.length, 1);
+        assert.doesNotMatch(fake.calls[0].body.contents.at(-1).parts[0].text, /Reply in/);
     });
 
     it('validates input', async () => {

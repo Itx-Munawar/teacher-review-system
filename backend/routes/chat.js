@@ -10,7 +10,7 @@ const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 const { LRUCache } = require('lru-cache');
-const { loadKnowledge, selectContext, detectReplyLanguage, DEFAULT_CONTEXT_CHARS, DEFAULT_GENERAL_CONTEXT_CHARS } = require('../lib/chatKnowledge');
+const { loadKnowledge, selectContext, detectReplyLanguage, romanUrduShare, DEFAULT_CONTEXT_CHARS, DEFAULT_GENERAL_CONTEXT_CHARS } = require('../lib/chatKnowledge');
 const gemini = require('../lib/gemini');
 const { logJson } = require('../lib/log');
 const { csrfValidate } = require('../csrf');
@@ -94,6 +94,34 @@ const normalizeQuestion = (text) => String(text || '')
     .replace(/[?!.,;:'"`،؟۔()]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+
+// Short reminder appended to the question sent to Gemini (never shown). The
+// model follows the user turn more reliably than the system prompt, which
+// mostly holds review text in another language.
+const LANGUAGE_REMINDERS = {
+    'roman-urdu': '(Reply in Roman Urdu, i.e. Urdu written in English letters.)',
+    urdu: '(Reply in Urdu script.)',
+};
+
+/** False when a Roman Urdu question got an (almost) all-English answer. */
+const replyMatchesLanguage = (text, language) => language !== 'roman-urdu' || romanUrduShare(text) >= 0.06;
+
+const TRANSLATE_REPLY_PROMPT = 'Rewrite the answer below in Roman Urdu (Urdu written in English letters, the way Pakistani students text). Keep the meaning, every teacher name, **bold** and "- " bullet points exactly. English words like grading, quizzes, attendance are fine inside Roman Urdu sentences. Return only the rewritten answer.';
+
+/** Cheap fix for a wrong-language answer: translate just the answer. */
+const translateReply = async (text) => {
+    try {
+        const fixed = await gemini.generate({
+            system: TRANSLATE_REPLY_PROMPT,
+            contents: [{ role: 'user', parts: [{ text }] }],
+            maxOutputTokens: MAX_ANSWER_TOKENS,
+            temperature: 0.2
+        });
+        return replyMatchesLanguage(fixed.text, 'roman-urdu') ? fixed.text : null;
+    } catch (_) {
+        return null;
+    }
+};
 
 const readSavedAnswer = async (key) => {
     if (!state.chatCacheReady) return null;
@@ -209,6 +237,8 @@ router.post('/api/chat', (req, res, next) => {
             hit = await readSavedAnswer(cacheKey);
             if (hit) answerCache.set(cacheKey, hit);
         }
+        // A saved answer in the wrong language is rebuilt instead of reused.
+        if (hit && !replyMatchesLanguage(hit.reply, language)) hit = null;
         if (hit) {
             logJson('info', 'chat', { cached: true, focus: selection.focusedTeachers.map((t) => t.id), ms: Date.now() - started });
             chatUsage.recordUsage(usageEntries('cached', selection, language));
@@ -219,9 +249,17 @@ router.post('/api/chat', (req, res, next) => {
         // Gemini requires the conversation to start with a user turn.
         const turns = history.map((h) => ({ role: h.role === 'assistant' ? 'model' : 'user', parts: [{ text: h.text }] }));
         while (turns.length && turns[0].role !== 'user') turns.shift();
-        turns.push({ role: 'user', parts: [{ text: message }] });
+        const reminder = LANGUAGE_REMINDERS[language];
+        turns.push({ role: 'user', parts: [{ text: reminder ? `${message}\n\n${reminder}` : message }] });
 
-        const { text, model } = await gemini.generate({ system, contents: turns, maxOutputTokens: MAX_ANSWER_TOKENS });
+        const generated = await gemini.generate({ system, contents: turns, maxOutputTokens: MAX_ANSWER_TOKENS });
+        const { model } = generated;
+        let { text } = generated;
+        if (!replyMatchesLanguage(text, language)) {
+            const translated = await translateReply(text);
+            logJson('info', 'chat_language_fix', { ok: Boolean(translated), model });
+            if (translated) text = translated;
+        }
 
         // Teacher pages worth linking: the ones the question was about, plus
         // any other teacher whose full name the answer mentions.

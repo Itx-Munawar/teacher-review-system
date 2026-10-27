@@ -32,11 +32,11 @@ describe('Gemini timeouts and fallback', { skip: SKIP }, () => {
     beforeEach(() => { fake.calls.length = 0; fake.queue.length = 0; });
 
     it('falls back after a timeout and then skips the hanging model', async () => {
-        fake.queue.push({ status: 200, delay: 4500, text: 'too slow' }, { status: 200, text: 'Answer from model b.' });
+        fake.queue.push({ status: 200, delay: 4500, text: 'too slow' }, { status: 200, text: 'Model b ka jawab: students kehte hain acha parhate hain.' });
         const started = Date.now();
         const res = await createClient(server.baseUrl).post('/api/chat', { message: 'waqar ashiq ki teaching kesi hai?' });
         assert.equal(res.status, 200, res.text);
-        assert.equal(res.body.reply, 'Answer from model b.');
+        assert.equal(res.body.reply, 'Model b ka jawab: students kehte hain acha parhate hain.');
         assert.deepEqual(fake.calls.map((c) => c.model), ['model-a', 'model-b']);
         assert.ok(Date.now() - started < 4500, 'gave up on model-a at the 3s timeout');
 
@@ -47,10 +47,10 @@ describe('Gemini timeouts and fallback', { skip: SKIP }, () => {
     });
 
     it('serves a saved answer after a server restart, until new reviews arrive', async () => {
-        fake.queue.push({ status: 200, text: 'Saved answer about Waqar.' });
+        fake.queue.push({ status: 200, text: 'Waqar ke baare mein saved jawab hai.' });
         const q = { message: 'waqar ashiq ka grading style?' };
         const first = await createClient(server.baseUrl).post('/api/chat', q);
-        assert.equal(first.body.reply, 'Saved answer about Waqar.');
+        assert.equal(first.body.reply, 'Waqar ke baare mein saved jawab hai.');
         assert.equal(fake.calls.length, 1);
 
         // A fresh server process has an empty memory cache: the DB answers.
@@ -61,7 +61,7 @@ describe('Gemini timeouts and fallback', { skip: SKIP }, () => {
         fake.calls.length = 0;
         const again = await createClient(server.baseUrl).post('/api/chat', q);
         assert.equal(again.status, 200, again.text);
-        assert.equal(again.body.reply, 'Saved answer about Waqar.');
+        assert.equal(again.body.reply, 'Waqar ke baare mein saved jawab hai.');
         assert.equal(fake.calls.length, 0, 'no AI call for a saved answer');
 
         // A new approved review changes the data version: the answer is rebuilt.
@@ -70,9 +70,9 @@ describe('Gemini timeouts and fallback', { skip: SKIP }, () => {
         await server.stop();
         server = await startServer(env);
         server.env = env;
-        fake.queue.push({ status: 200, text: 'Fresh answer with the new review.' });
+        fake.queue.push({ status: 200, text: 'Naye review ke saath taza jawab hai.' });
         const fresh = await createClient(server.baseUrl).post('/api/chat', q);
-        assert.equal(fresh.body.reply, 'Fresh answer with the new review.');
+        assert.equal(fresh.body.reply, 'Naye review ke saath taza jawab hai.');
         assert.equal(fake.calls.length, 1);
     });
 
