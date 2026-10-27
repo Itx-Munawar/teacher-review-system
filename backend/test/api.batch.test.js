@@ -229,7 +229,8 @@ describe('review extras, summaries, analytics and errors', { skip: SKIP }, () =>
         it('translates an English summary to Roman Urdu with a small second call', async () => {
             const [{ id: hira }] = await dbQuery("SELECT id FROM teachers WHERE name = 'Kinza Translate'");
             fake.queue.push(
-                { status: 200, text: JSON.stringify({ overview: 'Most students say she explains concepts clearly.', pros: ['Clear lectures'], cons: [] }) },
+                // Roman Urdu points but an English overview still counts as English.
+                { status: 200, text: JSON.stringify({ overview: 'Most students say she explains concepts clearly.', pros: ['Concepts achay se samjhati hain aur lectures clear hain'], cons: [] }) },
                 { status: 200, text: JSON.stringify({ overview: 'Zyada tar students kehte hain ke concepts clear karti hain.', pros: ['Lectures clear hoti hain'], cons: [] }) }
             );
             const res = await createClient(server.baseUrl).get(`/api/teachers/${hira}/summary`);
@@ -256,6 +257,18 @@ describe('review extras, summaries, analytics and errors', { skip: SKIP }, () =>
             const rebuilt = await createClient(server.baseUrl).get(`/api/teachers/${hira}/summary`);
             assert.equal(rebuilt.body.overview, 'Students bohat khush hain.');
             assert.equal(fake.calls.length, 1);
+            // A saved (current) summary with an English line is translated once.
+            fake.calls.length = 0;
+            await dbQuery('UPDATE teacher_summaries SET summary = ? WHERE teacher_id = ?',
+                [JSON.stringify({ overview: 'Students generally like her friendly nature a lot.', pros: ['Concepts achay se samjhati hain aur grading fair hai'], cons: [] }), hira]);
+            fake.queue.push({ status: 200, text: JSON.stringify({ overview: 'Students ko in ka friendly andaaz bohat pasand hai.', pros: ['Concepts achay se samjhati hain aur grading fair hai'], cons: [] }) });
+            const fixed = await createClient(server.baseUrl).get(`/api/teachers/${hira}/summary`);
+            assert.equal(fixed.body.overview, 'Students ko in ka friendly andaaz bohat pasand hai.');
+            assert.equal(fake.calls.length, 1);
+            assert.doesNotMatch(JSON.stringify(fake.calls[0].body.contents), /Kinza review/, 'translation does not resend reviews');
+            const again = await createClient(server.baseUrl).get(`/api/teachers/${hira}/summary`);
+            assert.equal(again.body.overview, 'Students ko in ka friendly andaaz bohat pasand hai.');
+            assert.equal(fake.calls.length, 1, 'saved after translating');
         });
 
         it('rejects unusable model output without caching it', async () => {

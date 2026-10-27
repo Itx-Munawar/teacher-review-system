@@ -55,10 +55,34 @@ const signatureFor = (reviews) => `n:${reviews.reduce((m, r) => Math.max(m, Numb
 // Signatures written before this scheme (sha1 of every review id + length).
 const LEGACY_SIGNATURE = /^[0-9a-f]{40}$/;
 
-/** True when the summary text reads as Roman Urdu rather than English. */
-const isRomanUrdu = (parsed) => romanUrduShare([parsed.overview, ...parsed.pros, ...parsed.cons].join(' ')) >= 0.08;
+/**
+ * True when every sentence of the summary reads as Roman Urdu. Checked line by
+ * line: a Roman Urdu pros list must not hide an English overview. Very short
+ * lines ("Grading fair") are skipped - they are fine either way.
+ */
+const isRomanUrdu = (parsed) => [parsed.overview, ...parsed.pros, ...parsed.cons]
+    .filter((line) => (String(line || '').match(/[a-z]+/gi) || []).length >= 5)
+    .every((line) => romanUrduShare(line) >= 0.1);
 
 const TRANSLATE_PROMPT = `Rewrite this JSON so every string is in Roman Urdu (Urdu written in English letters, the way Pakistani students text). Keep the meaning and the same keys. English words like grading, quizzes, assignments, attendance are fine inside Roman Urdu sentences. Return ONLY the JSON.`;
+
+/** Cheap fix for an English summary: translate the short JSON (no reviews). */
+const translateToRomanUrdu = async (parsed) => {
+    try {
+        const fixed = await gemini.generate({
+            system: TRANSLATE_PROMPT,
+            contents: [{ role: 'user', parts: [{ text: JSON.stringify(parsed) }] }],
+            maxOutputTokens: 600,
+            temperature: 0.2,
+            responseMimeType: 'application/json'
+        });
+        // eslint-disable-next-line no-use-before-define
+        const translated = parseSummary(fixed.text);
+        return translated && isRomanUrdu(translated) ? translated : null;
+    } catch (_) {
+        return null;
+    }
+};
 
 const clean = (text, max) => String(text || '').replace(/\s+/g, ' ').trim().slice(0, max);
 
@@ -132,7 +156,28 @@ const getTeacherSummary = async (teacherId) => {
 
     const signature = signatureFor(reviews);
     const cached = await readCached(teacherId);
-    if (cached && cached.signature === signature) return respond(cached);
+    const recentlyFailed = () => {
+        const at = lastFailure.get(teacherId);
+        return Boolean(at && Date.now() - at < RETRY_AFTER_FAILURE_MS());
+    };
+
+    if (cached && cached.signature === signature) {
+        if (isRomanUrdu(cached.parsed) || recentlyFailed() || inFlight.has(teacherId)) return respond(cached);
+        // Saved summary with English lines: translate it once (small call, no reviews).
+        const job = (async () => {
+            if (!takeBudget()) return respond(cached);
+            const translated = await translateToRomanUrdu(cached.parsed);
+            if (!translated) {
+                lastFailure.set(teacherId, Date.now());
+                return respond(cached);
+            }
+            await db.query('UPDATE teacher_summaries SET summary = ? WHERE teacher_id = ?', [JSON.stringify(translated), teacherId]);
+            logJson('info', 'summary_translated', { teacher_id: teacherId });
+            return respond({ ...cached, parsed: translated });
+        })();
+        inFlight.set(teacherId, job);
+        try { return await job; } finally { inFlight.delete(teacherId); }
+    }
 
     // One-time move from the old signature: a Roman Urdu summary of the same
     // reviews is kept (no AI call); only English ones are rebuilt.
@@ -143,8 +188,7 @@ const getTeacherSummary = async (teacherId) => {
 
     if (inFlight.has(teacherId)) return inFlight.get(teacherId);
 
-    const failedAt = lastFailure.get(teacherId);
-    if (failedAt && Date.now() - failedAt < RETRY_AFTER_FAILURE_MS()) {
+    if (recentlyFailed()) {
         return cached ? respond(cached, { stale: true }) : { available: false, reason: 'busy' };
     }
 
@@ -168,17 +212,7 @@ const getTeacherSummary = async (teacherId) => {
             }
             if (!isRomanUrdu(parsed)) {
                 // Cheap fix: translate the short JSON instead of re-sending every review.
-                try {
-                    const fixed = await gemini.generate({
-                        system: TRANSLATE_PROMPT,
-                        contents: [{ role: 'user', parts: [{ text: JSON.stringify(parsed) }] }],
-                        maxOutputTokens: 600,
-                        temperature: 0.2,
-                        responseMimeType: 'application/json'
-                    });
-                    const translated = parseSummary(fixed.text);
-                    if (translated && isRomanUrdu(translated)) parsed = translated;
-                } catch (_) { /* keep the English one rather than nothing */ }
+                parsed = (await translateToRomanUrdu(parsed)) || parsed;
             }
             await db.query(
                 `INSERT INTO teacher_summaries (teacher_id, summary, signature, review_count, model, generated_at)
