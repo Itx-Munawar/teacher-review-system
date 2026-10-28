@@ -65,7 +65,7 @@ const AiSummary: React.FC<AiSummaryProps> = ({ teacherId, reviewCount }) => {
                     {summary.pros.length > 0 && (
                         <div className="ai-summary-box ai-summary-box-pro">
                             <p className="ai-summary-label ai-summary-label-pro">
-                                <Icon name="thumbs-up" size={14} /> Students ko pasand
+                                <Icon name="thumbs-up" size={14} /> What students like
                             </p>
                             <ul>
                                 {summary.pros.map((p, i) => <li key={i}>{p}</li>)}
@@ -75,7 +75,7 @@ const AiSummary: React.FC<AiSummaryProps> = ({ teacherId, reviewCount }) => {
                     {summary.cons.length > 0 && (
                         <div className="ai-summary-box ai-summary-box-con">
                             <p className="ai-summary-label ai-summary-label-con">
-                                <Icon name="alert-triangle" size={14} /> Mushkilaat
+                                <Icon name="alert-triangle" size={14} /> Concerns
                             </p>
                             <ul>
                                 {summary.cons.map((c, i) => <li key={i}>{c}</li>)}

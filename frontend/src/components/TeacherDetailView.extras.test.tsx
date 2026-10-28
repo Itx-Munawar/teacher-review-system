@@ -144,7 +144,7 @@ describe('TeacherDetailView extras', () => {
         expect(screen.getByText(/2 of 3/)).toBeTruthy();
         // All of the filtered reviews are loaded: no "load more" for the 3rd overall review.
         expect(screen.queryByRole('button', { name: /load more reviews/i })).toBeNull();
-        fireEvent.click(screen.getByRole('button', { name: 'Sab courses' }));
+        fireEvent.click(screen.getByRole('button', { name: 'All courses' }));
         expect(props.onChangeReviewQuery).toHaveBeenLastCalledWith({ sort: 'newest', course: null });
     });
 

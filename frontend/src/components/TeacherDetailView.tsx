@@ -298,7 +298,7 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                                         aria-pressed={!reviewCourse}
                                         onClick={() => reviewCourse && onChangeReviewQuery?.({ sort: reviewSort, course: null })}
                                     >
-                                        Sab courses
+                                        All courses
                                     </button>
                                     {courseCounts.map(({ course, count }) => (
                                         <button
@@ -330,9 +330,9 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                     <div className={`review-list${reviewQueryLoading ? ' review-list-loading' : ''}`} aria-busy={reviewQueryLoading}>
                     {sortedReviews.length === 0 && reviewCourse ? (
                         <div className="reviews-empty">
-                            <p className="reviews-empty-title">Is course ka koi review nahi mila</p>
+                            <p className="reviews-empty-title">No reviews for this course yet</p>
                             <button type="button" className="profile-cta profile-cta-small" onClick={() => onChangeReviewQuery?.({ sort: reviewSort, course: null })}>
-                                Sab reviews dekhein
+                                Show all reviews
                             </button>
                         </div>
                     ) : sortedReviews.length === 0 ? (
