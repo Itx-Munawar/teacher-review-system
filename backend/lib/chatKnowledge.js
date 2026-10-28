@@ -494,7 +494,13 @@ const detectReplyLanguage = (message) => {
     return words.some((w) => ROMAN_URDU_MARKERS.has(w)) ? 'roman-urdu' : 'english';
 };
 
+// Any letter outside the Latin script (Urdu, Hindi, Gujarati...): Roman Urdu
+// text written for the site must not contain them.
+const FOREIGN_LETTER = /[^\P{L}\p{Script=Latin}]/u;
+const hasForeignLetters = (text) => FOREIGN_LETTER.test(String(text || ''));
+
 module.exports = {
+    hasForeignLetters,
     detectReplyLanguage,
     romanUrduShare,
     loadKnowledge,

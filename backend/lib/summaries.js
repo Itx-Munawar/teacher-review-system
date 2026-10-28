@@ -11,7 +11,7 @@ const state = require('../state');
 const gemini = require('./gemini');
 const { parseCourseList } = require('../contentFilter');
 const { logJson } = require('./log');
-const { romanUrduShare } = require('./chatKnowledge');
+const { romanUrduShare, hasForeignLetters } = require('./chatKnowledge');
 
 const MIN_REVIEWS = 3;
 const MAX_REVIEWS_IN_PROMPT = 150;
@@ -60,11 +60,16 @@ const LEGACY_SIGNATURE = /^[0-9a-f]{40}$/;
  * line: a Roman Urdu pros list must not hide an English overview. Very short
  * lines ("Grading fair") are skipped - they are fine either way.
  */
-const isRomanUrdu = (parsed) => [parsed.overview, ...parsed.pros, ...parsed.cons]
-    .filter((line) => (String(line || '').match(/[a-z]+/gi) || []).length >= 5)
-    .every((line) => romanUrduShare(line) >= 0.1);
+const isRomanUrdu = (parsed) => {
+    const lines = [parsed.overview, ...parsed.pros, ...parsed.cons].map((line) => String(line || ''));
+    // The model sometimes slips one word into another script ("આંkhain band kar ke").
+    if (lines.some(hasForeignLetters)) return false;
+    return lines
+        .filter((line) => (line.match(/[a-z]+/gi) || []).length >= 5)
+        .every((line) => romanUrduShare(line) >= 0.1);
+};
 
-const TRANSLATE_PROMPT = `Rewrite this JSON so every string is in Roman Urdu (Urdu written in English letters, the way Pakistani students text). Keep the meaning and the same keys. English words like grading, quizzes, assignments, attendance are fine inside Roman Urdu sentences. Return ONLY the JSON.`;
+const TRANSLATE_PROMPT = `Rewrite this JSON so every string is in Roman Urdu (Urdu written in English letters only, the way Pakistani students text; no Urdu, Hindi or other scripts). Keep the meaning and the same keys. English words like grading, quizzes, assignments, attendance are fine inside Roman Urdu sentences. Return ONLY the JSON.`;
 
 /** Cheap fix for an English summary: translate the short JSON (no reviews). */
 const translateToRomanUrdu = async (parsed) => {

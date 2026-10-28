@@ -2,7 +2,7 @@
 // review text goes to the model. Pure functions - no DB.
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { buildKnowledge, matchTeachers, matchTopics, selectContext, detectReplyLanguage, detectAspects, snippetOf } = require('../lib/chatKnowledge');
+const { hasForeignLetters, buildKnowledge, matchTeachers, matchTopics, selectContext, detectReplyLanguage, detectAspects, snippetOf } = require('../lib/chatKnowledge');
 
 // Enough "Muhammad"s and "Ali"s that those name parts are common, like in
 // the real data, plus a few distinctive names.
@@ -201,5 +201,20 @@ describe('chat: smaller context for general questions', () => {
         assert.equal(sel.mode, 'focused');
         assert.match(sel.context, /Explains calculus really well/);
         assert.match(sel.context, /Quizzes every week/);
+    });
+});
+
+describe('hasForeignLetters', () => {
+    it('is false for Roman Urdu, English, accents, digits and symbols', () => {
+        assert.equal(hasForeignLetters('Concepts bohat achay tareeqay se clear karte hain'), false);
+        assert.equal(hasForeignLetters('Café wali baat nahi, 100% fair grading (A/B) - sach mein!'), false);
+        assert.equal(hasForeignLetters(''), false);
+        assert.equal(hasForeignLetters(null), false);
+    });
+
+    it('catches a single word in Gujarati, Devanagari or Urdu script', () => {
+        assert.equal(hasForeignLetters('Students inhein આંkhain band kar ke select karte hain'), true);
+        assert.equal(hasForeignLetters('Grading अच्छी hai'), true);
+        assert.equal(hasForeignLetters('اچھے teacher'), true);
     });
 });
