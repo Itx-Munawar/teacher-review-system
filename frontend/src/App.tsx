@@ -28,7 +28,6 @@ import AppFooter from './components/AppFooter';
 import TeacherSidebar from './components/TeacherSidebar';
 import WelcomePanel from './components/WelcomePanel';
 import HomeIntro from './components/HomeIntro';
-import ChatCat from './components/ChatCat';
 import { openChat } from './utils/chatEvents';
 import CompareBar from './components/CompareBar';
 import { AboutModal, ContactModal } from './components/InfoModals';
@@ -913,7 +912,7 @@ const App: React.FC = () => {
                 items={[
                     { key: 'home', label: 'Home', icon: 'home', active: !isComparing && !showQnA && !selectedTeacher, onClick: handleTabHome },
                     { key: 'qna', label: 'Q&A', icon: 'message-square', active: showQnA, onClick: handleOpenQnA },
-                    ...(chatEnabled ? [{ key: 'ai', label: 'Ask AI', icon: 'sparkles' as const, iconNode: <ChatCat size={27} />, onClick: openChat }] : []),
+                    ...(chatEnabled ? [{ key: 'ai', label: 'Ask AI', icon: 'sparkles' as const, onClick: openChat }] : []),
                     { key: 'compare', label: 'Compare', icon: 'compare', active: isComparing, onClick: handleTabCompare },
                     { key: 'admin', label: 'Admin', icon: 'lock', onClick: handleTabAdmin },
                 ]}
