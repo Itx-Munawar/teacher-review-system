@@ -67,7 +67,7 @@ describe('chat API', { skip: SKIP }, () => {
         assert.doesNotMatch(sys, /PENDING-TEXT/);
         assert.doesNotMatch(sys, /SecretReviewerName/);
         assert.doesNotMatch(sys, /Attendance is strict/, 'other teachers are not needed for a specific question');
-        assert.deepEqual(call.body.contents, [{ role: 'user', parts: [{ text: 'sir waqar ki grading kesi hai?\n\n(Reply in Roman Urdu, i.e. Urdu written in English letters.)' }] }]);
+        assert.deepEqual(call.body.contents, [{ role: 'user', parts: [{ text: 'sir waqar ki grading kesi hai?\n\n(Reply in Roman Urdu, i.e. Urdu written in English letters, from the very first word. Do not open with an English phrase such as \"Based on the student reviews\".)' }] }]);
     });
 
     it('a general question gets a digest of every reviewed teacher', async () => {
@@ -109,7 +109,7 @@ describe('chat API', { skip: SKIP }, () => {
         const call = fake.calls[0];
         // Leading assistant greeting dropped: Gemini needs a user turn first.
         assert.deepEqual(call.body.contents.map((c) => c.role), ['user', 'model', 'user']);
-        assert.equal(call.body.contents[2].parts[0].text, 'aur unki attendance?\n\n(Reply in Roman Urdu, i.e. Urdu written in English letters.)');
+        assert.equal(call.body.contents[2].parts[0].text, 'aur unki attendance?\n\n(Reply in Roman Urdu, i.e. Urdu written in English letters, from the very first word. Do not open with an English phrase such as \"Based on the student reviews\".)');
         assert.match(systemText(call), /Attendance is strict/);
         assert.equal(res.body.teachers[0].id, sania);
     });

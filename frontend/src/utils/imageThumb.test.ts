@@ -1,4 +1,4 @@
-import { isUsableImageUrl, thumbUrl, thumbSrcSet, originalViaSite } from './imageThumb';
+import { isUsableImageUrl, thumbUrl, thumbSrcSet, originalViaSite, localPhotoUrl } from './imageThumb';
 
 const UMT_PHOTO = 'https://admin.umt.edu.pk/Media/UserProfile/636753931581232459123.JPG';
 
@@ -60,6 +60,20 @@ describe('thumbUrl', () => {
         expect(thumbUrl('https://admin.umt.edu.pk/Media/UserProfile/', 160))
             .toBe('https://admin.umt.edu.pk/Media/UserProfile/');
         expect(thumbUrl('', 160)).toBe('');
+    });
+});
+
+describe('localPhotoUrl', () => {
+    it('points at the copy stored with the site: 160 px for small circles, 320 px for big ones', () => {
+        expect(localPhotoUrl(UMT_PHOTO, 48)).toBe('/photos/s/636753931581232459123.webp');
+        expect(localPhotoUrl(UMT_PHOTO, 80)).toBe('/photos/s/636753931581232459123.webp');
+        expect(localPhotoUrl(UMT_PHOTO, 130)).toBe('/photos/l/636753931581232459123.webp');
+    });
+
+    it('is null for anything that is not a UMT profile photo', () => {
+        expect(localPhotoUrl('https://some-other-site.com/photo.jpg', 80)).toBeNull();
+        expect(localPhotoUrl('https://admin.umt.edu.pk/Media/UserProfile/', 80)).toBeNull();
+        expect(localPhotoUrl(null, 80)).toBeNull();
     });
 });
 

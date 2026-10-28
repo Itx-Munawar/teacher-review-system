@@ -4,7 +4,11 @@
  * 36px–130px circles. Resizing them on the fly to a small WebP cuts each photo
  * to roughly 1.5 KB, which is by far the biggest win on slow mobile connections.
  *
- * UMT profile photos (all real data) are fetched through our own domain:
+ * Best of all, most photos are stored with the site itself (public/photos,
+ * filled by scripts/sync-photos.mjs): /photos/s/<name>.webp (160 px) and
+ * /photos/l/<name>.webp (320 px). See localPhotoUrl().
+ *
+ * Otherwise UMT profile photos are fetched through our own domain:
  *   /img/t/<width>/<file>  → Vercel rewrite → wsrv.nl resize of the UMT photo
  *   /img/o/<file>          → Vercel rewrite → the original UMT photo
  * Some Pakistani networks block or stall wsrv.nl (and UMT's server is slow),
@@ -71,6 +75,21 @@ export function thumbUrl(url: string, width: number): string {
         q: '72',
     });
     return `${THUMBNAIL_PROXY}?${params}`;
+}
+
+/** CSS sizes up to this use the 160 px file (sharp at 2x); larger use 320 px. */
+const SMALL_PHOTO_MAX = 80;
+
+/**
+ * The copy of a UMT profile photo stored with the site, or null for any other
+ * URL. A teacher added after the last sync simply 404s here and the Avatar
+ * falls back to the proxied photo.
+ */
+export function localPhotoUrl(url: string | null | undefined, size: number): string | null {
+    const trimmed = (url || '').trim();
+    const file = isUsableImageUrl(trimmed) ? umtProfileFile(trimmed) : null;
+    if (!file) return null;
+    return `/photos/${size <= SMALL_PHOTO_MAX ? 's' : 'l'}/${file.replace(/\.[^.]+$/, '')}.webp`;
 }
 
 /**

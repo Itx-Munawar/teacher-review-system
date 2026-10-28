@@ -30,6 +30,7 @@ const render = (ui: React.ReactElement) => act(() => { root.render(ui); });
 const img = () => container.querySelector('img');
 const srcOf = () => img()?.getAttribute('src') || '';
 const FILE = '636753931581232459123.JPG';
+const LOCAL = (size: number) => `/photos/${size <= 80 ? 's' : 'l'}/636753931581232459123.webp`;
 
 /** Every avatar configuration actually used across the app's screens. */
 const SCREENS = [
@@ -45,7 +46,7 @@ const SCREENS = [
 describe('Avatar — thumbnail loading across every screen', () => {
     SCREENS.forEach(({ screen, className, size, expected }) => {
         describe(screen, () => {
-            it('requests a thumbnail at the right size from our own domain', () => {
+            it('uses the copy stored with the site first', () => {
                 render(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className={className} size={size} />);
 
                 const el = img();
@@ -55,11 +56,14 @@ describe('Avatar — thumbnail loading across every screen', () => {
                 expect(el!.getAttribute('decoding')).toBe('async');
                 expect(el!.getAttribute('alt')).toBe('Dr Jane Doe');
 
-                expect(srcOf()).toBe(`/img/t/${expected}/${FILE}`);
+                expect(srcOf()).toBe(LOCAL(expected));
+                expect(el!.getAttribute('srcset')).toBeNull();
             });
 
-            it('offers a 2x variant for high-DPI phones', () => {
+            it('falls back to a proxied thumbnail with a 2x variant', () => {
                 render(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className={className} size={size} />);
+                act(() => { fireEvent.error(img()!); }); // not synced yet
+                expect(srcOf()).toBe(`/img/t/${expected}/${FILE}`);
                 const srcSet = img()!.getAttribute('srcset') || '';
                 expect(srcSet).toContain(`/img/t/${expected}/${FILE} 1x`);
                 expect(srcSet).toContain(`/img/t/${expected * 2}/${FILE} 2x`);
@@ -68,7 +72,8 @@ describe('Avatar — thumbnail loading across every screen', () => {
 
             it('falls back to the original via our domain, then straight from UMT', () => {
                 render(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className={className} size={size} />);
-                act(() => { fireEvent.error(img()!); });
+                act(() => { fireEvent.error(img()!); }); // stored copy
+                act(() => { fireEvent.error(img()!); }); // proxied thumbnail
                 expect(srcOf()).toBe(`/img/o/${FILE}`);
                 expect(img()!.getAttribute('srcset')).toBeNull();
 
@@ -78,6 +83,7 @@ describe('Avatar — thumbnail loading across every screen', () => {
 
             it('falls back to initials if both the thumbnail and the original fail', () => {
                 render(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className={className} size={size} />);
+                act(() => { fireEvent.error(img()!); }); // stored copy failed
                 act(() => { fireEvent.error(img()!); }); // thumbnail failed
                 act(() => { fireEvent.error(img()!); }); // original via our domain failed
                 act(() => { fireEvent.error(img()!); }); // original from UMT failed
@@ -118,6 +124,8 @@ describe('Avatar — perceived speed', () => {
 
     it('keeps list thumbnails small: a ~60px circle must not request more than 80px (1x) / 160px (2x)', () => {
         render(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className="teacher-card-image" />);
+        expect(srcOf()).toBe(LOCAL(80)); // the 160 px file
+        act(() => { fireEvent.error(img()!); });
         expect(srcOf()).toBe(`/img/t/80/${FILE}`);
         expect(img()!.getAttribute('srcset')).toContain('/img/t/160/');
         expect(img()!.getAttribute('srcset')).not.toContain('/img/t/320/');
@@ -157,11 +165,11 @@ describe('Avatar — data the app really contains', () => {
     it('recovers the thumbnail when the avatar is reused for a different teacher', () => {
         render(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className="teacher-card-image" />);
         act(() => { fireEvent.error(img()!); });
-        expect(srcOf()).toBe(`/img/o/${FILE}`);
+        expect(srcOf()).toBe(`/img/t/80/${FILE}`);
 
         // Same component instance, new teacher (e.g. autocomplete list reuse)
         render(<Avatar name="Dr John Roe" imageUrl={UMT_PHOTO.replace('636753931581232459123.JPG', '639015873261646639164.jpg')} className="teacher-card-image" />);
-        expect(srcOf()).toBe('/img/t/80/639015873261646639164.jpg');
+        expect(srcOf()).toBe('/photos/s/639015873261646639164.webp');
     });
 
     it('uses a sensible single initial for a one-word name', () => {
@@ -176,6 +184,8 @@ describe('Avatar — stalled photos', () => {
     it('moves on when a source neither loads nor errors (blocked networks stall)', () => {
         vi.useFakeTimers();
         render(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className="teacher-card-image" priority />);
+        expect(srcOf()).toBe(LOCAL(80));
+        act(() => { vi.advanceTimersByTime(PHOTO_STALL_MS + 10); });
         expect(srcOf()).toBe(`/img/t/80/${FILE}`);
         act(() => { vi.advanceTimersByTime(PHOTO_STALL_MS + 10); });
         expect(srcOf()).toBe(`/img/o/${FILE}`);
@@ -192,7 +202,7 @@ describe('Avatar — stalled photos', () => {
         Object.defineProperty(img()!, 'complete', { value: true, configurable: true });
         Object.defineProperty(img()!, 'naturalWidth', { value: 80, configurable: true });
         act(() => { vi.advanceTimersByTime(PHOTO_STALL_MS * 2); });
-        expect(srcOf()).toBe(`/img/t/80/${FILE}`);
+        expect(srcOf()).toBe(LOCAL(80));
     });
 
     it('waits for an off-screen lazy photo to scroll into view before counting', () => {
@@ -207,10 +217,10 @@ describe('Avatar — stalled photos', () => {
         try {
             render(<Avatar name="Dr Jane Doe" imageUrl={UMT_PHOTO} className="teacher-card-image" />);
             act(() => { vi.advanceTimersByTime(PHOTO_STALL_MS * 3); });
-            expect(srcOf()).toBe(`/img/t/80/${FILE}`); // never scrolled into view
+            expect(srcOf()).toBe(LOCAL(80)); // never scrolled into view
             act(() => { trigger!([{ isIntersecting: true }]); });
             act(() => { vi.advanceTimersByTime(PHOTO_STALL_MS + 10); });
-            expect(srcOf()).toBe(`/img/o/${FILE}`);
+            expect(srcOf()).toBe(`/img/t/80/${FILE}`);
         } finally {
             (globalThis as any).IntersectionObserver = original;
         }

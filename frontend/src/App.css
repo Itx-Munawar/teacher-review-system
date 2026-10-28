@@ -9531,3 +9531,59 @@ body {
     .teacher-detail .review-sort { margin-left: 0; }
     .teacher-detail .course-chip { font-size: 0.74rem; }
 }
+
+/* ---------- Review form: "what to write about" topic chips ---------- */
+.review-topics {
+    margin-top: 10px;
+}
+
+.review-topics-hint {
+    margin: 0 0 6px;
+    color: var(--muted);
+    font-size: 0.8125rem;
+}
+
+.review-topics-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.modal-content .review-topic-chip,
+.review-topic-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--ink-soft);
+    font: inherit;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: none;
+    transform: none;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.modal-content .review-topic-chip:hover,
+.review-topic-chip:hover {
+    border-color: var(--gold);
+    color: var(--gold-deep);
+    transform: none;
+}
+
+.modal-content .review-topic-chip.is-covered,
+.review-topic-chip.is-covered {
+    border-color: var(--success-bg);
+    background: var(--success-bg);
+    color: var(--success);
+}
+
+.review-topic-chip span {
+    font-weight: 700;
+}

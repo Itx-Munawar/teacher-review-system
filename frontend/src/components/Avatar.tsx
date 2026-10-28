@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { isUsableImageUrl, thumbUrl, thumbSrcSet, originalViaSite } from '../utils/imageThumb';
+import { isUsableImageUrl, thumbUrl, thumbSrcSet, originalViaSite, localPhotoUrl } from '../utils/imageThumb';
 
 /**
  * A photo source that has neither loaded nor errored after this long (counted
@@ -39,8 +39,8 @@ interface AvatarProps {
 
 /**
  * Teacher photo with a graceful fallback chain:
- * resized thumbnail (via our domain) → original (via our domain) →
- * original straight from UMT → initials.
+ * copy stored with the site → resized thumbnail (via our domain) →
+ * original (via our domain) → original straight from UMT → initials.
  *
  * The thumbnail is ~1.5 KB instead of 20–230 KB, and a failed or broken URL
  * degrades to initials rather than a broken-image icon.
@@ -50,7 +50,8 @@ const Avatar: React.FC<AvatarProps> = ({ name, imageUrl, className = '', alt, si
     const sources = useMemo(() => {
         if (!isUsableImageUrl(imageUrl)) return [];
         const original = (imageUrl as string).trim();
-        return Array.from(new Set([thumbUrl(original, size), originalViaSite(original), original]));
+        const local = localPhotoUrl(original, size);
+        return Array.from(new Set([...(local ? [local] : []), thumbUrl(original, size), originalViaSite(original), original]));
     }, [imageUrl, size]);
 
     const [index, setIndex] = useState(0);
@@ -108,7 +109,7 @@ const Avatar: React.FC<AvatarProps> = ({ name, imageUrl, className = '', alt, si
         <img
             ref={imgRef}
             src={sources[index]}
-            srcSet={index === 0 ? thumbSrcSet((imageUrl as string).trim(), size) : undefined}
+            srcSet={sources[index].startsWith('/img/t/') ? thumbSrcSet((imageUrl as string).trim(), size) : undefined}
             alt={alt || name}
             className={`${className}`}
             style={PLACEHOLDER_STYLE}

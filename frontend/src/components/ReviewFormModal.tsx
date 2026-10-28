@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Icon from './Icon';
 import SearchableDropdown from './SearchableDropdown';
+import ReviewTopicChips from './ReviewTopicChips';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { getApprovedCustomCourses, suggestCustomCourse } from '../services/api';
 import type { TeacherDetail } from '../types';
@@ -129,6 +130,7 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
     onClose,
 }) => {
     const trapRef = useFocusTrap(true);
+    const commentRef = useRef<HTMLTextAreaElement>(null);
 
     // Approved community-added courses, merged into the built-in list
     const [customCourses, setCustomCourses] = useState<string[]>([]);
@@ -296,6 +298,7 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                             <span className="form-section-hint">required</span>
                         </div>
                         <textarea
+                            ref={commentRef}
                             id="review-comment"
                             rows={5}
                             value={reviewComment}
@@ -306,6 +309,12 @@ const ReviewFormModal: React.FC<ReviewFormModalProps> = ({
                             maxLength={1000}
                             aria-required="true"
                             aria-describedby="review-comment-help"
+                        />
+                        <ReviewTopicChips
+                            value={reviewComment}
+                            maxLength={1000}
+                            onChange={setReviewComment}
+                            textareaRef={commentRef}
                         />
                         <div className="review-form-meta" id="review-comment-help">
                             <span className="review-char-count">

@@ -59,6 +59,20 @@ describe('link previews and teacher tidy-up', { skip: SKIP }, () => {
             assert.doesNotMatch(res.text, /<script/i);
         });
 
+        it('puts the saved AI summary first, without calling the AI', async () => {
+            const overview = 'Zyada tar students kehte hain ke lectures clear hain aur grading fair hai, lekin kuch students ko assignments zyada lagte hain aur deadlines strict hain jo mushkil hai, phir bhi zyada tar log inhein recommend karte hain kyunke concepts pakke ho jaate hain.';
+            await dbQuery(
+                'INSERT INTO teacher_summaries (teacher_id, summary, signature, review_count) VALUES (?, ?, ?, 2)',
+                [withPhoto, JSON.stringify({ overview, pros: ['Lectures clear'], cons: [] }), 'n:1']
+            );
+            const res = await createClient(server.baseUrl).get(`/seo/teacher/${withPhoto}`, { headers: { 'User-Agent': 'WhatsApp/2.24.1 A' } });
+            const description = ogContent(res.text, 'og:description');
+            assert.match(description, /^AI summary: Zyada tar students kehte hain ke lectures clear hain/);
+            assert.match(description, /\.\.\. \| 2 anonymous student reviews\. Courses: Data Structures, OOP\.$/, 'long overviews are cut at a word');
+            assert.ok(description.length < 300, `short enough for a preview (${description.length})`);
+            await dbQuery('DELETE FROM teacher_summaries WHERE teacher_id = ?', [withPhoto]);
+        });
+
         it('falls back to the site logo and invites the first review', async () => {
             const res = await createClient(server.baseUrl).get(`/seo/teacher/${noPhoto}`);
             assert.equal(res.status, 200);

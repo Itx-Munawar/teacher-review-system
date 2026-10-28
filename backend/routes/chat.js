@@ -99,7 +99,7 @@ const normalizeQuestion = (text) => String(text || '')
 // model follows the user turn more reliably than the system prompt, which
 // mostly holds review text in another language.
 const LANGUAGE_REMINDERS = {
-    'roman-urdu': '(Reply in Roman Urdu, i.e. Urdu written in English letters.)',
+    'roman-urdu': '(Reply in Roman Urdu, i.e. Urdu written in English letters, from the very first word. Do not open with an English phrase such as "Based on the student reviews".)',
     urdu: '(Reply in Urdu script.)',
 };
 
@@ -165,7 +165,7 @@ Facts about the website (use these for "how do I..." questions):
 
 const LANGUAGE_INSTRUCTIONS = {
     english: 'The user\'s latest message is in English. Write your whole answer in English, even though many reviews are in Roman Urdu (translate what students said).',
-    'roman-urdu': 'The user\'s latest message is in Roman Urdu (Urdu written in English letters). Write your whole answer in Roman Urdu; English words for things like grading, quizzes or attendance are fine.',
+    'roman-urdu': 'The user\'s latest message is in Roman Urdu (Urdu written in English letters). Write your whole answer in Roman Urdu, starting from the first word; English words for things like grading, quizzes or attendance are fine. Open like "Students ke reviews ke mutabiq..." or "**Name** ke baare mein students kehte hain...", never with an English sentence such as "Based on the student reviews...".',
     urdu: 'The user\'s latest message is in Urdu script. Write your whole answer in Urdu script.',
 };
 

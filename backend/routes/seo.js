@@ -4,6 +4,7 @@ const express = require('express');
 const db = require('../db');
 const { parseCourseList } = require('../contentFilter');
 const { PUBLIC_SITE_URL } = require('../config');
+const state = require('../state');
 
 const router = express.Router();
 
@@ -147,6 +148,26 @@ const usableImage = (url) => {
     }
 };
 
+/** First sentence-ish of a saved AI summary, cut at a word boundary. */
+const clipSentence = (text, max = 200) => {
+    const clean = String(text || '').replace(/\s+/g, ' ').trim();
+    if (clean.length <= max) return clean;
+    const cut = clean.slice(0, max);
+    return `${cut.slice(0, Math.max(cut.lastIndexOf(' '), max - 30)).replace(/[\s,;:.-]+$/, '')}...`;
+};
+
+/** The saved AI summary overview, if one exists. Never calls the AI. */
+const savedSummaryLine = async (teacherId) => {
+    if (!state.teacherSummariesReady) return '';
+    try {
+        const [rows] = await db.query('SELECT summary FROM teacher_summaries WHERE teacher_id = ?', [teacherId]);
+        if (!rows.length) return '';
+        return clipSentence(JSON.parse(rows[0].summary).overview);
+    } catch (_) {
+        return '';
+    }
+};
+
 const previewPage = ({ title, description, url, image, imageAlt, card = 'summary' }) => `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -232,10 +253,16 @@ router.get('/seo/teacher/:id', async (req, res) => {
             : `${count} anonymous student review${count === 1 ? '' : 's'}.`;
         const courses = topCourses.length ? ` Courses: ${topCourses.join(', ')}.` : '';
         const image = usableImage(teacher.image_url);
+        // The saved AI summary makes the WhatsApp preview say what students
+        // actually think. It is only read here - a preview never spends AI quota.
+        const aiLine = count > 0 ? await savedSummaryLine(teacher.id) : '';
+        const description = aiLine
+            ? `AI summary: ${aiLine} | ${summary}${courses}`
+            : `${summary}${courses} See what UMT students say about grading, attendance and teaching.`;
 
         sendPreview(res, 200, previewPage({
             title: `${name} - ${department} | UMT Teacher Reviews`,
-            description: `${summary}${courses} See what UMT students say about grading, attendance and teaching.`,
+            description,
             url: `${baseUrl}/teacher/${teacher.id}`,
             image: image || fallback.image,
             imageAlt: image ? `Photo of ${name}` : fallback.imageAlt,

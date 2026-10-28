@@ -1,0 +1,42 @@
+# Keeps frontend/public/photos in step with the teachers in the database:
+# downloads photos of newly added teachers, removes ones no longer used.
+# Runs weekly and can be started by hand (Actions tab -> Sync teacher photos).
+name: Sync teacher photos
+
+on:
+  schedule:
+    - cron: '30 22 * * 0' # Mondays 03:30 Pakistan time
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-photos
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Download new photos
+        run: node frontend/scripts/sync-photos.mjs
+
+      - name: Commit changes
+        run: |
+          if [ -z "$(git status --porcelain frontend/public/photos)" ]; then
+            echo "Photos already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/public/photos
+          git commit -m "Sync teacher photos"
+          git push
