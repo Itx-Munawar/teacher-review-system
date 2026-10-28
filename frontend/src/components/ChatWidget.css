@@ -317,3 +317,9 @@
     .chat-panel, .chat-typing span { animation: none; }
     .chat-launcher { transition: none; }
 }
+
+/* Phones/tablets: the bottom nav has an "Ask AI" tab, so the floating
+   launcher (which sat on top of list buttons) is not needed. */
+@media (max-width: 768px) {
+    .chat-launcher { display: none; }
+}

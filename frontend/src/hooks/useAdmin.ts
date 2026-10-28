@@ -36,6 +36,18 @@ import { debounce } from '../utils/debounce';
 import { mapTeacherDetail } from '../utils/teacherDetail';
 import type { Teacher, TeacherDetail, AdminReview, AdminQuestion, CustomCourse, AdminTeacherDetail, AdminReply, AdminStats, Toast } from '../types';
 
+/** The admin cookie is HttpOnly, so remember (non-secret) that a session exists. */
+const ADMIN_HINT_KEY = 'trs_admin_session';
+export const hasAdminHint = (): boolean => {
+    try { return localStorage.getItem(ADMIN_HINT_KEY) === '1'; } catch { return false; }
+};
+const setAdminHint = (on: boolean) => {
+    try {
+        if (on) localStorage.setItem(ADMIN_HINT_KEY, '1');
+        else localStorage.removeItem(ADMIN_HINT_KEY);
+    } catch { /* storage blocked */ }
+};
+
 interface UseAdminOptions {
     location: Location;
     navigate: NavigateFunction;
@@ -455,13 +467,21 @@ export function useAdmin({
     const checkAdminLogin = useCallback(async () => {
         try {
             await adminMe();
+            setAdminHint(true);
             setIsAdminLoggedIn(true);
         } catch {
+            setAdminHint(false);
             setIsAdminLoggedIn(false);
         } finally {
             setAdminAuthChecked(true);
         }
     }, []);
+
+    // Visitors never call /admin/me (it would log a 401 on every page view);
+    // the check runs when the admin panel opens instead.
+    useEffect(() => {
+        if (showAdminPanel && !adminAuthChecked) checkAdminLogin();
+    }, [showAdminPanel, adminAuthChecked, checkAdminLogin]);
 
     const handleAdminLogin = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
@@ -473,6 +493,7 @@ export function useAdmin({
                 setRequires_totp(true);
                 return;
             }
+            setAdminHint(true);
             setIsAdminLoggedIn(true);
             setAdminUsername('');
             setAdminPassword('');
@@ -499,6 +520,7 @@ export function useAdmin({
         } finally {
             logoutInFlightRef.current = false;
         }
+        setAdminHint(false);
         setIsAdminLoggedIn(false);
         closeAdminPanel();
         setShowAddTeacherForm(false);

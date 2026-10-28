@@ -103,7 +103,7 @@ const Avatar: React.FC<AvatarProps> = ({ name, imageUrl, className = '', alt, si
 
     // React 18 doesn't know the camelCase `fetchPriority` prop (it logs a warning); the
     // lowercase attribute is what the browser reads and what React tells us to spell.
-    const priorityAttrs = priority ? { fetchpriority: 'high' } : {};
+    const priorityAttrs = priority ? { fetchPriority: 'high' as const } : {};
 
     return (
         <img

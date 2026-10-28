@@ -13,7 +13,7 @@ import {
 import { SITE_URL } from './utils/siteUrl';
 import { applySeo } from './utils/seo';
 import { mapTeacherDetail } from './utils/teacherDetail';
-import { useAdmin } from './hooks/useAdmin';
+import { useAdmin, hasAdminHint } from './hooks/useAdmin';
 import InstallPrompt from './components/InstallPrompt';
 import PullToRefresh from './components/PullToRefresh';
 import BottomNav from './components/BottomNav';
@@ -27,6 +27,8 @@ import AppHeader from './components/AppHeader';
 import AppFooter from './components/AppFooter';
 import TeacherSidebar from './components/TeacherSidebar';
 import WelcomePanel from './components/WelcomePanel';
+import HomeIntro from './components/HomeIntro';
+import { openChat } from './utils/chatEvents';
 import CompareBar from './components/CompareBar';
 import { AboutModal, ContactModal } from './components/InfoModals';
 import { ToastHost } from './components/Toast';
@@ -258,7 +260,7 @@ const App: React.FC = () => {
 
     useEffect(() => {
         loadTeachers(1);
-        checkAdminLogin();
+        if (hasAdminHint()) checkAdminLogin();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -737,6 +739,13 @@ const App: React.FC = () => {
         }
     }, [isComparing, compareList.length, runCompare, navigate]);
 
+    const focusTeacherSearch = useCallback(() => {
+        const input = searchInputRef.current;
+        if (!input) return;
+        input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        input.focus({ preventScroll: true });
+    }, []);
+
     const handleTabAdmin = useCallback(() => {
         haptic(10);
         setShowMobileMenu(false);
@@ -782,6 +791,9 @@ const App: React.FC = () => {
                 <div className={`container${selectedTeacher && !isComparing ? ' container-detail' : ''}`}>
                 <TeacherSidebar
                     hiddenOnMobile={Boolean((selectedTeacher || isComparing || showQnA) && isMobileViewport)}
+                    intro={isMobileViewport && !selectedTeacher && !isComparing && !showQnA && !isSearching
+                        ? <HomeIntro totalTeachersCount={totalTeachersCount} departmentCount={departments.length} />
+                        : null}
                     searchTerm={searchTerm}
                     handleSearch={handleSearch}
                     searchInputRef={searchInputRef}
@@ -843,7 +855,13 @@ const App: React.FC = () => {
                             reviewQueryLoading={reviewQueryLoading}
                         />
                     ) : (
-                        <WelcomePanel departments={departments} />
+                        <WelcomePanel
+                            departments={departments}
+                            teachers={teachers}
+                            totalTeachersCount={totalTeachersCount}
+                            chatEnabled={chatEnabled}
+                            onFindTeacher={focusTeacherSearch}
+                        />
                     )}
                 </ErrorBoundary>
                 </main>
@@ -894,6 +912,7 @@ const App: React.FC = () => {
                 items={[
                     { key: 'home', label: 'Home', icon: 'home', active: !isComparing && !showQnA && !selectedTeacher, onClick: handleTabHome },
                     { key: 'qna', label: 'Q&A', icon: 'message-square', active: showQnA, onClick: handleOpenQnA },
+                    ...(chatEnabled ? [{ key: 'ai', label: 'Ask AI', icon: 'sparkles' as const, onClick: openChat }] : []),
                     { key: 'compare', label: 'Compare', icon: 'compare', active: isComparing, onClick: handleTabCompare },
                     { key: 'admin', label: 'Admin', icon: 'lock', onClick: handleTabAdmin },
                 ]}

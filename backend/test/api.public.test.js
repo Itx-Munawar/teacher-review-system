@@ -92,6 +92,13 @@ describe('public API', { skip: SKIP }, () => {
             ]);
         });
 
+        it('returns home page stats counting approved reviews only', async () => {
+            const res = await createClient(server.baseUrl).get('/api/stats');
+            assert.equal(res.status, 200);
+            assert.deepEqual(res.body, { teachers: 3, departments: 2, reviews: 1, reviewed_teachers: 1 });
+            assert.equal(res.headers.get('cache-control'), 'public, max-age=60');
+        });
+
         it('returns one teacher with approved reviews and no moderation fields', async () => {
             const res = await createClient(server.baseUrl).get(`/api/teachers/${teacherA}`);
             assert.equal(res.status, 200);
