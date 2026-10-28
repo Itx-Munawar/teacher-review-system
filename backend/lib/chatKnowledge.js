@@ -499,8 +499,26 @@ const detectReplyLanguage = (message) => {
 const FOREIGN_LETTER = /[^\P{L}\p{Script=Latin}]/u;
 const hasForeignLetters = (text) => FOREIGN_LETTER.test(String(text || ''));
 
+/**
+ * A summary that is safe to show while it waits to be re-written: list
+ * points with another script are dropped, and in the overview only the
+ * affected words are removed. No AI call.
+ */
+const withoutForeignScript = (parsed) => {
+    if (!parsed) return parsed;
+    const scrub = (text) => String(text || '').split(/\s+/).filter((word) => !hasForeignLetters(word)).join(' ').trim();
+    const keep = (list) => (Array.isArray(list) ? list : []).filter((line) => !hasForeignLetters(line));
+    return {
+        ...parsed,
+        overview: hasForeignLetters(parsed.overview) ? scrub(parsed.overview) : parsed.overview,
+        pros: keep(parsed.pros),
+        cons: keep(parsed.cons)
+    };
+};
+
 module.exports = {
     hasForeignLetters,
+    withoutForeignScript,
     detectReplyLanguage,
     romanUrduShare,
     loadKnowledge,

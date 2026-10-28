@@ -2,7 +2,7 @@
 // review text goes to the model. Pure functions - no DB.
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { hasForeignLetters, buildKnowledge, matchTeachers, matchTopics, selectContext, detectReplyLanguage, detectAspects, snippetOf } = require('../lib/chatKnowledge');
+const { hasForeignLetters, withoutForeignScript, buildKnowledge, matchTeachers, matchTopics, selectContext, detectReplyLanguage, detectAspects, snippetOf } = require('../lib/chatKnowledge');
 
 // Enough "Muhammad"s and "Ali"s that those name parts are common, like in
 // the real data, plus a few distinctive names.
@@ -216,5 +216,24 @@ describe('hasForeignLetters', () => {
         assert.equal(hasForeignLetters('Students inhein આંkhain band kar ke select karte hain'), true);
         assert.equal(hasForeignLetters('Grading अच्छी hai'), true);
         assert.equal(hasForeignLetters('اچھے teacher'), true);
+    });
+});
+
+describe('withoutForeignScript', () => {
+    it('drops list points with another script and scrubs only those words from the overview', () => {
+        const out = withoutForeignScript({
+            overview: 'Students inhein \u0a86\u0a82khain band kar ke chunte hain.',
+            pros: ['Concepts clear karte hain', 'Students inhein \u0a86\u0a82khain band kar ke select karte hain'],
+            cons: ['Strict examiner hain']
+        });
+        assert.equal(out.overview, 'Students inhein band kar ke chunte hain.');
+        assert.deepEqual(out.pros, ['Concepts clear karte hain']);
+        assert.deepEqual(out.cons, ['Strict examiner hain']);
+    });
+
+    it('leaves a clean Roman Urdu summary untouched', () => {
+        const clean = { overview: 'Zyada tar students khush hain.', pros: ['Grading fair hai'], cons: [] };
+        assert.deepEqual(withoutForeignScript(clean), clean);
+        assert.equal(withoutForeignScript(null), null);
     });
 });

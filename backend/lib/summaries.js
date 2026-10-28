@@ -11,7 +11,7 @@ const state = require('../state');
 const gemini = require('./gemini');
 const { parseCourseList } = require('../contentFilter');
 const { logJson } = require('./log');
-const { romanUrduShare, hasForeignLetters } = require('./chatKnowledge');
+const { romanUrduShare, hasForeignLetters, withoutForeignScript } = require('./chatKnowledge');
 
 const MIN_REVIEWS = 3;
 const MAX_REVIEWS_IN_PROMPT = 150;
@@ -135,7 +135,7 @@ const readCached = async (teacherId) => {
 
 const respond = (row, extra = {}) => ({
     available: true,
-    ...row.parsed,
+    ...withoutForeignScript(row.parsed),
     review_count: row.review_count,
     generated_at: row.generated_at,
     ...extra
@@ -228,7 +228,7 @@ const getTeacherSummary = async (teacherId) => {
             );
             lastFailure.delete(teacherId);
             logJson('info', 'summary_generated', { teacher_id: teacherId, reviews: reviews.length, model });
-            return { available: true, ...parsed, review_count: reviews.length, generated_at: new Date().toISOString() };
+            return { available: true, ...withoutForeignScript(parsed), review_count: reviews.length, generated_at: new Date().toISOString() };
         } catch (err) {
             logJson('warn', 'summary_failed', { teacher_id: teacherId, kind: err && err.kind, reason: String(err && err.message).slice(0, 200) });
             lastFailure.set(teacherId, Date.now());

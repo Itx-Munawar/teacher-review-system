@@ -5,6 +5,7 @@ const db = require('../db');
 const { parseCourseList } = require('../contentFilter');
 const { PUBLIC_SITE_URL } = require('../config');
 const state = require('../state');
+const { withoutForeignScript } = require('../lib/chatKnowledge');
 
 const router = express.Router();
 
@@ -162,7 +163,7 @@ const savedSummaryLine = async (teacherId) => {
     try {
         const [rows] = await db.query('SELECT summary FROM teacher_summaries WHERE teacher_id = ?', [teacherId]);
         if (!rows.length) return '';
-        return clipSentence(JSON.parse(rows[0].summary).overview);
+        return clipSentence(withoutForeignScript({ overview: JSON.parse(rows[0].summary).overview }).overview);
     } catch (_) {
         return '';
     }
