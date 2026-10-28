@@ -5,6 +5,8 @@ export interface BottomNavItem {
     key: string;
     label: string;
     icon: IconName;
+    /** Custom artwork instead of the line icon (e.g. the chat cat). */
+    iconNode?: React.ReactNode;
     active?: boolean;
     onClick: () => void;
 }
@@ -24,8 +26,8 @@ const BottomNav: React.FC<BottomNavProps> = ({ items }) => (
                     onClick={item.onClick}
                     aria-current={item.active ? 'page' : undefined}
                 >
-                    <span className="bottom-nav-icon">
-                        <Icon name={item.icon} size={22} />
+                    <span className={`bottom-nav-icon${item.iconNode ? ' bottom-nav-icon-custom' : ''}`}>
+                        {item.iconNode ?? <Icon name={item.icon} size={22} />}
                     </span>
                     <span className="bottom-nav-label">{item.label}</span>
                 </button>

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { OPEN_CHAT_EVENT } from '../utils/chatEvents';
+import ChatCat, { type CatMood } from './ChatCat';
 import { sendChatMessage, sendChatFeedback, type ChatTeacherRef } from '../services/api';
 
 /** Pause before the automatic retry of a busy/failed answer. */
@@ -88,6 +89,8 @@ const renderRich = (text: string) => {
     return blocks;
 };
 
+const CAT_HINT_KEY = 'trs_cat_hint';
+
 const SparkIcon = () => (
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -140,6 +143,37 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ pageTeacher, onOpenTeacher, rai
             observer?.disconnect();
         };
     }, [raised]);
+
+    // Cat mood: scans while an answer is on its way, smiles when it lands.
+    const [happy, setHappy] = useState(false);
+    const wasSendingRef = useRef(false);
+    useEffect(() => {
+        const last = messages[messages.length - 1];
+        if (wasSendingRef.current && !sending && last && last.role === 'assistant' && !last.error) {
+            setHappy(true);
+            const t = window.setTimeout(() => setHappy(false), 1400);
+            wasSendingRef.current = sending;
+            return () => window.clearTimeout(t);
+        }
+        wasSendingRef.current = sending;
+        return undefined;
+    }, [sending, messages]);
+    const catMood: CatMood = sending ? 'thinking' : happy ? 'happy' : 'idle';
+
+    // One hello bubble per session, desktop only, if the visitor hasn't chatted yet.
+    const [hint, setHint] = useState(false);
+    useEffect(() => {
+        if (open || messages.some((m) => m.role === 'user')) { setHint(false); return undefined; }
+        try { if (sessionStorage.getItem(CAT_HINT_KEY)) return undefined; } catch { return undefined; }
+        if (typeof window.matchMedia !== 'function' || !window.matchMedia('(min-width: 769px)').matches) return undefined;
+        const show = window.setTimeout(() => {
+            setHint(true);
+            try { sessionStorage.setItem(CAT_HINT_KEY, '1'); } catch { /* ignore */ }
+        }, 6000);
+        const hide = window.setTimeout(() => setHint(false), 14000);
+        return () => { window.clearTimeout(show); window.clearTimeout(hide); };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open]);
 
     // The bottom nav and the home hero open the assistant from outside.
     useEffect(() => {
@@ -299,6 +333,8 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ pageTeacher, onOpenTeacher, rai
                     aria-label="Ask the review assistant"
                     title="Ask about a teacher"
                 >
+                    <span className="chat-cat-perch"><ChatCat variant="perch" size={58} follow /></span>
+                    {hint && <span className="chat-cat-hint" role="status">Meow! Kisi teacher ke baare mein poochna hai?</span>}
                     <SparkIcon />
                     <span className="chat-launcher-label">Ask AI</span>
                 </button>
@@ -307,7 +343,7 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ pageTeacher, onOpenTeacher, rai
                 <section className="chat-panel" role="dialog" aria-modal="false" aria-label="Review assistant">
                     <header className="chat-header">
                         <div className="chat-header-title">
-                            <span className="chat-header-icon"><SparkIcon /></span>
+                            <span className="chat-header-icon"><ChatCat size={30} mood={catMood} /></span>
                             <div>
                                 <h2>Review assistant</h2>
                                 <p>{pageTeacher ? `Asking about ${pageTeacher.name}` : 'Answers from student reviews'}</p>
