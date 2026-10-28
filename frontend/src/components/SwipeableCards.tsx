@@ -3,6 +3,7 @@ import Avatar from './Avatar';
 import Icon from './Icon';
 import { timeAgo } from '../utils/timeAgo';
 import type { TeacherDetail } from '../types';
+import { formatDate } from '../utils/dates';
 
 interface SwipeableCardsProps {
     teachers: TeacherDetail[];
@@ -169,7 +170,7 @@ const SwipeableCards: React.FC<SwipeableCardsProps> = ({
                                                 ? `${review.comment.slice(0, 120)}…`
                                                 : review.comment}"
                                             <footer className="swipe-review-author">
-                                                — {review.user_name || 'Anonymous'} · {new Date(review.created_at).toLocaleDateString()}
+                                                — {review.user_name || 'Anonymous'} · {formatDate(review.created_at)}
                                             </footer>
                                         </blockquote>
                                     ))}

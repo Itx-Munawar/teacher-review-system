@@ -166,3 +166,24 @@ describe('TeacherDetailView extras', () => {
         expect(screen.queryByText(/AI summary/)).toBeNull();
     });
 });
+
+describe('TeacherDetailView long reviews', () => {
+    it('folds a long review behind "Read more" and opens it on tap', async () => {
+        const long = 'Bohat acha teacher hai. '.repeat(30);
+        render(
+            <TeacherDetailView
+                selectedTeacher={{ id: 77, name: 'Test Teacher', department: 'SST', review_count: 1, total_reviews: 1, reviews: [{ id: 1, teacher_id: 77, comment: long, user_name: 'Anonymous', created_at: new Date().toISOString() }] } as TeacherDetail}
+                relatedTeachers={[]}
+                onShowReviewForm={() => {}}
+                onClearSelectedTeacher={() => {}}
+                onTeacherClick={async () => {}}
+                showToast={() => {}}
+            />
+        );
+        const btn = await screen.findByRole('button', { name: 'Read more' });
+        expect(btn).toHaveAttribute('aria-expanded', 'false');
+        fireEvent.click(btn);
+        expect(screen.getByRole('button', { name: 'Show less' })).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByText('Anonymous student')).toBeInTheDocument();
+    });
+});

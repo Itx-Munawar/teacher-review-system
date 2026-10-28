@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { getTeacherQuestions, submitQuestion, submitAnswer, Question } from '../services/api';
 import Icon from './Icon';
 import EmptyState from './EmptyState';
+import { formatDate } from '../utils/dates';
 
 interface QASectionProps {
     teacherId: number;
@@ -140,7 +141,7 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
                                 <span className="qa-q-badge">Q</span>
                                 <p className="qa-question-text">{q.question}</p>
                                 <span className="review-date">
-                                    <Icon name="calendar" size={13} /> {new Date(q.created_at).toLocaleDateString()}
+                                    <Icon name="calendar" size={13} /> {formatDate(q.created_at)}
                                 </span>
                             </div>
                             {q.answers.length > 0 && (
@@ -150,7 +151,7 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
                                             <span className="qa-a-badge">A</span>
                                             <p className="qa-answer-text">{a.answer}</p>
                                             <span className="review-date">
-                                                <Icon name="calendar" size={13} /> {new Date(a.created_at).toLocaleDateString()}
+                                                <Icon name="calendar" size={13} /> {formatDate(a.created_at)}
                                             </span>
                                         </div>
                                     ))}

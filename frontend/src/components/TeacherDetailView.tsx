@@ -7,6 +7,7 @@ import AiSummary from './AiSummary';
 import { replyToReview, voteHelpful } from '../services/api';
 import { extractCourses } from '../utils/courses';
 import { SITE_URL } from '../utils/siteUrl';
+import { formatDate, formatMonth, relativeDate } from '../utils/dates';
 import type { TeacherDetail, Teacher, Review, ReviewReply, ReviewQuery } from '../types';
 
 interface TeacherDetailViewProps {
@@ -54,7 +55,10 @@ const copyText = async (text: string): Promise<boolean> => {
     }
 };
 
+const isAnonymousName = (name?: string | null) => !name || name.trim().toLowerCase() === 'anonymous';
+
 const REPLY_MIN = 2;
+const LONG_REVIEW_CHARS = 360;
 const REPLY_MAX = 500;
 
 const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
@@ -100,9 +104,18 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
         : reviewCount;
     const hasMoreReviews = typeof onLoadMoreReviews === 'function' && sortedReviews.length < listTotal;
     const canRefine = typeof onChangeReviewQuery === 'function' && reviewCount >= 2;
-    const latestReview = sortedReviews[0]?.created_at
-        ? new Date(sortedReviews[0].created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
-        : '—';
+    // A clear "Most helpful" marker for the first review when it has votes.
+    const topReviewId = reviewSort === 'helpful' && !reviewCourse && (sortedReviews[0]?.helpful_count || 0) >= 1
+        ? sortedReviews[0].id
+        : null;
+    // Newest date among the loaded reviews (the list may be sorted by votes).
+    const latestReview = useMemo(() => {
+        const newest = (selectedTeacher.reviews || []).reduce((max, r) => {
+            const t = new Date(r.created_at).getTime();
+            return Number.isNaN(t) ? max : Math.max(max, t);
+        }, 0);
+        return newest ? formatMonth(newest) : '—';
+    }, [selectedTeacher.reviews]);
 
     // Replies: one inline form at a time, and a local record of what this
     // session already sent so the reader sees it is waiting for approval.
@@ -115,7 +128,9 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
     // Helpful votes: optimistic local overrides on top of the server's data.
     const [votes, setVotes] = useState<Record<number, { voted: boolean; count: number }>>({});
     const [votingId, setVotingId] = useState<number | null>(null);
-    useEffect(() => { setVotes({}); }, [selectedTeacher.id]);
+    // Long reviews start folded to about six lines so the page stays scannable.
+    const [expandedIds, setExpandedIds] = useState<number[]>([]);
+    useEffect(() => { setVotes({}); setExpandedIds([]); }, [selectedTeacher.id]);
 
     const toggleHelpful = async (review: Review) => {
         if (votingId !== null) return;
@@ -189,12 +204,11 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
             }
         >
             <div className="teacher-detail">
-                <div className="profile-topbar">
-                    <button className="back-button" onClick={onClearSelectedTeacher}>
-                        <Icon name="chevron-left" size={16} /> Back to teachers
+                <nav className="profile-topbar" aria-label="Breadcrumb">
+                    <button className="back-button" onClick={onClearSelectedTeacher} aria-label="Back to teachers">
+                        <Icon name="chevron-left" size={16} /> <span>Teachers</span>
                     </button>
-                    <span className="profile-topbar-note">Anonymous student reviews</span>
-                </div>
+                </nav>
 
                 <header className="profile-hero">
                     <div className="profile-hero-row">
@@ -210,34 +224,6 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                             <p className="profile-eyebrow">{selectedTeacher.department || 'UMT Faculty'}</p>
                             <h1>{selectedTeacher.name}</h1>
                         </div>
-                        <div className="profile-hero-actions">
-                            <button className="btn-write-review profile-cta" onClick={onShowReviewForm}>
-                                <Icon name="edit" size={16} /> Write a review
-                            </button>
-                            <span className="profile-cta-note">Anonymous by default</span>
-                        </div>
-                    </div>
-
-                    <div className="profile-share" aria-label="Share this teacher">
-                        <a
-                            className="share-btn share-btn-whatsapp"
-                            href={whatsappHref}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                        >
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
-                                <path d="M17.47 14.38c-.3-.15-1.75-.86-2.02-.96-.27-.1-.47-.15-.67.15-.2.3-.77.96-.94 1.16-.17.2-.35.22-.64.07-.3-.15-1.25-.46-2.38-1.47-.88-.79-1.47-1.76-1.65-2.06-.17-.3-.02-.46.13-.6.13-.14.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.03-.52-.07-.15-.67-1.6-.92-2.2-.24-.58-.49-.5-.67-.5h-.57c-.2 0-.52.07-.8.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.08c.15.2 2.1 3.2 5.08 4.48.71.31 1.26.49 1.7.63.71.23 1.36.2 1.87.12.57-.08 1.75-.72 2-1.41.25-.7.25-1.29.17-1.41-.07-.13-.27-.2-.57-.35zM12.04 21.5h-.01a9.45 9.45 0 0 1-4.82-1.32l-.35-.2-3.58.94.96-3.49-.23-.36a9.43 9.43 0 0 1-1.45-5.03c0-5.22 4.25-9.46 9.48-9.46a9.4 9.4 0 0 1 6.7 2.78 9.4 9.4 0 0 1 2.77 6.7c0 5.22-4.25 9.46-9.47 9.46zm8.06-17.52A11.32 11.32 0 0 0 12.04.64C5.76.64.65 5.75.65 12.03c0 2 .52 3.96 1.52 5.69L.55 23.64l6.05-1.59a11.37 11.37 0 0 0 5.43 1.38h.01c6.28 0 11.39-5.11 11.39-11.39 0-3.04-1.18-5.9-3.33-8.06z" />
-                            </svg>
-                            WhatsApp
-                        </a>
-                        <button type="button" className="share-btn" onClick={handleCopyLink}>
-                            <Icon name="link" size={14} /> Copy link
-                        </button>
-                        {canNativeShare && (
-                            <button type="button" className="share-btn" onClick={handleNativeShare}>
-                                <Icon name="share" size={14} /> Share
-                            </button>
-                        )}
                     </div>
 
                     <div className="profile-stats">
@@ -246,12 +232,42 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                             <span className="profile-stat-label">{reviewCount === 1 ? 'Review' : 'Reviews'}</span>
                         </div>
                         <div className="profile-stat">
-                            <span className="profile-stat-value">{courseCount}</span>
+                            <span className="profile-stat-value">{courseCount > 0 ? courseCount : '—'}</span>
                             <span className="profile-stat-label">{courseCount === 1 ? 'Course' : 'Courses'}</span>
                         </div>
                         <div className="profile-stat">
                             <span className="profile-stat-value profile-stat-date">{latestReview}</span>
                             <span className="profile-stat-label">Latest review</span>
+                        </div>
+                    </div>
+
+                    <div className="profile-hero-actions">
+                        <div className="profile-cta-wrap">
+                            <button className="btn-write-review profile-cta" onClick={onShowReviewForm}>
+                                <Icon name="edit" size={16} /> Write a review
+                            </button>
+                            <span className="profile-cta-note"><Icon name="lock" size={12} /> Anonymous by default</span>
+                        </div>
+                        <div className="profile-share" aria-label="Share this teacher">
+                            <a
+                                className="share-btn share-btn-whatsapp"
+                                href={whatsappHref}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+                                    <path d="M17.47 14.38c-.3-.15-1.75-.86-2.02-.96-.27-.1-.47-.15-.67.15-.2.3-.77.96-.94 1.16-.17.2-.35.22-.64.07-.3-.15-1.25-.46-2.38-1.47-.88-.79-1.47-1.76-1.65-2.06-.17-.3-.02-.46.13-.6.13-.14.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.03-.52-.07-.15-.67-1.6-.92-2.2-.24-.58-.49-.5-.67-.5h-.57c-.2 0-.52.07-.8.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.08c.15.2 2.1 3.2 5.08 4.48.71.31 1.26.49 1.7.63.71.23 1.36.2 1.87.12.57-.08 1.75-.72 2-1.41.25-.7.25-1.29.17-1.41-.07-.13-.27-.2-.57-.35zM12.04 21.5h-.01a9.45 9.45 0 0 1-4.82-1.32l-.35-.2-3.58.94.96-3.49-.23-.36a9.43 9.43 0 0 1-1.45-5.03c0-5.22 4.25-9.46 9.48-9.46a9.4 9.4 0 0 1 6.7 2.78 9.4 9.4 0 0 1 2.77 6.7c0 5.22-4.25 9.46-9.47 9.46zm8.06-17.52A11.32 11.32 0 0 0 12.04.64C5.76.64.65 5.75.65 12.03c0 2 .52 3.96 1.52 5.69L.55 23.64l6.05-1.59a11.37 11.37 0 0 0 5.43 1.38h.01c6.28 0 11.39-5.11 11.39-11.39 0-3.04-1.18-5.9-3.33-8.06z" />
+                                </svg>
+                                WhatsApp
+                            </a>
+                            <button type="button" className="share-btn" onClick={handleCopyLink}>
+                                <Icon name="link" size={14} /> Copy link
+                            </button>
+                            {canNativeShare && (
+                                <button type="button" className="share-btn" onClick={handleNativeShare}>
+                                    <Icon name="share" size={14} /> Share
+                                </button>
+                            )}
                         </div>
                     </div>
                 </header>
@@ -260,16 +276,15 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                 {reviewError && <div className="error-message">{reviewError}</div>}
 
                 <div className="reviews-section">
-                    <div className="section-head">
-                        <div>
-                            <p className="section-eyebrow">What students say</p>
-                            <h2>Student reviews</h2>
-                        </div>
+                    <div className="section-head reviews-head">
+                        <h2>Student reviews</h2>
                         <span className="section-pill">
                             {reviewCourse ? `${listTotal} of ${reviewCount}` : reviewCount} {reviewCount === 1 ? 'review' : 'reviews'}
                         </span>
                     </div>
-                    <p className="moderation-note">Every review is read by a moderator before it appears.</p>
+                    <p className="moderation-note">
+                        <Icon name="check" size={13} /> Every review is read by a moderator before it appears. Names are hidden.
+                    </p>
 
                     <AiSummary teacherId={selectedTeacher.id} reviewCount={reviewCount} />
 
@@ -333,17 +348,26 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                             {sortedReviews.map((review: Review) => {
                             const courses = extractCourses(review);
                             return (
-                                <article key={review.id} className="review-card">
+                                <article key={review.id} className={`review-card${review.id === topReviewId ? ' review-card-top' : ''}`}>
                                     <div className="review-header">
                                         <span className="reviewer-badge" aria-hidden="true">
-                                            {(review.user_name || 'A').trim().charAt(0).toUpperCase()}
+                                            {isAnonymousName(review.user_name)
+                                                ? <Icon name="user" size={15} />
+                                                : (review.user_name || 'A').trim().charAt(0).toUpperCase()}
                                         </span>
-                                        <span className="reviewer-name">
-                                            {review.user_name || 'Anonymous'}
-                                        </span>
-                                        <span className="review-date">
-                                            <Icon name="calendar" size={13} /> {new Date(review.created_at).toLocaleDateString()}
-                                        </span>
+                                        <div className="review-meta">
+                                            <span className="reviewer-name">
+                                                {isAnonymousName(review.user_name) ? 'Anonymous student' : review.user_name}
+                                            </span>
+                                            <time className="review-date" dateTime={review.created_at} title={formatDate(review.created_at)}>
+                                                {relativeDate(review.created_at)}
+                                            </time>
+                                        </div>
+                                        {review.id === topReviewId && (
+                                            <span className="review-top-badge">
+                                                <Icon name="thumbs-up" size={12} filled /> Most helpful
+                                            </span>
+                                        )}
                                     </div>
                                     {courses.length > 0 && (
                                         <div className="review-courses">
@@ -354,7 +378,25 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                                             ))}
                                         </div>
                                     )}
-                                    <p className="review-comment">{review.comment}</p>
+                                    {(() => {
+                                        const long = (review.comment || '').length > LONG_REVIEW_CHARS;
+                                        const open = expandedIds.includes(review.id);
+                                        return (
+                                            <>
+                                                <p className={`review-comment${long && !open ? ' review-comment-folded' : ''}`}>{review.comment}</p>
+                                                {long && (
+                                                    <button
+                                                        type="button"
+                                                        className="review-more"
+                                                        aria-expanded={open}
+                                                        onClick={() => setExpandedIds((ids) => (open ? ids.filter((x) => x !== review.id) : [...ids, review.id]))}
+                                                    >
+                                                        {open ? 'Show less' : 'Read more'}
+                                                    </button>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
                                     {(review.replies || []).length > 0 && (
                                         <ul className="review-replies" aria-label={`Replies to ${review.user_name || 'Anonymous'}`}>
                                             {(review.replies || []).map((reply: ReviewReply) => (
@@ -362,7 +404,7 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                                                     <div className="review-reply-meta">
                                                         <Icon name="message-circle" size={12} />
                                                         <span className="review-reply-author">{reply.user_name || 'Anonymous'}</span>
-                                                        <span>{new Date(reply.created_at).toLocaleDateString()}</span>
+                                                        <time dateTime={reply.created_at} title={formatDate(reply.created_at)}>{relativeDate(reply.created_at)}</time>
                                                     </div>
                                                     <p className="review-reply-text">{reply.reply}</p>
                                                 </li>
@@ -480,10 +522,7 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
             >
                 <div className="related-teachers">
                     <div className="section-head">
-                        <div>
-                            <p className="section-eyebrow">Keep exploring</p>
-                            <h3>Related teachers</h3>
-                        </div>
+                        <h3>More teachers in this department</h3>
                     </div>
                     <div className="related-teachers-list">
                         {relatedTeachers.map((teacher) => (
@@ -492,8 +531,16 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                                 className="related-teacher-card"
                                 onClick={() => onTeacherClick(teacher)}
                             >
-                                <span className="related-teacher-name">{teacher.name}</span>
-                                <span className="related-teacher-dept">{teacher.department}</span>
+                                <Avatar name={teacher.name} imageUrl={teacher.image_url} className="related-teacher-avatar" size={44} />
+                                <span className="related-teacher-text">
+                                    <span className="related-teacher-name">{teacher.name}</span>
+                                    <span className="related-teacher-dept">
+                                        {teacher.review_count > 0
+                                            ? `${teacher.review_count} ${teacher.review_count === 1 ? 'review' : 'reviews'}`
+                                            : 'No reviews yet'}
+                                    </span>
+                                </span>
+                                <Icon name="chevron-left" size={16} className="related-teacher-arrow" />
                             </button>
                         ))}
                     </div>

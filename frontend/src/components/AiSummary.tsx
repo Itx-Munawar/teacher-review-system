@@ -55,24 +55,28 @@ const AiSummary: React.FC<AiSummaryProps> = ({ teacherId, reviewCount }) => {
     return (
         <section className="ai-summary" aria-label="AI summary of student reviews">
             <div className="ai-summary-head">
-                <Icon name="sparkles" size={16} />
-                <span>AI summary</span>
+                <span className="ai-summary-icon" aria-hidden="true"><Icon name="sparkles" size={15} /></span>
+                <span className="ai-summary-title">AI summary</span>
                 <span className="ai-summary-badge">{summary.review_count} reviews se</span>
             </div>
             {summary.overview && <p className="ai-summary-overview">{summary.overview}</p>}
             {(summary.pros.length > 0 || summary.cons.length > 0) && (
                 <div className="ai-summary-lists">
                     {summary.pros.length > 0 && (
-                        <div>
-                            <p className="ai-summary-label ai-summary-label-pro">Students ko pasand</p>
+                        <div className="ai-summary-box ai-summary-box-pro">
+                            <p className="ai-summary-label ai-summary-label-pro">
+                                <Icon name="thumbs-up" size={14} /> Students ko pasand
+                            </p>
                             <ul>
                                 {summary.pros.map((p, i) => <li key={i}>{p}</li>)}
                             </ul>
                         </div>
                     )}
                     {summary.cons.length > 0 && (
-                        <div>
-                            <p className="ai-summary-label ai-summary-label-con">Mushkilaat</p>
+                        <div className="ai-summary-box ai-summary-box-con">
+                            <p className="ai-summary-label ai-summary-label-con">
+                                <Icon name="alert-triangle" size={14} /> Mushkilaat
+                            </p>
                             <ul>
                                 {summary.cons.map((c, i) => <li key={i}>{c}</li>)}
                             </ul>
@@ -81,7 +85,8 @@ const AiSummary: React.FC<AiSummaryProps> = ({ teacherId, reviewCount }) => {
                 </div>
             )}
             <p className="ai-summary-note">
-                Yeh summary AI ne students ke reviews se banai hai, is mein ghalti ho sakti hai. Poori baat ke liye neeche reviews parhein.
+                <Icon name="info" size={13} />
+                <span>Yeh summary AI ne students ke reviews se banai hai, is mein ghalti ho sakti hai. Poori baat ke liye neeche reviews parhein.</span>
             </p>
         </section>
     );

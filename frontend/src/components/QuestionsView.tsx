@@ -3,6 +3,7 @@ import { getAllQuestions, submitAnswer, BoardQuestion } from '../services/api';
 import Icon from './Icon';
 import EmptyState from './EmptyState';
 import type { Teacher } from '../types';
+import { formatDate } from '../utils/dates';
 
 const PAGE_SIZE = 15;
 
@@ -140,7 +141,7 @@ const QuestionsView: React.FC<QuestionsViewProps> = ({ onOpenTeacher, onBack }) 
                                 <span className="qa-q-badge">Q</span>
                                 <p className="qa-question-text">{q.question}</p>
                                 <span className="review-date">
-                                    <Icon name="calendar" size={13} /> {new Date(q.created_at).toLocaleDateString()}
+                                    <Icon name="calendar" size={13} /> {formatDate(q.created_at)}
                                 </span>
                             </div>
 
@@ -151,7 +152,7 @@ const QuestionsView: React.FC<QuestionsViewProps> = ({ onOpenTeacher, onBack }) 
                                             <span className="qa-a-badge">A</span>
                                             <p className="qa-answer-text">{a.answer}</p>
                                             <span className="review-date">
-                                                <Icon name="calendar" size={13} /> {new Date(a.created_at).toLocaleDateString()}
+                                                <Icon name="calendar" size={13} /> {formatDate(a.created_at)}
                                             </span>
                                         </div>
                                     ))}
