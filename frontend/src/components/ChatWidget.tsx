@@ -160,12 +160,11 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ pageTeacher, onOpenTeacher, rai
     }, [sending, messages]);
     const catMood: CatMood = sending ? 'thinking' : happy ? 'happy' : 'idle';
 
-    // One hello bubble per session, desktop only, if the visitor hasn't chatted yet.
+    // One hello bubble per session (desktop launcher or mobile perch), if the visitor hasn't chatted yet.
     const [hint, setHint] = useState(false);
     useEffect(() => {
         if (open || messages.some((m) => m.role === 'user')) { setHint(false); return undefined; }
         try { if (sessionStorage.getItem(CAT_HINT_KEY)) return undefined; } catch { return undefined; }
-        if (typeof window.matchMedia !== 'function' || !window.matchMedia('(min-width: 769px)').matches) return undefined;
         const show = window.setTimeout(() => {
             setHint(true);
             try { sessionStorage.setItem(CAT_HINT_KEY, '1'); } catch { /* ignore */ }
@@ -174,6 +173,58 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ pageTeacher, onOpenTeacher, rai
         return () => { window.clearTimeout(show); window.clearTimeout(hide); };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
+
+    // Phones: the cat sits on the bottom nav, right above the "Ask AI" tab,
+    // so it never covers list buttons. It ducks behind the edge while the
+    // page scrolls and peeks back up once scrolling stops.
+    const [perch, setPerch] = useState<{ left: number; bottom: number } | null>(null);
+    const [ducked, setDucked] = useState(false);
+    useEffect(() => {
+        if (open) return undefined;
+        let observer: ResizeObserver | null = null;
+        const measure = () => {
+            const nav = document.querySelector('.bottom-nav');
+            const tab = document.querySelector('.bottom-nav-item[data-key="ai"]');
+            if (!nav || !tab || window.getComputedStyle(nav).display === 'none') { setPerch(null); return; }
+            const n = nav.getBoundingClientRect();
+            const t = tab.getBoundingClientRect();
+            setPerch({ left: Math.round(t.left + t.width / 2), bottom: Math.round(window.innerHeight - n.top - 7) });
+            if (!observer && typeof ResizeObserver !== 'undefined') {
+                observer = new ResizeObserver(measure);
+                observer.observe(nav);
+            }
+        };
+        const frame = window.requestAnimationFrame(measure);
+        window.addEventListener('resize', measure);
+        return () => {
+            window.cancelAnimationFrame(frame);
+            window.removeEventListener('resize', measure);
+            observer?.disconnect();
+        };
+    }, [open]);
+    useEffect(() => {
+        if (!perch) return undefined;
+        let timer: number | undefined;
+        const onScroll = () => {
+            setDucked(true);
+            window.clearTimeout(timer);
+            timer = window.setTimeout(() => setDucked(false), 900);
+        };
+        window.addEventListener('scroll', onScroll, { passive: true });
+        return () => { window.removeEventListener('scroll', onScroll); window.clearTimeout(timer); };
+    }, [perch]);
+
+    // The hello bubble never gets in the way: the first scroll or a tap
+    // anywhere else dismisses it for good.
+    useEffect(() => { if (ducked) setHint(false); }, [ducked]);
+    useEffect(() => {
+        if (!hint) return undefined;
+        const onDown = (e: PointerEvent) => {
+            if (!(e.target as Element | null)?.closest?.('.chat-cat-hint')) setHint(false);
+        };
+        window.addEventListener('pointerdown', onDown);
+        return () => window.removeEventListener('pointerdown', onDown);
+    }, [hint]);
 
     // The bottom nav and the home hero open the assistant from outside.
     useEffect(() => {
@@ -338,6 +389,22 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ pageTeacher, onOpenTeacher, rai
                     <SparkIcon />
                     <span className="chat-launcher-label">Ask AI</span>
                 </button>
+            )}
+            {!open && !raised && perch && (
+                <>
+                    <div className={`chat-cat-mobile${ducked ? ' is-ducked' : ''}`} style={{ left: perch.left, bottom: perch.bottom }}>
+                        <button type="button" className="chat-cat-mobile-btn" onClick={() => setOpen(true)} aria-label="Ask the review assistant">
+                            <ChatCat variant="perch" size={54} />
+                        </button>
+                    </div>
+                    {hint && !ducked && (
+                        <div className="chat-cat-hint-mobile-wrap" style={{ left: perch.left, bottom: perch.bottom + 46 }}>
+                            <button type="button" className="chat-cat-hint chat-cat-hint-mobile" onClick={() => setOpen(true)}>
+                                Meow! Kisi teacher ke baare mein poochna hai?
+                            </button>
+                        </div>
+                    )}
+                </>
             )}
             {open && (
                 <section className="chat-panel" role="dialog" aria-modal="false" aria-label="Review assistant">

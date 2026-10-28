@@ -21,6 +21,7 @@ const BottomNav: React.FC<BottomNavProps> = ({ items }) => (
             {items.map((item) => (
                 <button
                     key={item.key}
+                    data-key={item.key}
                     type="button"
                     className={`bottom-nav-item${item.active ? ' bottom-nav-item-active' : ''}`}
                     onClick={item.onClick}

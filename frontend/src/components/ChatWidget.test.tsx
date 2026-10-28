@@ -146,4 +146,26 @@ describe('ChatWidget', () => {
         await screen.findByText('Old-style answer.');
         expect(screen.queryByRole('button', { name: 'Helpful answer' })).toBeNull();
     });
+
+    it('perches the cat on the mobile bottom nav, ducks on scroll and opens the chat on tap', async () => {
+        const nav = document.createElement('nav');
+        nav.className = 'bottom-nav';
+        nav.innerHTML = '<button class="bottom-nav-item" data-key="ai">Ask AI</button>';
+        document.body.appendChild(nav);
+        try {
+            const { container } = render(<ChatWidget pageTeacher={null} onOpenTeacher={() => {}} />);
+            const perch = await waitFor(() => {
+                const el = container.querySelector('.chat-cat-mobile');
+                expect(el).not.toBeNull();
+                return el as HTMLElement;
+            });
+            fireEvent.scroll(window);
+            expect(perch.className).toContain('is-ducked');
+            fireEvent.click(perch.querySelector('button')!);
+            expect(container.querySelector('.chat-panel')).not.toBeNull();
+            expect(container.querySelector('.chat-cat-mobile')).toBeNull();
+        } finally {
+            nav.remove();
+        }
+    });
 });
