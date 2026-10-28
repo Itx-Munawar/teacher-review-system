@@ -80,6 +80,13 @@ export const getDepartments = () => {
     return api.get('/departments');
 };
 
+export interface SiteStats { teachers: number; departments: number; reviews: number; reviewed_teachers: number }
+
+export const getStats = async (): Promise<SiteStats> => {
+    const res = await api.get('/stats');
+    return res.data as SiteStats;
+};
+
 export const getRelatedTeachers = (id: number) => {
     return api.get(`/teachers/${id}/related`);
 };

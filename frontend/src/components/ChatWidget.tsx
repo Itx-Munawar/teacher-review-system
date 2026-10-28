@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { OPEN_CHAT_EVENT } from '../utils/chatEvents';
 import { sendChatMessage, sendChatFeedback, type ChatTeacherRef } from '../services/api';
 
 /** Pause before the automatic retry of a busy/failed answer. */
@@ -139,6 +140,13 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ pageTeacher, onOpenTeacher, rai
             observer?.disconnect();
         };
     }, [raised]);
+
+    // The bottom nav and the home hero open the assistant from outside.
+    useEffect(() => {
+        const onOpen = () => setOpen(true);
+        window.addEventListener(OPEN_CHAT_EVENT, onOpen);
+        return () => window.removeEventListener(OPEN_CHAT_EVENT, onOpen);
+    }, []);
 
     // Bumped by "New" so a late answer never lands in a fresh conversation.
     const conversationRef = useRef(0);

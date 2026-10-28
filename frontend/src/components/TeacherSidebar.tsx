@@ -8,6 +8,8 @@ import type { Teacher } from '../types';
 interface TeacherSidebarProps {
     /** Detail/compare/Q&A is open on a phone, where the list is its own page. */
     hiddenOnMobile: boolean;
+    /** Optional block above the search box (the compact home intro on phones). */
+    intro?: React.ReactNode;
     searchTerm: string;
     handleSearch: (value: string) => void;
     searchInputRef: React.RefObject<HTMLInputElement | null>;
@@ -36,6 +38,7 @@ interface TeacherSidebarProps {
 /** Left column: teacher search, sort/department filters and the paginated teacher list. */
 const TeacherSidebar: React.FC<TeacherSidebarProps> = ({
     hiddenOnMobile,
+    intro,
     searchTerm,
     handleSearch,
     searchInputRef,
@@ -60,7 +63,8 @@ const TeacherSidebar: React.FC<TeacherSidebarProps> = ({
     teachers,
     totalTeachersCount,
 }) => (
-    <div className={`sidebar${hiddenOnMobile ? ' sidebar-hidden-mobile' : ''}`}>
+    <div className={`sidebar${hiddenOnMobile ? ' sidebar-hidden-mobile' : ''}${intro ? ' sidebar-with-intro' : ''}`}>
+        {intro}
         <div className="search-box">
             <TeacherAutocomplete
                 value={searchTerm}

@@ -150,6 +150,34 @@ router.get('/api/departments', async (req, res) => {
     }
 });
 
+// GET /api/stats - headline numbers for the home page (cached 60s)
+router.get('/api/stats', async (req, res) => {
+    try {
+        let stats = getCached('stats');
+        if (!stats) {
+            const [[row]] = await db.query(`
+                SELECT
+                    (SELECT COUNT(*) FROM teachers) AS teachers,
+                    (SELECT COUNT(DISTINCT department) FROM teachers) AS departments,
+                    (SELECT COUNT(*) FROM reviews WHERE is_approved = 1) AS reviews,
+                    (SELECT COUNT(DISTINCT teacher_id) FROM reviews WHERE is_approved = 1) AS reviewed_teachers
+            `);
+            stats = {
+                teachers: Number(row.teachers) || 0,
+                departments: Number(row.departments) || 0,
+                reviews: Number(row.reviews) || 0,
+                reviewed_teachers: Number(row.reviewed_teachers) || 0,
+            };
+            setCache('stats', stats);
+        }
+        res.set('Cache-Control', 'public, max-age=60');
+        res.json(stats);
+    } catch (error) {
+        console.error('Error fetching stats:', error);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
 // GET /api/teachers/search - search all teachers (no pagination)
 // Supports: ?q=<term>&limit=N (limit used for autocomplete)
 // Fuzzy matching: exact, prefix, substring, SOUNDEX (typo-tolerant), word-order tolerant
