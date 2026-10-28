@@ -119,7 +119,7 @@ const CoursePage: React.FC = () => {
                                                 <h3 title={teacher.name}>{teacher.name}</h3>
                                                 <p className="department" title={teacher.department}>{teacher.department}</p>
                                                 <span className="reviews-count">
-                                                    ({teacher.review_count} {teacher.review_count === 1 ? 'review' : 'reviews'})
+                                                    {teacher.review_count} {teacher.review_count === 1 ? 'review' : 'reviews'}
                                                 </span>
                                             </div>
                                         </Link>
