@@ -13,20 +13,20 @@
     "test:api": "node --test --test-concurrency=1 test/"
   },
   "dependencies": {
-    "axios": "^1.20.0",
+    "axios": "^1.21.0",
     "bcryptjs": "^3.0.3",
     "cheerio": "^1.2.0",
     "compromise": "^14.19.0",
     "cors": "^2.8.5",
     "dotenv": "^18.0.9",
     "express": "^5.3.0",
-    "express-rate-limit": "^8.7.1",
+    "express-rate-limit": "^8.7.2",
     "express-validator": "^7.0.1",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.0",
     "lru-cache": "^11.5.2",
     "mysql2": "^3.6.0",
-    "nodemailer": "^10.2.1",
+    "nodemailer": "^10.3.1",
     "validator": "^13.11.0"
   },
   "devDependencies": {
