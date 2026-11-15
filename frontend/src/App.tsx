@@ -26,6 +26,7 @@ import AdminScreen from './components/AdminScreen';
 import AppHeader from './components/AppHeader';
 import AppFooter from './components/AppFooter';
 import TeacherSidebar from './components/TeacherSidebar';
+import { TeacherDetailSkeleton } from './components/Skeleton';
 import WelcomePanel from './components/WelcomePanel';
 import HomeIntro from './components/HomeIntro';
 import { openChat } from './utils/chatEvents';
@@ -60,9 +61,22 @@ const App: React.FC = () => {
     const [isSearching, setIsSearching] = useState(false);
     const [searchResults, setSearchResults] = useState<Teacher[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
+    // Latest-wins guard for search fetches, so a slower earlier query cannot
+    // overwrite the results of the query the user actually settled on.
+    const searchRequestRef = useRef(0);
     const [error, setError] = useState<string | null>(null);
 
     const [selectedTeacher, setSelectedTeacher] = useState<TeacherDetail | null>(null);
+    // The detail page opens instantly on click and the data follows. Waiting
+    // for the detail API before navigating left the click visibly doing
+    // nothing for seconds (cold Render backend), which read as a broken
+    // search: the box cleared, the homepage stayed, no feedback at all.
+    // Starts true on a direct /teacher/:id load so the skeleton shows
+    // instead of the welcome panel while the first fetch runs.
+    const [teacherDetailLoading, setTeacherDetailLoading] = useState(() => Boolean(teacherIdParam));
+    // Latest-wins guard for detail fetches, so a second click (or a route
+    // effect) cannot let an older response overwrite the newest teacher.
+    const detailRequestRef = useRef(0);
     const [reviewsLoadingMore, setReviewsLoadingMore] = useState(false);
     const [relatedTeachers, setRelatedTeachers] = useState<Teacher[]>([]);
     const [compareList, setCompareList] = useState<Teacher[]>([]);
@@ -186,21 +200,27 @@ const App: React.FC = () => {
     // Pull-to-refresh reloads the teacher list from page 1
     const handlePullRefresh = useCallback(() => loadTeachers(1), [loadTeachers]);
 
-    // ========== SEARCH (AUTOCOMPLETE ONLY) ==========
-    // The old behavior replaced the sidebar list while typing; that duplicated
-    // the autocomplete dropdown. Now typing only drives the dropdown, and the
-    // sidebar list stays unchanged until a teacher is selected.
+    // ========== SEARCH ==========
+    // Typing filters the sidebar list to the matches as well as driving the
+    // autocomplete dropdown. The URL already says ?search=... while typing,
+    // so leaving the unfiltered "Most Reviews" list up read as search being
+    // broken. handleSearch only runs once typing pauses (the autocomplete
+    // reports the settled query after a 400ms debounce), so this is one
+    // request per pause, not one per keystroke.
     const performSearch = useCallback(async (value: string) => {
+        const requestId = ++searchRequestRef.current;
         setIsSearching(true);
         setLoading(true);
         try {
             const res = await searchAllTeachers(value, 50);
+            if (requestId !== searchRequestRef.current) return;
             setSearchResults(res.data || []);
         } catch (searchErr) {
+            if (requestId !== searchRequestRef.current) return;
             console.error('Search error:', searchErr);
             setSearchResults([]);
         } finally {
-            setLoading(false);
+            if (requestId === searchRequestRef.current) setLoading(false);
         }
     }, []);
 
@@ -220,20 +240,18 @@ const App: React.FC = () => {
             return next;
         }, { replace: true });
 
-        // Do NOT replace the sidebar list while typing – the autocomplete
-        // dropdown handles suggestions. Only reload the full list on clear.
+        // Only reload the full list on clear; otherwise filter it to the
+        // matches so the list agrees with the ?search= URL and the "Found N
+        // teachers matching ..." line.
         if (!value.trim()) {
             setIsSearching(false);
             setSearchResults([]);
             setCurrentPage(1);
             loadTeachers(1);
         } else {
-            // Leaving a shared/deep-linked result list? Typing now drives the
-            // dropdown, so show the regular sidebar list again.
-            setIsSearching(false);
-            setSearchResults([]);
+            performSearch(value);
         }
-    }, [setSearchParams, loadTeachers]);
+    }, [setSearchParams, loadTeachers, performSearch]);
 
     // Track mobile viewport for hiding the list when a detail page is open
     useEffect(() => {
@@ -276,6 +294,7 @@ const App: React.FC = () => {
 
         if (teacherId) {
             (async () => {
+                setTeacherDetailLoading(true);
                 try {
                     const response = await getTeacherDetail(parseInt(teacherId));
                     setSelectedTeacher(mapTeacherDetail(response.data));
@@ -288,6 +307,8 @@ const App: React.FC = () => {
                         const robots = document.head.querySelector('meta[name="robots"]');
                         if (robots) robots.setAttribute('content', 'noindex, nofollow');
                     }
+                } finally {
+                    setTeacherDetailLoading(false);
                 }
             })();
         }
@@ -297,8 +318,12 @@ const App: React.FC = () => {
     // Sync teacher detail when navigating between /teacher/:id pages (back/forward)
     useEffect(() => {
         if (!teacherIdParam) return;
+        // A click is already fetching this teacher (handleTeacherClick
+        // navigates first, then loads); do not fire a second request for it.
+        if (teacherDetailLoading) return;
         if (selectedTeacher && selectedTeacher.id === parseInt(teacherIdParam)) return;
         (async () => {
+            setTeacherDetailLoading(true);
             try {
                 const response = await getTeacherDetail(parseInt(teacherIdParam));
                 setSelectedTeacher(mapTeacherDetail(response.data));
@@ -309,10 +334,12 @@ const App: React.FC = () => {
                     const robots = document.head.querySelector('meta[name="robots"]');
                     if (robots) robots.setAttribute('content', 'noindex, nofollow');
                 }
+            } finally {
+                setTeacherDetailLoading(false);
             }
         })();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [teacherIdParam]);
+    }, [teacherIdParam, teacherDetailLoading]);
 
     // Load related teachers in the same department
     useEffect(() => {
@@ -438,8 +465,21 @@ const App: React.FC = () => {
 
     const handleTeacherClick = useCallback(async (teacher: Teacher) => {
         searchInputRef.current?.blur();
+        // Navigate FIRST, then load the detail: awaiting the detail API
+        // before navigating left a suggestion click visibly doing nothing
+        // for seconds on a slow/cold backend, which users read as "search
+        // doesn't work". The detail skeleton shows while the data loads.
+        const requestId = ++detailRequestRef.current;
+        if (!selectedTeacher || selectedTeacher.id !== teacher.id) {
+            setSelectedTeacher(null);
+        }
+        setTeacherDetailLoading(true);
+        navigate(`/teacher/${teacher.id}`);
         try {
             const response = await getTeacherDetail(teacher.id);
+            // A newer click wins: ignore this response if another teacher
+            // was picked while it was in flight.
+            if (requestId !== detailRequestRef.current) return;
             setSelectedTeacher(mapTeacherDetail(response.data));
             setShowReviewForm(false);
             setShowQnA(false);
@@ -455,13 +495,15 @@ const App: React.FC = () => {
                 listScrollPosRef.current = window.scrollY;
                 window.scrollTo({ top: 0, behavior: 'auto' });
             }
-
-            navigate(`/teacher/${teacher.id}`);
         } catch (error) {
+            if (requestId !== detailRequestRef.current) return;
             console.error('Error loading teacher details:', error);
             showToast('Failed to load teacher details', 'error');
+            clearSelectedTeacher();
+        } finally {
+            if (requestId === detailRequestRef.current) setTeacherDetailLoading(false);
         }
-    }, [navigate, showToast, searchInputRef]);
+    }, [navigate, showToast, searchInputRef, selectedTeacher]);
 
     // Reviews are paginated (50/page): append the next page instead of replacing
     // the list the reader is already scrolling through.
@@ -854,6 +896,8 @@ const App: React.FC = () => {
                             onChangeReviewQuery={handleChangeReviewQuery}
                             reviewQueryLoading={reviewQueryLoading}
                         />
+                    ) : teacherDetailLoading ? (
+                        <TeacherDetailSkeleton />
                     ) : (
                         <WelcomePanel
                             departments={departments}
