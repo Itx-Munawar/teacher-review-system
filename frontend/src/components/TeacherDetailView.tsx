@@ -232,7 +232,7 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                             <span className="profile-stat-label">{reviewCount === 1 ? 'Review' : 'Reviews'}</span>
                         </div>
                         <div className="profile-stat">
-                            <span className="profile-stat-value">{courseCount > 0 ? courseCount : '—'}</span>
+                            <span className="profile-stat-value">{courseCount}</span>
                             <span className="profile-stat-label">{courseCount === 1 ? 'Course' : 'Courses'}</span>
                         </div>
                         <div className="profile-stat">
@@ -289,7 +289,7 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                     <AiSummary teacherId={selectedTeacher.id} reviewCount={reviewCount} />
 
                     {canRefine && (
-                        <div className="review-toolbar">
+                        <div className={`review-toolbar${courseCounts.length === 0 ? ' review-toolbar-sort-only' : ''}`}>
                             {courseCounts.length > 0 && (
                                 <div className="review-course-filter" role="group" aria-label="Filter reviews by course">
                                     <button
@@ -534,7 +534,8 @@ const TeacherDetailView: React.FC<TeacherDetailViewProps> = ({
                                 <Avatar name={teacher.name} imageUrl={teacher.image_url} className="related-teacher-avatar" size={44} />
                                 <span className="related-teacher-text">
                                     <span className="related-teacher-name">{teacher.name}</span>
-                                    <span className="related-teacher-dept">
+                                    <span className="related-teacher-dept">{teacher.department}</span>
+                                    <span className={`related-teacher-count${teacher.review_count === 0 ? ' zero' : ''}`}>
                                         {teacher.review_count > 0
                                             ? `${teacher.review_count} ${teacher.review_count === 1 ? 'review' : 'reviews'}`
                                             : 'No reviews yet'}

@@ -59,7 +59,11 @@ const CompareView: React.FC<CompareViewProps> = ({
                     }}
                     placeholder="Search and add a teacher to compare..."
                 />
-                <p className="compare-search-hint">{compareList.length}/3 selected — tap a result to add it to the comparison.</p>
+                <p className="compare-search-hint">
+                    {compareList.length >= 3
+                        ? '3/3 selected — remove one below to add a different teacher.'
+                        : `${compareList.length}/3 selected — tap a result to add it to the comparison.`}
+                </p>
             </div>
 
             {compareDetails.length < 2 ? (
@@ -74,7 +78,7 @@ const CompareView: React.FC<CompareViewProps> = ({
                                                 name={teacher.name}
                                                 imageUrl={teacher.image_url}
                                                 className="compare-selected-photo"
-                                                size={112}
+                                                size={64}
                                             />
                                         </div>
                                         <div className="compare-selected-info">
@@ -101,6 +105,7 @@ const CompareView: React.FC<CompareViewProps> = ({
                                 ? "Search above to add at least 2 teachers, then their reviews appear side by side."
                                 : "Search above to add 1 more teacher to start comparing."
                         }
+                        compact
                     />
                 </div>
             ) : (
@@ -152,15 +157,13 @@ const CompareView: React.FC<CompareViewProps> = ({
                                         </td>
                                     ))}
                                 </tr>
-                                <tr>
+                                <tr className="compare-review-row">
                                     <td className="compare-metric-cell">Recent review</td>
                                     {compareDetails.map((t) => (
                                         <td key={t.id} className="compare-value-cell">
                                             {t.reviews && t.reviews.length > 0 ? (
                                                 <blockquote className="compare-snippet">
-                                                    "{t.reviews[0].comment.length > 90
-                                                        ? `${t.reviews[0].comment.slice(0, 90)}…`
-                                                        : t.reviews[0].comment}"
+                                                    <p className="compare-snippet-text">"{t.reviews[0].comment}"</p>
                                                     <footer className="compare-snippet-author">
                                                         — {t.reviews[0].user_name || 'Anonymous'}
                                                     </footer>

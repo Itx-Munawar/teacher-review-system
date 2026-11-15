@@ -126,12 +126,15 @@ const QASection: React.FC<QASectionProps> = ({ teacherId, teacherName }) => {
             )}
 
             {loading ? (
-                <p className="qa-empty">Loading questions...</p>
+                <div className="qa-skeleton" aria-label="Loading questions" role="status">
+                    {[0, 1, 2].map((i) => (<div key={i} className="qa-skeleton-bar skeleton" />))}
+                </div>
             ) : questions.length === 0 ? (
                 <EmptyState
                     icon="help"
                     title="No questions yet"
                     message="Ask the first question about this teacher."
+                    compact
                 />
             ) : (
                 <div className="qa-list">

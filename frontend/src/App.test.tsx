@@ -58,6 +58,9 @@ function renderApp() {
 
 describe('App — search (regression)', () => {
     beforeEach(() => {
+        // The compare list persists in localStorage: start each test clean so
+        // one test's picks never leak into the next.
+        window.localStorage.clear();
         // jsdom has no matchMedia; PullToRefresh (rendered by App) calls it.
         if (typeof window.matchMedia !== 'function') {
             Object.defineProperty(window, 'matchMedia', {
@@ -169,4 +172,20 @@ describe('App — search (regression)', () => {
         // so match against the rendered text as a whole.
         await waitFor(() => expect(document.body.textContent).toContain('Bht achy teacher h'), { timeout: 5000 });
     }, 15000);
+
+    it('restores a saved compare list after a reload', async () => {
+        vi.mocked(getTeacherDetail).mockResolvedValue({
+            data: {
+                teacher: UMER, reviews: [], total_reviews: 0,
+                review_pagination: { page: 1, limit: 50, total: 0, totalPages: 1 },
+                filtered_reviews: 0, review_sort: 'helpful', review_course: null, course_counts: [],
+            },
+        } as never);
+        window.localStorage.setItem('trs-compare-list', JSON.stringify([UMER, WAQAR]));
+        renderApp();
+
+        await waitFor(() => expect(screen.getByText('2/3 selected')).toBeInTheDocument());
+        expect(screen.getByText(/Umer Usman ✕/)).toBeInTheDocument();
+        expect(screen.getByText(/Waqar Ashiq ✕/)).toBeInTheDocument();
+    });
 });

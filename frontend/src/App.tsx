@@ -37,6 +37,22 @@ import { haptic } from './utils/haptics';
 import type { Teacher, TeacherDetail, Toast, ReviewQuery } from './types';
 import './App.css';
 
+// Compare picks survive a reload: the list is kept in localStorage (details are re-fetched, never stored).
+const COMPARE_STORAGE_KEY = 'trs-compare-list';
+
+/** Reads a saved compare list, tolerating anything else that might be in the key. */
+const readSavedCompareList = (): Teacher[] => {
+    try {
+        const raw = window.localStorage.getItem(COMPARE_STORAGE_KEY);
+        if (!raw) return [];
+        const parsed: unknown = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter((t): t is Teacher => !!t && typeof (t as Teacher).id === 'number');
+    } catch {
+        return [];
+    }
+};
+
 // The compare screen is rarely opened, so it is split into its own chunk
 // instead of shipping in the bundle every visitor downloads (the admin
 // screens are split the same way inside AdminScreen).
@@ -79,7 +95,7 @@ const App: React.FC = () => {
     const detailRequestRef = useRef(0);
     const [reviewsLoadingMore, setReviewsLoadingMore] = useState(false);
     const [relatedTeachers, setRelatedTeachers] = useState<Teacher[]>([]);
-    const [compareList, setCompareList] = useState<Teacher[]>([]);
+    const [compareList, setCompareList] = useState<Teacher[]>(readSavedCompareList);
     const [isComparing, setIsComparing] = useState(false);
     const [isMobileViewport, setIsMobileViewport] = useState(() => window.innerWidth <= 768);
     const [compareDetails, setCompareDetails] = useState<TeacherDetail[]>([]);
@@ -630,6 +646,25 @@ const App: React.FC = () => {
             setCompareLoading(false);
         }
     }, [showToast]);
+
+    // Keep the saved compare list in step with the live one.
+    useEffect(() => {
+        try {
+            window.localStorage.setItem(COMPARE_STORAGE_KEY, JSON.stringify(compareList));
+        } catch {
+            // Private mode / storage unavailable: comparing still works for the session.
+        }
+    }, [compareList]);
+
+    // A restored list needs its details back before the table can render.
+    const compareRestoredRef = useRef(false);
+    useEffect(() => {
+        if (compareRestoredRef.current) return;
+        compareRestoredRef.current = true;
+        if (compareList.length >= 2 && compareDetails.length === 0) {
+            fetchCompareDetails(compareList);
+        }
+    }, [compareList, compareDetails.length, fetchCompareDetails]);
 
     const runCompare = useCallback(async () => {
         if (compareList.length < 2) {

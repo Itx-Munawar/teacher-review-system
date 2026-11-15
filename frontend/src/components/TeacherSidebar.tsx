@@ -138,7 +138,7 @@ const TeacherSidebar: React.FC<TeacherSidebarProps> = ({
                                 <div className="teacher-card-info">
                                     <h3 title={teacher.name}>{teacher.name}</h3>
                                     <p className="department" title={teacher.department}>{teacher.department}</p>
-                                    <span className="reviews-count">
+                                    <span className={`reviews-count${teacher.review_count === 0 ? ' reviews-count-zero' : ''}`}>
                                         {teacher.review_count} {teacher.review_count === 1 ? 'review' : 'reviews'}
                                     </span>
                                 </div>

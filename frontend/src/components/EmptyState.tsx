@@ -6,6 +6,8 @@ interface EmptyStateProps {
     title: string;
     message?: string;
     action?: React.ReactNode;
+    /** Smaller illustration and padding for inline spots (teacher Q&A, compare picker). */
+    compact?: boolean;
 }
 
 /** Inline SVG illustrations for different empty states */
@@ -46,8 +48,8 @@ const illustrations: Record<string, React.ReactNode> = {
     ),
 };
 
-const EmptyState: React.FC<EmptyStateProps> = ({ icon, title, message, action }) => (
-    <div className="empty-state">
+const EmptyState: React.FC<EmptyStateProps> = ({ icon, title, message, action, compact = false }) => (
+    <div className={`empty-state${compact ? ' empty-state-compact' : ''}`}>
         <div className="empty-state-visual">
             {illustrations[icon] || (
                 <div className="empty-state-icon">

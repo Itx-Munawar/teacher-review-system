@@ -24,7 +24,7 @@ const prefersReducedMotion = () =>
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** Counts from 0 to `target` with an ease-out curve (instant under reduced motion). */
-export const useCountUp = (target: number, duration = 1600): number => {
+export const useCountUp = (target: number, duration = 900): number => {
     const [value, setValue] = useState(0);
     useEffect(() => {
         if (!target) { setValue(0); return undefined; }

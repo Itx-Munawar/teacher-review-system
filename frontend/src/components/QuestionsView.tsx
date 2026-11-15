@@ -110,7 +110,9 @@ const QuestionsView: React.FC<QuestionsViewProps> = ({ onOpenTeacher, onBack }) 
             {success && <div className="success-message" role="status">{success}</div>}
 
             {loading ? (
-                <p className="qa-empty">Loading questions...</p>
+                <div className="qa-skeleton" aria-label="Loading questions" role="status">
+                    {[0, 1, 2, 3].map((i) => (<div key={i} className="qa-skeleton-bar skeleton" />))}
+                </div>
             ) : questions.length === 0 ? (
                 <EmptyState
                     icon="help"
@@ -158,6 +160,12 @@ const QuestionsView: React.FC<QuestionsViewProps> = ({ onOpenTeacher, onBack }) 
                                     ))}
                                 </div>
                             )}
+
+                            <span className={`qa-status${q.answers.length > 0 ? ' qa-status-answered' : ''}`}>
+                                {q.answers.length > 0
+                                    ? `✓ ${q.answers.length} ${q.answers.length === 1 ? 'answer' : 'answers'}`
+                                    : 'Awaiting answer'}
+                            </span>
 
                             {openAnswerForms[q.id] ? (
                                 <div className="qa-answer-form">
